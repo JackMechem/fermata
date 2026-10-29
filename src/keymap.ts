@@ -29,6 +29,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "rewind", label: "Rewind One Bar", group: "Transport", keys: [","] },
   { id: "forward", label: "Forward One Bar", group: "Transport", keys: ["."] },
   { id: "catch-playhead", label: "Catch Playhead", group: "Transport", keys: ["`"] },
+  { id: "show-playhead", label: "Scroll to Playhead", group: "Transport", keys: [] },
   { id: "autopunch", label: "Autopunch Mode", group: "Transport", keys: ["Mod+Ctrl+P"] },
 
   { id: "create-marker", label: "Create Marker", group: "Navigation", keys: ["Alt+'"] },

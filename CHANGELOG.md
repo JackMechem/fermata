@@ -6,6 +6,46 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
+  and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
+  Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps
+  automatically. Bounce, export, freeze and Join render them as playback does.
+- **Overview:** the Tracks area's horizontal scroll bar is now a miniature of the whole
+  project (regions, playhead, cycle, markers, project end) with a box for the visible area:
+  drag it to scroll, drag its edges to zoom, click elsewhere to jump there (View › Show
+  Overview).
+- **Scroll to Playhead** button beside Catch; a second Stop also brings the playhead into view.
+- **Settings › Editing › Mouse Wheel Scrolls:** Horizontally (time) makes a mouse's vertical
+  wheel scroll through time in the Tracks area and Piano Roll, with Shift for vertical.
+- **Autosave after recording** (Settings › General › After Recording, on by default): the
+  autosave is written as soon as a take is placed, and after Bounce in Place, Freeze and
+  imports.
+- **Recovering an interrupted recording:** takes being recorded when Fermata crashed, was
+  killed or lost power are repaired and offered in the Recover sheet, placed where they would
+  have landed (cycle takes as a take folder).
+- Saves are atomic and keep the previous `project.json` as `project.json.bak`; a damaged
+  project file falls back to the autosave or the backup. A panic on the main thread writes an
+  emergency autosave.
+- A LICENSE file (MIT), shipped in every bundle.
+- CI runs the headless checks that need no third-party plug-ins on Linux
+  (`scripts/headless-checks.sh`).
+
+### Changed
+
+- Tracks can be as short as 22 px (View › Track Height has a new Mini size). Below 52 px the
+  header goes onto one line and its M, S, R, I and Freeze buttons move into a ⋯ menu; the ones
+  that are on stay visible.
+- The track header's volume slider and level meter are one taller control: the meter fills
+  the slider's groove.
+- Automation lanes move with a plug-in dragged to another track's strip; one undo reverts both.
+
+### Fixed
+
+- Opening Group Settings (including from New Group from Track) blanked the window.
+- Play or Record right after moving the playhead could start from the old position.
+
 ## [0.1.0-alpha.1] - 2026-10-29
 
 The first prerelease. Everything below is new.

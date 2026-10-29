@@ -404,7 +404,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Split at the marquee or locators (p. 320)
 - [x] Rubber-band region selection in the Tracks area (p. 299)
 - [ ] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300)
-- [~] Drag modes (p. 295). *Overlap only; no No Overlap, X-Fade, Shuffle R or Shuffle L.*
+- [~] Drag modes (p. 295). *Overlap and X-Fade; no No Overlap, Shuffle R or Shuffle L.*
 - [ ] Alignment guides (p. 290)
 - [ ] Full snap modes and relative snap (p. 290–292)
 - [ ] Horizontal auto zoom (p. 292)
@@ -427,7 +427,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Split into equal portions (p. 320)
 - [ ] Demix MIDI by channel or note pitch (p. 321–322)
 - [ ] Join per track (p. 323)
-- [ ] Mixdown options for joined audio, with crossfades (p. 324)
+- [~] Mixdown options for joined audio, with crossfades (p. 324). *Join mixes through the playback path, so crossfades are kept; no options.*
 - [ ] MIDI aliases (p. 326–328)
 - [ ] Name regions by track, tracks by region, colour tracks by region and the reverse (key commands)
 - [ ] Delete and shuffle the following regions (p. 332)
@@ -437,10 +437,10 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Fades and crossfades (p. 348–353)
 
-- [ ] Fade curve shape (p. 351)
-- [ ] Fade types: crossfade, equal-power crossfade, speed-up and slow-down fades (p. 351–352)
-- [ ] Crossfades between adjacent regions (p. 352)
-- [ ] Automatic crossfades on edits (p. 352)
+- [x] Fade curve shape (p. 351)
+- [x] Fade types: crossfade, equal-power crossfade, speed-up and slow-down fades (p. 351–352)
+- [~] Crossfades between adjacent regions (p. 352). *Not for take folders, looped or muted regions.*
+- [~] Automatic crossfades on edits (p. 352). *The X-Fade drag mode; no Crossfade Time or Curve settings.*
 - [ ] Apply the last fade to a marquee selection (p. 350)
 
 ### Region parameters (p. 363–371)
@@ -1088,7 +1088,8 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 1. **Plug-in editor windows on Windows and macOS.** Without them, Fermata is effectively a
    Linux-only DAW for anyone using plug-ins.
 2. **Crossfades, fade curves and drag modes** (X-Fade and Shuffle). These are the basis of
-   clean audio editing and comping.
+   clean audio editing and comping. *Fades, crossfades and the X-Fade mode are done; Shuffle
+   and No Overlap are not.*
 3. **Marquee tool and Tracks-area Tool menu** (Scissors, Glue, Fade, Pencil, Eraser): the
    everyday editing workflow.
 4. **Plug-in presets and channel strip settings**, with compare and copy/paste. Without them,

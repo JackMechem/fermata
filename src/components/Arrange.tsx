@@ -19,6 +19,7 @@ import { crossfadeLaws, crossfadesByRegion, draggedFadeOut, fadeCurve, fadeHandl
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
+import { toggleOverview } from "./Overview";
 import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
 
 // ---- peaks ----------------------------------------------------------------------------------
@@ -1016,6 +1017,12 @@ export function Arrange() {
 
   const onContextMenu = (e: React.MouseEvent) => {
     e.preventDefault();
+    // A right-click on the horizontal scroll bar (shown while the overview is hidden) offers
+    // the overview back.
+    const el = scrollRef.current!;
+    if (!getState().showOverview && e.clientY >= el.getBoundingClientRect().top + el.clientHeight) {
+      return openMenu(e.clientX, e.clientY, [{ label: "Show Overview", onClick: toggleOverview }]);
+    }
     const h = hit(e);
     const { project } = live.current;
     if (!h || !project) return;

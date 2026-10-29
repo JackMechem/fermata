@@ -121,6 +121,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("browser", "Browsers", None)?)
         .item(&item("automation", "Show Automation", None)?)
         .item(&item("global-tracks", "Show Global Tracks", None)?)
+        .item(&item("overview", "Show Overview", None)?)
         .item(&item("musical-typing", "Musical Typing", Some("CmdOrCtrl+K"))?)
         .separator()
         .item(&item("show-hidden", "Show Hidden Tracks", None)?)

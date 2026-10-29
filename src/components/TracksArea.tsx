@@ -12,6 +12,7 @@ import { importAudioDialog, undoRedo } from "../files";
 import { isLooped } from "../loops";
 import { exportSelectionMidi, importMidiDialog } from "../midiFiles";
 import { fmt, keyHint } from "../keymap";
+import { transport } from "../transport";
 import { GlobalTracks, globalTracksHeight } from "./GlobalTracks";
 import { Overview, toggleOverview } from "./Overview";
 import { OVERVIEW_H } from "../overview";
@@ -138,6 +139,11 @@ export function TracksArea() {
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
               <path d="M3 2v10M3 7h8M8 4l3 3-3 3" />
+            </svg>
+          </button>
+          <button className="lb-btn" title={"Scroll to Playhead" + (keyHint("show-playhead") ? ` (${keyHint("show-playhead")})` : "")} onClick={() => transport.showPlayhead()}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+              <path d="M7 1v12M2 4h3M2 10h3M9 4h3M9 10h3" />
             </svg>
           </button>
           <span className="lb-label">Snap:</span>

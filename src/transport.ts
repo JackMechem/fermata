@@ -4,12 +4,6 @@ import { barFloor, barsFrom } from "./time";
 import { tempoMap } from "./tempo";
 import { revealPlayhead } from "./view";
 
-/** Moves the playhead and scrolls the time views to show it (see `revealPlayhead`). */
-export async function locateAndReveal(pos: number) {
-  await act("locate", { pos });
-  revealPlayhead(pos);
-}
-
 export const transport = {
   nudgeBars(n: number) {
     const p = getState().snap?.project;
@@ -17,7 +11,7 @@ export const transport = {
     const m = tempoMap(p);
     const at = m.barPosition(currentTick()?.pos ?? 0);
     const cur = n < 0 ? Math.ceil(at - 0.001) : Math.floor(at + 0.001);
-    locateAndReveal(Math.max(0, Math.round(m.barStart(cur + n + 1))));
+    act("locate", { pos: Math.max(0, Math.round(m.barStart(cur + n + 1))) });
   },
   toggleCycle() {
     const p = getState().snap?.project;
@@ -32,7 +26,7 @@ export const transport = {
     }
   },
   toStart() {
-    locateAndReveal(0);
+    act("locate", { pos: 0 });
   },
   /** The Autopunch button: switches the punch range on or off. With none yet, it takes the
    *  cycle's range, or the two bars from the playhead's bar. */
@@ -60,5 +54,9 @@ export const transport = {
     const again = !t?.playing && !t?.recording;
     await act("stop");
     if (again && p) revealPlayhead(p.cycle.enabled ? p.cycle.start : 0);
+  },
+  /** Scroll to Playhead: brings the playhead into view without moving it. */
+  showPlayhead() {
+    revealPlayhead(currentTick()?.pos ?? 0);
   },
 };

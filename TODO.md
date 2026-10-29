@@ -9,14 +9,13 @@ of what exists are in the [User Guide](docs/USER_GUIDE.md#19-known-limitations).
 Goal: prereleases that install cleanly and that people can trust with their projects.
 
 - [ ] Code signing on Windows (Authenticode) and signing plus notarization on macOS
-- [ ] A LICENSE file (the Cargo and Nix metadata declare MIT, but the repository has none)
+- [x] A LICENSE file (MIT, shipped in every bundle)
 - [ ] Hands-on testing of the Windows and macOS builds: devices, MIDI, plug-in scanning,
       installers, file dialogs
-- [ ] Automation lanes follow a plug-in moved to another track (today they stay behind on the
-      old track, keyed to the old instance)
-- [ ] Make `takes_check` "autopunch trims the take" deterministic (fails about 1 in 5 runs on the
-      null device's timing)
-- [ ] Run the headless checks that need no plug-ins in CI on Linux
+- [x] Automation lanes follow a plug-in moved to another track
+- [x] Make `takes_check` "autopunch trims the take" deterministic (it was a real race: a
+      position read right after a locate could return the old playhead)
+- [x] Run the headless checks that need no plug-ins in CI on Linux (`scripts/headless-checks.sh`)
 
 ## Stage 2: Plug-ins on every platform
 
@@ -34,9 +33,10 @@ Goal: a VST3 user on Windows or macOS gets the same workflow as on Linux.
 
 Goal: clean, fast audio editing and comping without workarounds.
 
-- [ ] Crossfades between adjacent regions, and automatic crossfades on edits
-- [ ] Fade curve shapes and fade types (equal power, speed-up, slow-down)
-- [ ] Drag modes: No Overlap, X-Fade, Shuffle Left and Right
+- [x] Crossfades between adjacent regions, and automatic crossfades on edits
+- [x] Fade curve shapes and fade types (equal power, speed-up, slow-down)
+- [ ] Drag modes: No Overlap, Shuffle Left and Right (Overlap and X-Fade are done)
+- [ ] Crossfades for take folders and looped regions; Logic's Crossfade Time and Curve settings
 - [ ] Marquee tool, a Tool menu in the tracks area, and Scissors, Glue, Fade, Pencil and Eraser
 - [ ] Region gain drag; snap edits to zero crossings
 - [ ] Region drags in bars and beats across tempo changes

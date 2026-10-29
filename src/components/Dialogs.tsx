@@ -447,7 +447,10 @@ export function SettingsDialog() {
 export function GroupSheet() {
   const id = useStore((s) => s.groupSheet);
   const group = useStore((s) => s.snap?.project.groups.find((g) => g.id === s.groupSheet));
-  const members = useStore((s) => s.snap?.project.tracks.filter((t) => t.group === s.groupSheet) ?? []);
+  // Select the stable track list and filter it here: a selector that builds a new array on
+  // every call makes useSyncExternalStore re-render forever, which blanks the window.
+  const tracks = useStore((s) => s.snap?.project.tracks);
+  const members = (tracks ?? []).filter((t) => t.group === id);
   const close = () => setState({ groupSheet: null });
   const [name, setName] = useState(group?.name ?? "");
   useEffect(() => setName(group?.name ?? ""), [id]);

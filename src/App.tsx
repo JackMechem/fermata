@@ -20,6 +20,7 @@ import { MenuHost } from "./components/Menu";
 import { loadPaneSizes, Splitter } from "./components/Splitter";
 import { Browser, Inspector, Library, Mixer } from "./components/Panels";
 import { TracksArea, editMenu } from "./components/TracksArea";
+import { toggleOverview } from "./components/Overview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirmDiscard, importAudioDialog, openProjectDialog, saveProject, undoRedo } from "./files";
 import { currentTick, getState, pushTick, setState, useStore } from "./store";
@@ -265,6 +266,9 @@ function handleMenu(id: string) {
     case "global-tracks":
       setState({ showGlobalTracks: !s.showGlobalTracks });
       break;
+    case "overview":
+      toggleOverview();
+      break;
     case "ui-larger":
       stepUiScale(1);
       break;
@@ -297,6 +301,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   rewind: () => transport.nudgeBars(-1),
   forward: () => transport.nudgeBars(1),
   "catch-playhead": () => setState({ catchPlayhead: !getState().catchPlayhead }),
+  "show-playhead": () => transport.showPlayhead(),
   mixer: () => handleMenu("mixer"),
   inspector: () => handleMenu("inspector"),
   library: () => handleMenu("library"),
@@ -385,7 +390,7 @@ function Toast() {
 
 function StatusLine() {
   const audio = useStore((s) => s.snap?.audio);
-  const midi = useStore((s) => s.snap?.midi_inputs ?? []);
+  const midi = useStore((s) => s.snap?.midi_inputs) ?? [];
   const name = useStore((s) => s.snap?.project.name);
   const dirty = useStore((s) => s.snap?.dirty);
   return (

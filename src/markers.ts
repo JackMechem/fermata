@@ -8,7 +8,6 @@ import { colorMenu } from "./ops";
 import { currentTick, getState, setState } from "./store";
 import { barsFrom, snapPos } from "./time";
 import { mix, theme } from "./theme";
-import { locateAndReveal } from "./transport";
 
 const project = () => getState().snap?.project;
 const playhead = () => currentTick()?.pos ?? 0;
@@ -39,7 +38,7 @@ export function gotoMarker(dir: 1 | -1) {
   const at = playhead();
   // A little slack, so a playhead sitting on a marker moves on to the next one.
   const m = dir > 0 ? p.markers.find((x) => x.pos > at + 1) : [...p.markers].reverse().find((x) => x.pos < at - 1);
-  if (m) locateAndReveal(m.pos);
+  if (m) act("locate", { pos: m.pos });
 }
 
 /** The marker at the playhead, or the last one before it. */

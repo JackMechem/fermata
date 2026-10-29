@@ -36,7 +36,7 @@ function MarkerRow({ m }: { m: Marker }) {
 
 /** Logic's Marker List: every marker with its position, an editable name and a Go To button. */
 export function MarkerList() {
-  const markers = useStore((s) => s.snap?.project.markers ?? []);
+  const markers = useStore((s) => s.snap?.project.markers) ?? [];
   const close = () => setState({ showMarkerList: false });
   return (
     <Sheet title="Marker List" onClose={close} width={480}>

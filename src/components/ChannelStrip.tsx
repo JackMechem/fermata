@@ -31,7 +31,7 @@ export function PluginSlotView({
   title: string;
 }) {
   const plugins = useStore((s) => s.plugins);
-  const openEditors = useStore((s) => s.snap?.open_editors ?? []);
+  const openEditors = useStore((s) => s.snap?.open_editors) ?? [];
   const fxOpen = useStore((s) => (plugin ? s.fxPanels.includes(plugin.uid) : false));
   useStore((s) => s.fxList);
   // A frozen track's plug-ins are unloaded and can't change until it is unfrozen.

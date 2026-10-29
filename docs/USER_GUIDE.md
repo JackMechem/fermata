@@ -117,9 +117,9 @@ From left to right:
 - **Library, Inspector, Mixer, Editors** buttons.
 - **Transport:** Rewind (`,`, to the previous bar line), Forward (`.`, to the next bar line),
   Stop, Play (Space), Record (R). Stop while stopped returns to the left locator when Cycle is
-  on, otherwise to the start. When the playhead lands off screen this way, or with Go to
-  Beginning (Enter), Rewind, Forward or Go to Previous / Next Marker, the Tracks area and the
-  open editor scroll sideways to show it near their left edge, whether or not Catch is on.
+  on, otherwise to the start, and the Tracks area and the open editor scroll sideways to show
+  it if it's off screen. Other jumps (Go to Beginning, Rewind, Forward, markers) leave the view
+  where it is; **Scroll to Playhead** (the button beside Catch) brings the playhead into view.
 - **The LCD:**
   - **BAR / BEAT:** the playhead position. Drag vertically to move the playhead by bars.
   - **TEMPO:** drag vertically to change it, or double-click to type a value (Enter applies,
@@ -136,7 +136,8 @@ From left to right:
 ### Tracks area
 
 - **Local menu bar:** Edit, Functions and View menus; on the right, the **Catch** button
-  (\`, on by default: the view follows the playhead), the **Snap** pop-up (Smart, Bar, Beat,
+  (\`, on by default: the view follows the playhead), **Scroll to Playhead** (shows the
+  playhead without moving it), the **Snap** pop-up (Smart, Bar, Beat,
   Off; Smart follows the zoom), the track height slider and the horizontal zoom slider.
 - **Ruler**, from the top:
   - the **cycle strip** (yellow): drag to make a cycle range, drag it or its edges to move or
@@ -168,8 +169,9 @@ From left to right:
     (within the usual zoom limits).
   - The wheel scrolls through time (Shift+wheel scrolls the tracks); Ctrl+wheel zooms around
     the pointer when it's over the box, otherwise around the middle of the view.
-  - View › Show Overview (or right-click the strip) hides it and brings back the scroll bar.
-    The choice is remembered.
+  - View › Show Overview (in the main menu bar or the Tracks area's View menu), or right-click
+    the strip, hides it and brings back the scroll bar; the same menu item, or a right-click on
+    the scroll bar, shows it again. The choice is remembered.
 
 Track headers:
 
