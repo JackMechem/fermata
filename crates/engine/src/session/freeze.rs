@@ -1,0 +1,263 @@
+//! Track Freeze, as in Logic: a track's instrument, Channel EQ and plug-ins are rendered
+//! (pre-fader) into a freeze file, which then plays in their place while the plug-ins are
+//! unloaded. Fader, pan, sends and their automation stay live; plug-in automation is baked in.
+//!
+//! The plug-ins' settings are kept in the project (`PluginSlot::state`), so unfreezing loads
+//! them again exactly as they were. While a track is frozen its regions, plug-ins and Channel
+//! EQ can't change: the session refuses those edits (`check_unfrozen`, `frozen_guard`).
+//!
+//! Like Bounce in Place, freezing has two steps: the render (`render_freeze`, which may run on
+//! a worker thread) and the edit (`place_freeze`, on the main thread, as one undo step).
+
+use super::*;
+
+/// Freeze files live here inside the project folder.
+const FREEZE_DIR: &str = "Freeze Files";
+/// How long a frozen track may ring on after its last region (silence is trimmed).
+const FREEZE_TAIL_SECS: f64 = 4.0;
+/// Below about -90 dBFS the tail counts as silent.
+const SILENCE: f32 = 3.2e-5;
+
+/// One track's freeze render, written to disk and waiting to be placed.
+pub struct FreezeRender {
+    track: Id,
+    start: i64,
+    path: PathBuf,
+    clip: Clip,
+}
+
+impl Session {
+    pub fn is_frozen(&self, track: Id) -> bool {
+        self.project.track(track).map(|t| t.frozen.is_some()).unwrap_or(false)
+    }
+
+    /// Errors (naming the track) if any of `tracks` is frozen.
+    pub fn check_unfrozen(&self, tracks: &[Id]) -> Result<()> {
+        match tracks.iter().filter_map(|id| self.project.track(*id)).find(|t| t.frozen.is_some()) {
+            Some(t) => Err(anyhow!("{} is frozen. Unfreeze it to edit its regions and plug-ins.", t.name)),
+            None => Ok(()),
+        }
+    }
+
+    /// How many plug-in instances are loaded (built-in synths aside).
+    pub fn plugin_instances(&self) -> usize {
+        self.controllers.len()
+    }
+
+    /// The Channel EQ the engine runs for a track: none while frozen, since the freeze file
+    /// already has it.
+    pub(super) fn eq_coeffs(&self, t: &Track) -> crate::eq::EqCoeffs {
+        if t.frozen.is_some() {
+            crate::eq::EqCoeffs::default()
+        } else {
+            crate::eq::coefficients(&t.eq, self.sample_rate())
+        }
+    }
+
+    /// A frozen track's playback list: just its freeze file.
+    pub(super) fn freeze_dsp(&self, t: &Track) -> Option<Arc<Vec<RegionDsp>>> {
+        let f = t.frozen?;
+        let clip = self.clips.get(&f.clip)?.clone();
+        let length = clip.frames() as i64;
+        Some(Arc::new(vec![RegionDsp::Audio { start: f.start, length, offset: 0, gain: 1.0, clip, fade_in: (f.start, 0), fade_out: (f.start + length, 0) }]))
+    }
+
+    /// Freeze, step one: renders each track in `ids` through its instrument, Channel EQ and
+    /// plug-ins (not its fader, pan or sends) into the project's Freeze Files folder.
+    pub fn render_freeze(&mut self, ids: &[Id], progress: &mut dyn FnMut(f64)) -> Result<Vec<FreezeRender>> {
+        let sr = self.sample_rate();
+        let tail = (FREEZE_TAIL_SECS * sr).round() as i64;
+        let n = ids.len().max(1) as f64;
+        let mut out = Vec::new();
+        for (k, &id) in ids.iter().enumerate() {
+            let t = self.project.track(id).ok_or_else(|| anyhow!("no such track"))?;
+            if !matches!(t.kind, TrackKind::Audio | TrackKind::Instrument) {
+                return Err(anyhow!("Only audio and software instrument tracks can be frozen"));
+            }
+            if t.frozen.is_some() {
+                return Err(anyhow!("{} is already frozen", t.name));
+            }
+            let span = t.regions.iter().filter(|r| !r.muted).fold(None, |acc: Option<(i64, i64)>, r| Some(acc.map_or((r.start, r.end()), |(a, b)| (a.min(r.start), b.max(r.end())))));
+            let Some((from, to)) = span else { return Err(anyhow!("{} has no regions to freeze", t.name)) };
+            let name = t.name.clone();
+            let iso = self.isolate_track(id, false, true);
+            let mut audio = self.render(from, to, tail, Some(iso), &mut |f| progress((k as f64 + f) / n))?;
+            // Keep the ringing tail, not the silence after it.
+            let keep = (to - from) as usize;
+            let len = audio.first().map(|c| c.len()).unwrap_or(0);
+            let last = (keep..len).rev().find(|&i| audio.iter().any(|c| c[i].abs() > SILENCE)).map(|i| i + 1).unwrap_or(keep);
+            audio.iter_mut().for_each(|c| c.truncate(last.min(len)));
+            let path = self.freeze_path(&name);
+            crate::decode::write_wav(&path, sr as u32, &audio)?;
+            out.push(FreezeRender { track: id, start: from, clip: Clip::from_channels(path.clone(), sr as u32, audio), path });
+        }
+        Ok(out)
+    }
+
+    /// An unused file name for a track's freeze file.
+    fn freeze_path(&self, track_name: &str) -> PathBuf {
+        let clean: String = track_name.chars().map(|c| if c.is_alphanumeric() || c == ' ' || c == '-' { c } else { '_' }).collect();
+        let dir = self.dir.join(FREEZE_DIR);
+        (1..).map(|i| if i == 1 { dir.join(format!("{clean} Freeze.wav")) } else { dir.join(format!("{clean} Freeze {i}.wav")) }).find(|p| !p.exists()).unwrap()
+    }
+
+    /// Freeze, step two: each track plays its render and unloads its plug-ins, keeping their
+    /// settings for unfreezing. Record an undo step first, capturing plug-ins.
+    pub fn place_freeze(&mut self, renders: Vec<FreezeRender>) -> Result<()> {
+        for r in renders {
+            let Some(t) = self.project.track(r.track).filter(|t| t.frozen.is_none()).cloned() else {
+                let _ = std::fs::remove_file(&r.path);
+                continue;
+            };
+            let states: Vec<(Id, String)> = t.inserts.iter().flatten().chain(t.instrument.iter()).filter_map(|s| self.controllers.get(&s.uid).map(|c| (s.uid, encode_state(&c.save_state())))).collect();
+            let clip = self.add_clip(&r.path, r.clip);
+            let tm = self.project.track_mut(r.track).unwrap();
+            for slot in tm.inserts.iter_mut().flatten().chain(tm.instrument.iter_mut()) {
+                if let Some((_, st)) = states.iter().find(|(uid, _)| *uid == slot.uid) {
+                    slot.state = Some(st.clone());
+                }
+            }
+            tm.frozen = Some(FreezeInfo { clip, start: r.start });
+            tm.armed = false;
+            self.unload_plugins(&t);
+            self.push_regions(r.track);
+            self.send(Cmd::Eq(r.track, crate::eq::EqCoeffs::default()));
+        }
+        // Arming changed, and the frozen tracks' latency went with their plug-ins.
+        self.push_all_params();
+        self.update_midi_target();
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Both freeze steps, for callers already on the main thread.
+    pub fn freeze_tracks(&mut self, ids: &[Id], progress: &mut dyn FnMut(f64)) -> Result<()> {
+        let renders = self.render_freeze(ids, progress)?;
+        self.place_freeze(renders)
+    }
+
+    /// Loads a frozen track's plug-ins again (with the settings they had) and deletes its
+    /// freeze file. The clip stays in memory, so undo can freeze the track again.
+    pub fn unfreeze_track(&mut self, id: Id) -> Result<()> {
+        let t = self.project.track(id).ok_or_else(|| anyhow!("no such track"))?;
+        let f = t.frozen.ok_or_else(|| anyhow!("{} isn't frozen", t.name))?;
+        self.project.track_mut(id).unwrap().frozen = None;
+        if let Some(i) = self.project.clips.iter().position(|c| c.id == f.clip) {
+            let c = self.project.clips.remove(i);
+            let path = if Path::new(&c.path).is_absolute() { PathBuf::from(&c.path) } else { self.dir.join(&c.path) };
+            let _ = std::fs::remove_file(path);
+        }
+        let t = self.project.track(id).unwrap().clone();
+        self.load_plugins(&t);
+        self.push_regions(id);
+        let eq = self.eq_coeffs(&t);
+        self.send(Cmd::Eq(id, eq));
+        self.update_pdc();
+        self.dirty = true;
+        Ok(())
+    }
+
+    /// Unloads a track's plug-ins from the engine (and their controllers and editors).
+    fn unload_plugins(&mut self, t: &Track) {
+        if let Some(s) = &t.instrument {
+            if let Some(mut c) = self.controllers.remove(&s.uid) {
+                c.close_editor();
+            }
+            self.send(Cmd::Instrument { track: t.id, insert: None });
+        }
+        for (slot, s) in t.inserts.iter().enumerate() {
+            if let Some(s) = s {
+                if let Some(mut c) = self.controllers.remove(&s.uid) {
+                    c.close_editor();
+                }
+                self.send(Cmd::Insert { track: t.id, slot, insert: None });
+            }
+        }
+    }
+
+    /// Loads a track's plug-ins from their saved settings.
+    fn load_plugins(&mut self, t: &Track) {
+        if let Some(s) = &t.instrument {
+            let ins = self.instantiate_slot(s).map_err(|e| log::error!("{}: {e}", t.name)).ok();
+            self.send(Cmd::Instrument { track: t.id, insert: ins });
+        }
+        for (slot, s) in t.inserts.iter().enumerate() {
+            if let Some(s) = s {
+                let ins = self.instantiate_slot(s).map_err(|e| log::error!("{}: {e}", t.name)).ok();
+                self.send(Cmd::Insert { track: t.id, slot, insert: ins });
+            }
+        }
+    }
+
+    /// Undo and redo across a freeze: loads or unloads the plug-ins of a track that `restore`
+    /// moves between `cur` and `t`. Returns true when the track is frozen on either side, so
+    /// the caller leaves its plug-ins alone.
+    pub(super) fn restore_freeze(&mut self, cur: &Track, t: &Track) -> bool {
+        if cur.frozen.is_none() && t.frozen.is_none() {
+            return false;
+        }
+        let uids = |x: &Track| x.inserts.iter().map(|s| s.as_ref().map(|s| s.uid)).chain(std::iter::once(x.instrument.as_ref().map(|s| s.uid))).collect::<Vec<_>>();
+        match (cur.frozen.is_some(), t.frozen.is_some()) {
+            (true, false) => self.load_plugins(t),
+            (false, true) => self.unload_plugins(cur),
+            _ => {
+                if uids(cur) != uids(t) {
+                    self.unload_plugins(cur);
+                }
+            }
+        }
+        if t.frozen.is_some() {
+            self.ensure_freeze_files();
+        }
+        if cur.frozen != t.frozen {
+            self.push_regions(t.id);
+            let eq = self.eq_coeffs(t);
+            self.send(Cmd::Eq(t.id, eq));
+        }
+        true
+    }
+
+    /// Writes back any freeze file that is missing on disk (unfreezing deletes it; undo can
+    /// bring the freeze back) from the copy still in memory.
+    pub(super) fn ensure_freeze_files(&self) {
+        for f in self.project.tracks.iter().filter_map(|t| t.frozen) {
+            let (Some(c), Some(r)) = (self.clips.get(&f.clip), self.project.clips.iter().find(|c| c.id == f.clip)) else { continue };
+            let path = if Path::new(&r.path).is_absolute() { PathBuf::from(&r.path) } else { self.dir.join(&r.path) };
+            if !path.exists() {
+                if let Err(e) = crate::decode::write_wav(&path, c.sample_rate, &c.channels) {
+                    log::error!("rewriting freeze file {}: {e}", path.display());
+                }
+            }
+        }
+    }
+
+    /// Refuses an edit that changed a frozen track's regions, plug-ins or Channel EQ: puts
+    /// them back and returns why. Call straight after an edit recorded with `checkpoint`
+    /// (the command wrappers do). If nothing else changed, the edit's undo step goes too.
+    pub fn frozen_guard(&mut self) -> Result<()> {
+        let Some(before) = self.undo_stack.last().map(|e| &e.project) else { return Ok(()) };
+        let mut hit: Vec<(Track, String)> = Vec::new();
+        for t in self.project.tracks.iter().filter(|t| t.frozen.is_some()) {
+            let Some(b) = before.track(t.id).filter(|b| b.frozen == t.frozen) else { continue };
+            if !same(&t.regions, &b.regions) || !same(&t.instrument, &b.instrument) || !same(&t.inserts, &b.inserts) || !same(&t.eq, &b.eq) {
+                hit.push((b.clone(), t.name.clone()));
+            }
+        }
+        let Some(name) = hit.first().map(|h| h.1.clone()) else { return Ok(()) };
+        let mut target = self.project.clone();
+        for (b, _) in hit {
+            if let Some(t) = target.track_mut(b.id) {
+                t.regions = b.regions;
+                t.instrument = b.instrument;
+                t.inserts = b.inserts;
+                t.eq = b.eq;
+            }
+        }
+        let nothing_else = same(&target.tracks, &before.tracks) && same(&target.groups, &before.groups);
+        self.restore(target);
+        if nothing_else {
+            self.undo_stack.pop();
+        }
+        Err(anyhow!("{name} is frozen. Unfreeze it to edit its regions and plug-ins."))
+    }
+}
