@@ -2,6 +2,7 @@
 name = "daw-engine"
 version.workspace = true
 edition.workspace = true
+license.workspace = true
 
 [dependencies]
 vst3-host = { path = "../vst3-host" }

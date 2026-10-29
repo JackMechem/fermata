@@ -158,5 +158,5 @@ Fermata uses [semantic versioning](https://semver.org). Prereleases are tagged
 
 ## Licence
 
-The Cargo and Nix package metadata declare the MIT licence. The repository does not yet
-include a LICENSE file.
+Fermata is released under the MIT licence; see [LICENSE](LICENSE). The release bundles include
+a copy.

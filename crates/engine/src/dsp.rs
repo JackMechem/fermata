@@ -1147,9 +1147,19 @@ impl Engine {
         let _ftz = crate::denormals::NoDenormals::new();
         let frames = if out_ch == 0 { 0 } else { output.len() / out_ch };
 
+        let mut applied = 0;
         while let Ok(cmd) = self.cmd_rx.pop() {
             self.apply(cmd);
-            self.status.cmds_done.fetch_add(1, Ordering::Relaxed);
+            applied += 1;
+        }
+        if applied > 0 {
+            // Publish the transport as the commands left it before counting them done: once
+            // the session sees a locate done, it reads the position from `status.pos`, which
+            // must not still hold the old one (see `Session::position`).
+            self.status.pos.store(self.pos, Ordering::Relaxed);
+            self.status.playing.store(self.playing, Ordering::Relaxed);
+            self.status.recording.store(self.recording, Ordering::Relaxed);
+            self.status.cmds_done.fetch_add(applied, Ordering::Release);
         }
 
         self.live.clear();

@@ -1,5 +1,6 @@
 # Type-checks and tests the frontend and the engine, and checks that the app builds, on
-# Linux, Windows and macOS for every push and pull request.
+# Linux, Windows and macOS for every push and pull request. On Linux it also runs the
+# headless engine checks that need no third-party plug-ins.
 name: CI
 
 on:
@@ -50,6 +51,11 @@ jobs:
         run: cargo test -p daw
       - name: Check everything compiles (examples included)
         run: cargo check --workspace --all-targets
+      # A real Session on ALSA's null output device (no sound card, audio server or plug-ins
+      # needed), with a generated test tone; the same script developers run.
+      - name: Headless engine checks
+        if: runner.os == 'Linux'
+        run: bash scripts/headless-checks.sh
 
   # The flake: `nix build` (and so `nix run`) builds the app and runs the engine's unit tests.
   nix:

@@ -35,6 +35,8 @@ rustPlatform.buildRustPackage (finalAttrs: {
       ../src-tauri
       ../src
       ../index.html
+      # bundled with the app (Tauri's bundle.resources)
+      ../LICENSE
       ../package.json
       ../package-lock.json
       ../tsconfig.json

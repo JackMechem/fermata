@@ -167,6 +167,9 @@ pub struct Session {
     /// `session/builtin.rs`), and the instances whose panels are open.
     fx: HashMap<Id, Arc<FxShared>>,
     fx_watch: std::collections::HashSet<Id>,
+    /// The last transport jump sent (locate, or record from a pre-roll): the `cmds_sent` count
+    /// that includes it and the position it moves to (see [`Session::position`]).
+    pending_pos: Option<(u64, i64)>,
 }
 
 /// A project snapshot taken before an edit.
@@ -291,6 +294,7 @@ impl Session {
             bad_audio_at: Instant::now() - Duration::from_secs(60),
             fx: HashMap::new(),
             fx_watch: Default::default(),
+            pending_pos: None,
         };
         s.restart_audio();
         s.sync_globals();
@@ -332,6 +336,7 @@ impl Session {
         self.audio_status = status;
         // The command counter restarts with the engine's view of it.
         self.cmds_sent = self.status.cmds_done.load(Ordering::Relaxed);
+        self.pending_pos = None;
         if rate != self.project.sample_rate || (self.engine_rate as u32) != rate {
             // The project runs at the device's rate, and that's saved with it.
             if rate != self.project.sample_rate {
@@ -880,8 +885,15 @@ impl Session {
 
     // ---- transport --------------------------------------------------------------------------
 
+    /// The playhead. Until the engine has applied the last locate (or record start), that's
+    /// where it was sent: an audio callback already under way when it was sent still publishes
+    /// the old position, so `status.pos` alone could jump back to it for a block, and a
+    /// `play()` or `record()` right after a locate would start from there.
     pub fn position(&self) -> i64 {
-        self.status.pos.load(Ordering::Relaxed)
+        match self.pending_pos {
+            Some((seq, pos)) if self.status.cmds_done.load(Ordering::Acquire) < seq => pos,
+            _ => self.status.pos.load(Ordering::Relaxed),
+        }
     }
 
     pub fn is_playing(&self) -> bool {
@@ -930,7 +942,7 @@ impl Session {
     pub fn locate(&mut self, pos: i64) {
         let from = self.position();
         self.send(Cmd::Locate(pos.max(0)));
-        self.status.pos.store(pos.max(0), Ordering::Relaxed);
+        self.pending_pos = Some((self.cmds_sent, pos.max(0)));
         self.auto_jumped(from, pos.max(0));
     }
 
@@ -989,6 +1001,7 @@ impl Session {
         self.last_play_from = punch;
         self.send(Cmd::Autopunch { range: quiet, capture });
         self.send(Cmd::Record { from, punch });
+        self.pending_pos = Some((self.cmds_sent, from));
         if !playing {
             self.auto_play_started(from.max(0));
         }

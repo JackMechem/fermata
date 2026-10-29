@@ -190,12 +190,21 @@ fn main() {
     check(&format!("a loaded project plays its lane ({:.1} dB)", db(e)), (db(e) - (db(flat) - 40.0)).abs() < 1.5);
 
     // A plug-in parameter, through the processor's parameter queue.
-    let (Some(name), Some(pname)) = (args.next(), args.next()) else { std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32) };
+    fn done() -> ! {
+        std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32)
+    }
+    let (Some(name), Some(pname)) = (args.next(), args.next()) else {
+        println!("SKIP plug-in parameter automation: no plug-in and parameter name given");
+        done()
+    };
+    let list = daw_engine::plugin_db::load_cache().unwrap_or_default();
+    let Some(desc) = list.iter().find(|d| d.name == name) else {
+        println!("SKIP plug-in parameter automation: {name} isn't in the plug-in cache (scan plug-ins first)");
+        done()
+    };
     s.clear_automation(a, None);
     s.set_auto_mode(a, AutoMode::Read);
-    let list = daw_engine::plugin_db::load_cache().unwrap_or_default();
     s.set_plugins(list.clone());
-    let desc = list.iter().find(|d| d.name == name).expect("no such plug-in in the cache");
     let uid = s.set_plugin(a, 0, &desc.id).unwrap();
     let params = s.plugin_params(uid);
     println!("{name}: {} automatable parameters, e.g. {:?}", params.len(), params.iter().take(10).map(|p| p.name.as_str()).collect::<Vec<_>>());

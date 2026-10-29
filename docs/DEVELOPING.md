@@ -136,9 +136,29 @@ the project folder (never point it at your real projects):
 cargo run -q -p daw-engine --example stack_check -- /path/to/tone.wav /tmp/fermata-scratch
 ```
 
+`scripts/headless-checks.sh` builds the examples once and runs every check that needs no
+third-party plug-ins, each in its own folder under a scratch directory, with a test tone from
+the `test_tone` example. It's what CI runs, so run it the same way before sending an engine
+change:
+
+```sh
+scripts/headless-checks.sh                       # all of them, in a temporary folder
+scripts/headless-checks.sh takes_check fx_check  # just these
+scripts/headless-checks.sh --scratch /tmp/fermata-checks   # keep the projects and logs there
+```
+
+It runs the checks as on a fresh CI runner: `HOME` and the `XDG_*` folders point into the
+scratch folder, and the PipeWire, PulseAudio, JACK and D-Bus session variables are cleared,
+so the checks find no audio server, no settings and no plug-in cache, and never touch yours.
+That makes the plug-in parts of `fx_check`, `automation_check` and `bounce_check` print `SKIP`;
+`pdc_check` and `freeze_check` need a real plug-in and aren't in the script, so run those (and
+the plug-in parts) by hand. A check counts as failed when it exits non-zero or prints a line
+starting with `FAIL`; each one's output is in `<scratch>/<check>/output.log`, and the scratch
+folder is kept when anything failed.
+
 | Example | Arguments | What it checks |
 |---|---|---|
-| `fx_check` | audio file, scratch dir | Every built-in effect in the registry: it loads and processes, parameters set, save, reload, undo and duplicate, automation drives it, latency reaches PDC, side-chains key it (live and in isolated renders), meters reach the tick, freezing bakes it in; plug-in and Channel EQ copy and paste, presets. The VST3 paste checks need **ZaMaximX2**. |
+| `fx_check` | audio file, scratch dir | Every built-in effect in the registry: it loads and processes, parameters set, save, reload, undo and duplicate, automation drives it, latency reaches PDC, side-chains key it (live and in isolated renders), meters reach the tick, freezing bakes it in; plug-in and Channel EQ copy and paste, presets. The VST3 paste checks need **ZaMaximX2**, and print `SKIP` without it. |
 | `insert_order_check` | audio file, scratch dir | Reordering Audio FX inserts: the engine runs the new order, instances keep running (same ids, nothing reloaded), undo and redo restore it, moving or copying to another strip makes room there. |
 | `stack_check` | audio file, scratch dir | Track stacks (folder and summing), groups and region edits, by the levels the meters report. |
 | `loop_check` | audio file, scratch dir | Looping regions (playback, trim, move, convert, split, join) and hidden tracks. |
@@ -147,15 +167,16 @@ cargo run -q -p daw-engine --example stack_check -- /path/to/tone.wav /tmp/ferma
 | `bounce_check` | audio file, scratch dir | Bounce, Export All Tracks, Export Region and Bounce in Place: ranges, tails, formats, normalize, placement. |
 | `crossfade_check` | audio file, scratch dir | Fade curves, Speed Up and Slow Down, and X, EqP and X S crossfades, measured in offline renders of synthetic files (X sums to unity, EqP to constant power); butt fades and gaps; the X-Fade drag mode with undo and redo; and that playback, Bounce, Export, Bounce in Place, Freeze, Join and save/reopen all sound the same. |
 | `range_edit_check` | audio file, scratch dir | Audio Track Editor range edits and Split at Transients: what plays after each edit, and that one undo reverts it. |
-| `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too. |
+| `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too (`SKIP` when it isn't in the cache). |
 | `pdc_check` | audio file, scratch dir | Plug-in delay compensation with a real latent plug-in, measured by cross-correlating offline renders. Needs **ZaMaximX2** (zam-plugins) in the plug-in cache. |
 | `freeze_check` | audio file, scratch dir | Freeze: a frozen instrument track with a latent plug-in sounds as it did live, plug-ins are unloaded, edits are refused, undo, redo, unfreeze and reopening restore the right state. Needs **ZaMaximX2**. |
-| `takes_check` | audio file, scratch dir | Take folders, comping, cycle and Autopunch recording layout (the null device has no input, so takes are silent), and markers. "autopunch trims the take" fails about one run in five, from the null device's timing; rerun it before investigating. |
+| `takes_check` | audio file, scratch dir | Take folders, comping, cycle and Autopunch recording layout (the null device has no input, so takes are silent), and markers. |
 | `countin_check` | scratch dir | Recording with a count-in from bar 1, where the transport runs at negative positions, three times without an engine error. |
 | `tempo_check` | scratch dir | The tempo map and signature changes: the click across changes, plug-in transport positions, bar numbering, Move MIDI Regions with Tempo, quantize, a MIDI file round trip, undo, and that a project without changes keeps the old timing exactly. |
 | `midi_check` | scratch dir | Piano Roll edits, muted notes, controller playback and chasing, split/join/trim with controllers, MIDI file export and import. |
 | `undo_check` | audio file | Undo and redo through a sequence of edits. |
 | `import_check` | project dir, files... | Imports files onto new tracks and reports what was created. |
+| `test_tone` | output `.wav` path | Not a check: writes the test tone the checks play (3 s of 440 Hz at -21.5 dBFS, stereo, 32-bit float, 48 kHz). |
 | `demo_project` | output `.fermata` path | Writes a small demo project (synthesized drums, a plucked part, a MIDI region) for trying the UI. |
 | `fx_bench` | optional block size (default 512) | Not a check: times every built-in effect per block at 48 kHz (worst and average) against the block's real-time budget. Run it with `--release`. |
 | `hosts` | none | Lists every audio host and its devices. |
@@ -190,7 +211,8 @@ TypeScript directly; on Node 22 add `--experimental-strip-types`.
 ### What to run before sending a change
 
 - `cargo test -p daw-engine --lib` and `cargo test -p daw`
-- every headless example that touches your area (all of them for engine changes); for a
+- every headless example that touches your area (for engine changes,
+  `scripts/headless-checks.sh` and the plug-in checks `pdc_check` and `freeze_check`); for a
   built-in effect, `fx_check` and `fx_bench`
 - `npm test` and `npx tsc --noEmit -p .`
 - a visual check in the running app for UI changes
@@ -423,7 +445,9 @@ pnpm tauri build          # native bundles for the current platform (deb, rpm, A
   (`npm install --package-lock-only` after changing dependencies with pnpm).
 
 - The package source is a file set (Cargo files, `crates`, `src-tauri`, `src`, `index.html`,
-  the npm and TypeScript configs), so editing docs doesn't trigger a rebuild.
+  `LICENSE`, the npm and TypeScript configs), so editing docs doesn't trigger a rebuild.
+- The bundles (and so the Nix package, in `lib/Fermata`) carry a copy of `LICENSE`, through
+  `bundle.resources` in `src-tauri/tauri.conf.json`.
 - `nix/package.nix` has its own `version` string; `scripts/set-version.sh` keeps it in step
   (see below).
 
@@ -466,9 +490,11 @@ or notarized yet.
 `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and on demand, on
 `ubuntu-24.04`, `windows-latest` and `macos-latest`: `npm ci`, `npm run build` (type check and
 frontend build), `npm test`, `cargo test -p daw-engine --lib`, `cargo test -p daw` and
-`cargo check --workspace --all-targets` (so the examples must compile). A separate `nix` job
-runs `nix flake check`, which builds the Nix package. The headless examples
-need the ALSA null device and some need real plug-ins, so they don't run in CI; run them
-locally.
+`cargo check --workspace --all-targets` (so the examples must compile). On Linux it then runs
+`scripts/headless-checks.sh`: the headless checks that need no third-party plug-ins, on ALSA's
+`null` device (the runner has no sound card or audio server) with a generated test tone. A
+separate `nix` job runs `nix flake check`, which builds the Nix package. `pdc_check`,
+`freeze_check` and the plug-in parts of the other checks need real plug-ins, so they don't run
+in CI; run them locally.
 
 The main branch is `main` on <https://github.com/JackMechem/fermata>.

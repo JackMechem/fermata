@@ -1161,6 +1161,7 @@ it like any plug-in.
 |---|---|
 | `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`. |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
+| `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |
 | `flake.nix`, `nix/package.nix`, `nix/shell.nix`, `shell.nix` | Nix package, dev shell, overlay and checks. |
 | `src-tauri/tauri.conf.json` | Tauri app and bundle configuration. |
