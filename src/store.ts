@@ -76,6 +76,8 @@ export interface State {
   fxList: FxInfo[];
   /** Built-in effect instances whose panel windows are open, the frontmost last. */
   fxPanels: Id[];
+  /** The overview strip under the tracks, in place of the horizontal scroll bar (View menu). */
+  showOverview: boolean;
 }
 
 let state: State = {
@@ -116,6 +118,7 @@ let state: State = {
   moveMidiWithTempo: false,
   fxList: [],
   fxPanels: [],
+  showOverview: true,
 };
 
 const listeners = new Set<() => void>();

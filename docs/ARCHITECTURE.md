@@ -1107,6 +1107,7 @@ it like any plug-in.
 | `midiFiles.ts` | MIDI file import and export entry points. |
 | `audioEdit.ts` | Audio Track Editor state and operations: range selection, zoom, transients, keys. |
 | `audioRange.ts` | The Audio Track Editor's range arithmetic; pure, tested. |
+| `overview.ts` | The Tracks area overview strip's mapping: time and tracks to strip pixels, the visible-area box, edge-drag zoom; pure, tested. |
 | `fx.ts` | Built-in effect descriptions (`FxInfo`, `FxParamSpec`) and `FX_PANELS`. |
 | `fxFormat.ts` | Built-in effect value formatting and control mapping; pure, tested. |
 | `fxHost.ts` | Built-in effect registry and panel windows, the plug-in and Channel EQ clipboard, the slot right-click menu. |
@@ -1150,6 +1151,7 @@ it like any plug-in.
 | `Bounce.tsx` | Bounce, Export and Bounce in Place dialogs. |
 | `MarkerList.tsx` | Marker List. |
 | `GlobalTracks.tsx` | The Tempo and Signature global tracks. |
+| `Overview.tsx` | The overview strip under the tracks (in place of the horizontal scroll bar): cached region layer, visible-area box, playhead, scroll and zoom drags. |
 | `fx/FxWindow.tsx` | Floating panel windows for built-in effects; the generic panel. |
 | `fx/common.tsx` | Shared panel controls: knobs, toggles, choices, meters, the side-chain pop-up. |
 | `fx/Presets.tsx` | The preset pop-up (built-in effects and Channel EQ). |

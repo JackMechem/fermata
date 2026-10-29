@@ -157,6 +157,19 @@ From left to right:
   ruler and global tracks it always scrolls through time. A click without a drag, on a region or on empty
   space, also moves the playhead there (snapped to the grid). Settings › Editing › Click Moves
   Playhead can limit this to empty space or turn it off.
+- **Overview:** the strip along the bottom, in place of a horizontal scroll bar, shows the
+  whole project in miniature: a row per track (a closed stack is one row), each region as a
+  bar in its colour, the cycle range and markers along the top edge, the playhead, and the end
+  of the last region, with the timeline after it shaded darker. The lit box is the part shown
+  in the Tracks area, both the time and the tracks scrolled into view.
+  - Drag the box to scroll, across and up or down.
+  - Click outside the box to centre the view there; keep the button down to go on dragging.
+  - Drag the box's left or right edge to zoom: the view shows the time between the edges
+    (within the usual zoom limits).
+  - The wheel scrolls through time (Shift+wheel scrolls the tracks); Ctrl+wheel zooms around
+    the pointer when it's over the box, otherwise around the middle of the view.
+  - View › Show Overview (or right-click the strip) hides it and brings back the scroll bar.
+    The choice is remembered.
 
 Track headers:
 

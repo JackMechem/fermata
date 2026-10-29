@@ -6078,3 +6078,35 @@ canvas.pr-cursor-line {
   width: 1px;
   background: rgba(0, 0, 0, 0.35);
 }
+
+/* ---- overview: the project in miniature under the tracks (Overview.tsx) -------------------- */
+
+/* The strip stands in for the Tracks area's horizontal scroll bar; the vertical one stays. */
+.tracks-body.with-overview .arrange-scroll::-webkit-scrollbar {
+  height: 0;
+}
+
+.tracks-body.with-overview .arrange > .playhead {
+  bottom: 0;
+}
+
+.overview-corner {
+  background: var(--headers-bg);
+  border-top: 1px solid var(--edge);
+  border-right: 1px solid var(--edge);
+}
+
+.overview {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--edge);
+  background: var(--panel);
+}
+
+.overview > canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+}

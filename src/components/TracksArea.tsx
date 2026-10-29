@@ -13,6 +13,8 @@ import { isLooped } from "../loops";
 import { exportSelectionMidi, importMidiDialog } from "../midiFiles";
 import { fmt, keyHint } from "../keymap";
 import { GlobalTracks, globalTracksHeight } from "./GlobalTracks";
+import { Overview, toggleOverview } from "./Overview";
+import { OVERVIEW_H } from "../overview";
 import { act } from "../api";
 import type { DragMode } from "../fades";
 
@@ -53,6 +55,7 @@ export function TracksArea() {
   const headerW = useStore((s) => s.paneSizes.headers);
   const showHidden = useStore((s) => s.showHidden);
   const globalH = useStore(globalTracksHeight);
+  const showOverview = useStore((s) => s.showOverview);
   const dragMode = useStore((s) => s.snap?.project.drag_mode) ?? "overlap";
   // Menus read the rest of the state when they open.
   const s = { ...getState(), pxPerBeat, catchPlayhead, snapMode, trackHeight };
@@ -86,6 +89,7 @@ export function TracksArea() {
     { label: "Browsers", hint: keyHint("browser"), checked: s.showBrowser, onClick: () => setState({ showBrowser: !s.showBrowser }) },
     { label: "Show Automation", hint: keyHint("automation"), checked: s.showAutomation, onClick: () => setState({ showAutomation: !s.showAutomation }) },
     { label: "Show Global Tracks", hint: keyHint("global-tracks"), checked: s.showGlobalTracks, onClick: () => setState({ showGlobalTracks: !s.showGlobalTracks }) },
+    { label: "Show Overview", checked: s.showOverview, onClick: toggleOverview },
     { separator: true },
     { label: "Show Hidden Tracks", hint: keyHint("show-hidden"), checked: s.showHidden, onClick: ops.toggleShowHidden },
     { separator: true },
@@ -193,7 +197,13 @@ export function TracksArea() {
           />
         </div>
       </div>
-      <div className="tracks-body" style={{ gridTemplateColumns: `${headerW}px 1fr`, gridTemplateRows: globalH ? `${RULER_H}px ${globalH}px 1fr` : `${RULER_H}px 1fr` }}>
+      <div
+        className={"tracks-body" + (showOverview ? " with-overview" : "")}
+        style={{
+          gridTemplateColumns: `${headerW}px 1fr`,
+          gridTemplateRows: (globalH ? `${RULER_H}px ${globalH}px 1fr` : `${RULER_H}px 1fr`) + (showOverview ? ` ${OVERVIEW_H + 1}px` : ""),
+        }}
+      >
         <div className="headers-top">
           <button className="add-track" title={`New Tracks (${fmt("Mod+Alt+N")})`} onClick={() => setState({ dialog: "new-tracks" })}>
             <Icon.plus />
@@ -210,6 +220,8 @@ export function TracksArea() {
           <Splitter pane="headers" dir="x" sign={1} />
         </div>
         <Arrange />
+        {showOverview && <div className="overview-corner" />}
+        {showOverview && <Overview />}
       </div>
     </div>
   );
