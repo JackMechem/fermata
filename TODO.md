@@ -4,6 +4,44 @@ What's left, in the order it matters for a usable release. Each stage builds on 
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
 of what exists are in the [User Guide](docs/USER_GUIDE.md#19-known-limitations).
 
+## Open items (2026-10-29)
+
+Left over from finishing the effect panels, separate windows and macOS plug-in work. Nothing
+here has been checked by eye in the app yet unless it says so.
+
+- **Look at in the running app:**
+  - Effect panels: the Loudness Meter's units at −100.0 and −∞; resizing floating panels from
+    every edge and corner; the dock's tabs, float/dock, the preset sheet not being clipped; Esc
+    order (frontmost floating panel, then the docked one).
+  - Separate windows: Mixer and Editor pop-out and back; key commands and ⌘A/⌘C/⌘V in a
+    detached Editor; an effect slot clicked in a detached Mixer floats there; positions
+    remembered across a relaunch and on a second monitor (Retina next to a 1× screen).
+  - The Mixer scrolling when short, with every strip ending on the same line.
+  - Open Effect Panels › Separate windows, and each effect type remembering its window size.
+  - macOS VST3 editors in the app (Surge XT, Keyscape): open, raise, close, resize, cascade,
+    hiding while another app is in front; Space, R and Musical Typing with a plug-in window in
+    front; typing into a plug-in's text field; ⌘S running once; a project with a missing
+    plug-in showing it struck through.
+  - From before the move: the overview strip in a few themes; track headers at 22–51 px and the
+    meter-in-slider in the Light and Contrast themes; crossfade and fade-curve drawing and the
+    Inspector's fade rows; the Drag pop-up; the Scroll to Playhead button; the recovery sheet
+    after `kill -9` during a take.
+- **Small fixes:**
+  - `isInstrument` in `src/fxHost.ts` compares plug-in ids exactly, so pasting an instrument
+    copied from a slot whose plug-in was found at another path (`Session::find_plugin`) is
+    refused.
+  - The Compressor's "Lookahead" and the Classic Opto's "Peak Reduction" labels may overlap
+    their knobs by a pixel or two.
+- **Larger:**
+  - The settings folder is `~/.config/fermata` on macOS too; `~/Library/Application Support`
+    is the native place, but moving it needs a migration.
+  - VST3 editor windows on Linux don't pass unused keys to Fermata (the plug-in's child window
+    takes KeyPress); macOS does (`src/pluginKeys.ts`).
+  - Only one Channel EQ analyzer per session: a detached EQ and another strip's EQ take turns.
+  - CI: run `scripts/headless-checks.sh` on macos-latest too (it runs on macOS now), and open a
+    draft PR from `dev` so the Linux headless step runs on GitHub's runners.
+  - Signing and notarization on macOS (the entitlements are ready in `src-tauri/`).
+
 ## Stage 1: Release hygiene
 
 Goal: prereleases that install cleanly and that people can trust with their projects.
