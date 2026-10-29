@@ -7,6 +7,9 @@ import { applyUiScale, savedUiScale } from "./uiScale";
 import { savedWaveStyle } from "./waveform";
 import { setState } from "./store";
 import { savedShowOverview } from "./components/Overview";
+import "./panelKinds";
+import { ownPanel } from "./detach";
+import { DetachedWindow } from "./components/DetachedWindow";
 
 applyTheme(savedThemeId(), false);
 const scale = savedUiScale();
@@ -16,6 +19,7 @@ setState({ showOverview: savedShowOverview() });
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
-    <App />
+    {/* A detached panel's window (detach.ts) shows just that panel. */}
+    {ownPanel ? <DetachedWindow /> : <App />}
   </React.StrictMode>,
 );

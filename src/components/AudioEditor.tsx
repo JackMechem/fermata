@@ -17,6 +17,7 @@ import { draggedFadeOut, fadeHandles } from "../fades";
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { fmt } from "../keymap";
 import { onRevealPlayhead, revealLeft } from "../view";
+import { DetachButton } from "./DetachButton";
 
 /** Ruler height, with the cycle strip at its top. */
 const RULER = 24;
@@ -835,6 +836,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
             title={`Horizontal zoom (${fmt("Mod")}-scroll, ${fmt("Mod+ArrowLeft")} / ${fmt("Mod+ArrowRight")}, Z)`}
             onChange={(e) => setZoom(lo * Math.pow(hi / lo, parseFloat(e.target.value)))}
           />
+          <DetachButton panel="editor" />
         </div>
       </div>
       {project && <InfoStrip project={project} track={track} region={focus} sel={sel} />}

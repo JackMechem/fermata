@@ -116,6 +116,20 @@ export function useSettings<T>(sel: (s: AppSettings) => T): T {
   );
 }
 
+/** Calls `l` whenever the settings change (detach.ts passes them to the other windows). */
+export function onSettingsChange(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+}
+
+/** Takes settings another window changed (and already saved). */
+export function receiveSettings(s: AppSettings) {
+  settings = s;
+  listeners.forEach((l) => l());
+}
+
 export async function loadSettings() {
   const s = await call<AppSettings>("get_settings");
   if (s) settings = s;

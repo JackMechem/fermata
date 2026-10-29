@@ -7,6 +7,7 @@ mod recent;
 #[cfg(target_os = "linux")]
 mod glib_loop;
 mod settings;
+mod windows;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -71,6 +72,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState { session: session.clone() })
+        .on_window_event(windows::on_window_event)
         .setup(move |app| {
             menu::install(app)?;
             let handle = app.handle().clone();
@@ -285,6 +287,10 @@ fn main() {
             commands::set_region_fade_shape,
             commands::crossfade_regions,
             commands::set_drag_mode,
+            windows::open_panel_window,
+            windows::close_panel_window,
+            windows::focus_panel_window,
+            windows::broadcast_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

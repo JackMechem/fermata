@@ -7,6 +7,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DEFAULT_WIDTH, keepOnScreen, resizeRect, type Edge, type PanelKey, type Size } from "../../fxDock";
 import { closePanel, dockPanel, escTarget, focusPanel, prunePanels, savedPanelSize, savePanelSize } from "../../fxDockState";
 import { getState, useStore } from "../../store";
+import { isMain } from "../../detach";
+import { DetachButton } from "../DetachButton";
 import { DockGlyph, PanelContent, PanelLead, PanelTools, panelExists, usePanelTitle } from "./FxPanel";
 
 /** Where each floating panel was, so floating it again puts it back there. */
@@ -170,9 +172,13 @@ function FloatingPanel({ panelKey, z }: { panelKey: PanelKey; z: number }) {
         <span className="eq-track">{title.track}</span>
         <PanelTools panelKey={panelKey} />
         <span className="fx-title-gap" />
-        <button className="fx-mode" title="Dock in the bottom section" onClick={() => dockPanel(panelKey)}>
-          <DockGlyph />
-        </button>
+        <DetachButton panel={panelKey} className="fx-mode" />
+        {/* A detached Mixer's window has no bottom section to dock in. */}
+        {isMain && (
+          <button className="fx-mode" title="Dock in the bottom section" onClick={() => dockPanel(panelKey)}>
+            <DockGlyph />
+          </button>
+        )}
         <button className="eq-close" title="Close (Esc)" onClick={() => closePanel(panelKey)}>
           ×
         </button>

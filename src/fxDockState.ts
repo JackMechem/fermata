@@ -14,18 +14,25 @@ const dockOf = (s: State): DockState => ({ ...s.fxDock, bottom: s.bottom });
 /** Where new panels open (Settings › General › Open Effect Panels). */
 export const panelMode = (): PanelMode => (getSettings().ui.fx_panels === "docked" ? "docked" : "floating");
 
-function apply(f: (s: DockState) => DockState) {
-  const before = dockOf(getState());
+/** The store change a dock transition makes to `s`, or null if it changes nothing (also used
+ *  by panelKinds.tsx to show and hide detached panels). */
+export function dockPatch(s: State, f: (s: DockState) => DockState): Partial<State> | null {
+  const before = dockOf(s);
   const next = dock.checkBottom(f(before));
-  if (JSON.stringify(next) === JSON.stringify(before)) return;
+  if (JSON.stringify(next) === JSON.stringify(before)) return null;
   const { bottom, ...fxDock } = next;
   const refs = next.open.map(parseKey);
-  setState({
+  return {
     fxDock,
     bottom,
     fxPanels: refs.flatMap((r) => (r?.kind === "fx" ? [r.uid] : [])),
     eqEditor: refs.find((r) => r?.kind === "eq")?.track ?? null,
-  });
+  };
+}
+
+function apply(f: (s: DockState) => DockState) {
+  const p = dockPatch(getState(), f);
+  if (p) setState(p);
 }
 
 export const openPanel = (key: PanelKey, mode: PanelMode = panelMode()) => apply((s) => dock.openPanel(s, key, mode));

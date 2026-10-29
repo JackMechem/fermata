@@ -41,6 +41,8 @@ import { getSettings, updateSettings } from "./prefs";
 import { createMarker, deleteMarker, gotoMarker, markerAtPlayhead, openMarkerList } from "./markers";
 import { MarkerList } from "./components/MarkerList";
 import { packTakeFolder } from "./takes";
+import { installDetach, receiveSnapshot, toggleDetached } from "./detach";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -280,6 +282,7 @@ function handleMenu(id: string) {
       break;
     default:
       if (id.startsWith("theme:")) applyTheme(id.slice(6));
+      else if (id.startsWith("detach:")) toggleDetached(id.slice(7));
       break;
     case "zoom-in":
       setState({ pxPerBeat: Math.min(400, s.pxPerBeat * 1.4) });
@@ -375,7 +378,7 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault();
 }
 
-function Toast() {
+export function Toast() {
   const toast = useStore((s) => s.toast);
   const [visible, setVisible] = useState(false);
   useEffect(() => {
@@ -470,14 +473,22 @@ export default function App() {
     loadFxList();
     const offs = [
       listen<Tick>("tick", (e) => pushTick(e.payload)),
-      listen<Snapshot>("project", (e) => setState({ snap: e.payload })),
-      listen<string>("menu", (e) => handleMenu(e.payload)),
+      listen<Snapshot>("project", (e) => receiveSnapshot(e.payload)),
+      // On this window only: menu items for a focused panel window go there (windows.rs), and a
+      // plain listen() would hear those too.
+      getCurrentWebviewWindow().listen<string>("menu", (e) => handleMenu(e.payload)),
       getCurrentWindow().onCloseRequested(async (e) => {
         if (!(await confirmDiscard("Quit"))) e.preventDefault();
       }),
     ];
     window.addEventListener("keydown", onKey);
     const offDrop = installNativeDrop();
+    // Detached panel windows: their key commands run here, as if pressed in this window.
+    const offDetach = installDetach({
+      key: (id) => {
+        if (!getState().dialog) KEY_ACTIONS[id]?.();
+      },
+    });
     const ctx = (e: MouseEvent) => e.preventDefault();
     window.addEventListener("contextmenu", ctx);
     return () => {
@@ -485,6 +496,7 @@ export default function App() {
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("contextmenu", ctx);
       offDrop();
+      offDetach();
     };
   }, []);
 

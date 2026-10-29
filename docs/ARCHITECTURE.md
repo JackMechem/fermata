@@ -872,6 +872,49 @@ drawings. The common pattern:
   settings, Marker List, Channel EQ, Musical Typing).
 - Native file dialogs and confirmations use `@tauri-apps/plugin-dialog` (`src/files.ts`).
 
+### Detached windows
+
+A detachable panel (the Mixer, the Editors, a Channel EQ, a built-in effect panel) can be shown
+in an OS window of its own, labelled `panel-<key>` (keys: `mixer`, `editor`, `eq:<track>`,
+`fx:<uid>`, the last two shared with `fxDock.ts`). Every window loads the same frontend;
+`main.tsx` renders `DetachedWindow` instead of `App` when the label is a panel's.
+
+- **Authority.** The main window decides what is detached (`state.detached`), remembers it with
+  each kind's window geometry (localStorage `fermata.detachedPanels`), and opens, focuses and
+  closes the windows (`windows.rs`: `open_panel_window`, `focus_panel_window`,
+  `close_panel_window`). Panel windows ask it with `panel-msg` events (`hello`, `attach`,
+  `detach`, `close`, `key`, `geometry`), and key commands pressed in them run in the main
+  window's `KEY_ACTIONS`.
+- **Kinds.** `src/panelKinds.tsx` registers each kind with `src/detach.ts`: its title, what its
+  window renders, whether a window's state shows it, and the state changes that hide and show
+  it (`bottom` for the Mixer and Editors, `fxDock` for effect panels). Each window hides a
+  detached panel its own state tries to show (X, a slot click) and brings that panel's window
+  to the front instead, so a panel is never shown twice. The main window closes the windows of
+  panels whose track or effect has gone.
+- **Sync.** Each window keeps its own store. The fields in `detachModel.ts` `SYNCED_FIELDS`
+  (selection, clipboard, snap, theme, interface size, the plug-in lists, `detached`) go to the
+  other windows as `ui-sync` patches, settings as `ui-settings`. Snapshots don't travel through
+  the frontend: after a window's `act()` changes its `snap`, it calls `broadcast_snapshot`
+  (throttled to one every 30 ms), and Rust sends the session's snapshot to every other window as
+  `project-sync`. The engine's `tick` and `project` events reach every window anyway. Applying
+  another window's change is marked remote, so it isn't sent back. With nothing detached, the
+  main window sends nothing.
+- **Event targets.** Tauri delivers an event to every listener registered for any target,
+  whatever target it was sent to, and a plain `listen()` registers for any target. So the
+  events meant for one window (`menu`, `panel-msg`, `ui-sync`, `ui-settings`, `project-sync`)
+  are listened for with `getCurrentWebviewWindow().listen`.
+- **Menu bar.** `windows.rs` `route_menu` sends a native menu item to the focused panel window,
+  else to the main window. On macOS the menu bar is the app's, so this is what decides which
+  window an item acts on. A panel window handles the editor's Edit items itself and passes the
+  rest to the main window.
+- **Geometry.** Kept per kind, as the outer position and inner size, in physical pixels; on
+  macOS in points, since the screens share one coordinate space in points there and a physical
+  position would be converted with the scale of the screen the window is on now. It is fitted
+  to the monitors' work areas when a window opens (`fitToMonitors`).
+- **Closing.** A panel window's close button attaches the panel. When the main window is
+  destroyed, `windows.rs` destroys the panel windows without asking them, so the detached
+  Mixer and Editors reopen at the next launch.
+
 ## 12. Tempo map
 
 **Model.** `Project.tempo_map: Vec<TempoEvent { pos, bpm, ramp }>` (positions in samples) and
@@ -1074,6 +1117,7 @@ it like any plug-in.
 | `settings.rs` | `settings.json`: `Settings`, `UiPrefs`, `PluginPrefs`, tolerant parsing. |
 | `recent.rs` | `recent.json` and the Project Chooser's recent list. |
 | `glib_loop.rs` | Linux: runs plug-in editor file descriptors and timers on GTK's main loop. |
+| `windows.rs` | Detached panel windows: opening, focusing and closing them, `broadcast_snapshot`, menu routing to the focused window. |
 
 ### `src` (frontend)
 
@@ -1121,6 +1165,9 @@ it like any plug-in.
 | `uiScale.ts` | Interface scale and canvas pixel ratio. |
 | `icons.tsx` | Hand-drawn control bar glyphs. |
 | `styles.css` | All styles, using the theme variables. |
+| `detach.ts` | Detached panel windows: the panel kind registry, sharing UI state and snapshots between windows, detaching and attaching, remembered geometry. |
+| `detachModel.ts` | Panel keys and window labels, the shared fields, fitting windows to monitors; pure, tested. |
+| `panelKinds.tsx` | The detachable panel kinds: Mixer, Editors, Channel EQ, effect panels. |
 
 ### `src/components`
 
@@ -1156,6 +1203,8 @@ it like any plug-in.
 | `fx/common.tsx` | Shared panel controls: knobs, toggles, choices, meters, the side-chain pop-up. |
 | `fx/Presets.tsx` | The preset pop-up (built-in effects and Channel EQ). |
 | `fx/Compressor.tsx`, `Limiter.tsx`, `Gate.tsx`, `DeEsser.tsx`, `Reverb.tsx`, `Delay.tsx`, `Tuner.tsx`, `Loudness.tsx` | Each effect's panel. |
+| `DetachedWindow.tsx` | The root of a detached panel's window. |
+| `DetachButton.tsx` | The Open in Separate Window / Attach to Main Window button. |
 
 ### Tests, examples and packaging
 

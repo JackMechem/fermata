@@ -231,12 +231,42 @@ status, the audio devices, and the number of MIDI inputs.
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
-| View | Library, Inspector, Mixer, Editors, Browsers, Show Automation, Musical Typing, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
+| View | Library, Inspector, Mixer, Editors, Mixer in Separate Window, Editor in Separate Window, Browsers, Show Automation, Musical Typing, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
 
 When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
 All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
 and Split act on the range.
 While a bounce is rendering, menu commands are ignored.
+
+### Separate windows
+
+The Mixer, the Editors, the Channel EQ and the built-in effect panels can each be opened in a
+window of their own, for example to put the Mixer on a second monitor.
+
+- **Open in Separate Window:** click the pop-out button at the right end of the panel's bar
+  (the Mixer's, the Piano Roll's or the Audio Track Editor's), or in an effect panel's or
+  Channel EQ's title bar, docked or floating. View › Mixer in Separate Window and View › Editor
+  in Separate Window do the same, and the Piano Roll's and Audio Track Editor's View menus have
+  the item too.
+- **Attach to Main Window:** the same button in the separate window (pop-in), the same menu
+  items, or the window's close button. The Mixer and the Editors go back to the bottom
+  section; an effect panel or Channel EQ opens in the main window as Settings › General › Open
+  Effect Panels says (docked or floating).
+- **One place at a time:** while a panel has its own window, it isn't shown in the main window.
+  X (Mixer), E (Editors), an insert slot or a Channel EQ thumbnail bring its window to the
+  front instead.
+- **Everything stays live.** Meters, the playhead, the selection (the editor follows it), the
+  theme, the interface size and the settings are the same in every window. Key commands and the
+  menu bar work in a separate window as in the main one; the Edit menu acts on the separate
+  window's editor while it is in front.
+- **Effect panels opened from a separate Mixer** (clicking an insert slot there) float inside
+  the Mixer's window.
+- An effect panel's or Channel EQ's own × (or Esc) closes it altogether, and its window goes
+  with it. So does removing the effect or deleting the track.
+- **Remembered:** each kind of window reopens where it was last, with its size, on the same
+  monitor if it is still connected (otherwise on the nearest one, moved and shrunk to fit). The
+  Mixer and the Editors reopen in their own windows at the next launch if they were detached
+  when Fermata quit. Separate windows close with the main window.
 
 ---
 
@@ -1899,6 +1929,9 @@ blank, because WebKit then draws on the CPU.
   plug-ins on the live track itself, not on the auxes or stacks it plays through. Fader
   automation written live is stored at the playhead, not compensated. Delay changes while
   playing (bypass, a plug-in reporting new latency) can click.
+- **Separate windows:** the analyzer follows one strip, so a Channel EQ in a separate window
+  and another strip's Channel EQ in the main window take turns showing it. On Linux under
+  native Wayland (not the default), the compositor decides where windows open.
 - **Built-in effects:** the side-chain key is always post-fader (no pre-fader option yet).
   Changing a Lookahead while playing can click as the delay compensation moves. Bounces keep
   the tail length set in the Bounce dialog whatever an effect's own tail; Freeze stretches its

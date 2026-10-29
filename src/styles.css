@@ -6485,3 +6485,42 @@ canvas.pr-cursor-line {
 .loud {
   max-width: 1000px;
 }
+
+/* ==== Detached windows (detach) ==== */
+
+/* A panel in a window of its own (components/DetachedWindow.tsx): it fills the window, which
+   sets its height instead of the bottom section's splitter. */
+.panel-window {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.panel-window > .mixer,
+.panel-window > .editor,
+.panel-window > .fx-dock {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  border-top: none;
+}
+
+/* An effect panel or Channel EQ's own window: the strip's name after the effect's. */
+.panel-plug-track {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--dim);
+}
+
+/* Open in Separate Window / Attach to Main Window, at the end of a panel's bar. */
+.lb-btn.detach-btn {
+  color: var(--dim);
+}
+
+.lb-btn.detach-btn:hover {
+  color: var(--text);
+}

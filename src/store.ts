@@ -84,6 +84,8 @@ export interface State {
   showOverview: boolean;
   /** Open plug-in panels and where they show (fxDock.ts). `fxPanels` and `eqEditor` follow it. */
   fxDock: DockPanels;
+  /** Panels shown in their own windows, by panel key ("mixer", "eq:12"; see detach.ts). */
+  detached: string[];
 }
 
 let state: State = {
@@ -126,6 +128,7 @@ let state: State = {
   fxPanels: [],
   showOverview: true,
   fxDock: { open: [], floating: [], active: null, ret: "none" },
+  detached: [],
 };
 
 const listeners = new Set<() => void>();
@@ -143,6 +146,14 @@ export function setState(patch: Partial<State> | ((s: State) => Partial<State>))
 function subscribe(l: () => void) {
   listeners.add(l);
   return () => listeners.delete(l);
+}
+
+/** Calls `l` after every state change (detach.ts shares some of the state between windows). */
+export function subscribeState(l: () => void): () => void {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
 }
 
 export function useStore<T>(sel: (s: State) => T): T {

@@ -1,6 +1,7 @@
 import type { Region, Track } from "../api";
 import { useStore } from "../store";
 import { AudioEditor } from "./AudioEditor";
+import { DetachButton } from "./DetachButton";
 import { PianoRoll } from "./PianoRoll";
 
 /**
@@ -30,6 +31,9 @@ export function Editor() {
       <div className="local-bar">
         <div className="local-menus">
           <span className="local-title">Editor</span>
+        </div>
+        <div className="local-right">
+          <DetachButton panel="editor" />
         </div>
       </div>
       <div className="editor-body">

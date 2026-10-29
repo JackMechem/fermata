@@ -38,6 +38,8 @@ import {
   type PrView,
 } from "../pianoRollDraw";
 import { currentTick, getState, setState, useStore } from "../store";
+import { detachMenuItems } from "../detach";
+import { DetachButton } from "./DetachButton";
 import { lengthBbt, samplesPerBeat, toBbt } from "../time";
 import { barLines, musicalWarp, tempoMap, type Warp } from "../tempo";
 import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu";
@@ -1645,6 +1647,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       { label: "Taller Rows", hint: fmt("Mod+ArrowDown"), onClick: () => zoomY(1.2) },
       { label: "Shorter Rows", hint: fmt("Mod+ArrowUp"), onClick: () => zoomY(1 / 1.2) },
       { label: "Zoom to Fit Region", hint: "Z", onClick: zoomToFit },
+      ...detachMenuItems("editor"),
     ];
   };
 
@@ -1916,6 +1919,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
             title={`Horizontal zoom (${fmt("Mod")}-scroll, ${fmt("Mod+ArrowLeft")} / ${fmt("Mod+ArrowRight")})`}
             onChange={(e) => zoomX((6 * Math.pow(1600 / 6, parseFloat(e.target.value))) / pr.pxPerBeat)}
           />
+          <DetachButton panel="editor" />
         </div>
       </div>
       {qOpen && (

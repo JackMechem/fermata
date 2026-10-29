@@ -1,7 +1,8 @@
-//! The native menu bar. Items emit a `menu` event carrying their id to the frontend.
+//! The native menu bar. Items emit a `menu` event carrying their id to the frontend (to the
+//! focused detached panel window, if any; see windows.rs).
 
 use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{App, Emitter, Runtime};
+use tauri::{App, Runtime};
 
 /// Logic's ⌃B. Elsewhere Ctrl+B is already Bounce Project (⌘B), so Bounce in Place adds Alt.
 const BOUNCE_IN_PLACE_KEY: &str = if cfg!(target_os = "macos") { "Ctrl+B" } else { "Ctrl+Alt+B" };
@@ -118,6 +119,9 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("inspector", "Inspector", None)?)
         .item(&item("mixer", "Mixer", None)?)
         .item(&item("editor", "Editors", None)?)
+        // Toggles: a detached panel's own window, or back into the main window.
+        .item(&item("detach:mixer", "Mixer in Separate Window", None)?)
+        .item(&item("detach:editor", "Editor in Separate Window", None)?)
         .item(&item("browser", "Browsers", None)?)
         .item(&item("automation", "Show Automation", None)?)
         .item(&item("global-tracks", "Show Global Tracks", None)?)
@@ -138,8 +142,6 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
 
     let menu = MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &track, &record, &navigate, &view]).build()?;
     app.set_menu(menu)?;
-    app.on_menu_event(|app, ev| {
-        let _ = app.emit("menu", ev.id().0.clone());
-    });
+    app.on_menu_event(|app, ev| crate::windows::route_menu(app, ev.id().0.clone()));
     Ok(())
 }

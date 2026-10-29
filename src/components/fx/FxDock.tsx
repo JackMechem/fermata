@@ -4,6 +4,7 @@
 import { dockedPanels, type PanelKey } from "../../fxDock";
 import { closePanel, floatPanel, selectDocked } from "../../fxDockState";
 import { useStore } from "../../store";
+import { DetachButton } from "../DetachButton";
 import { FloatGlyph, PanelContent, PanelLead, PanelTools, usePanelTitle } from "./FxPanel";
 
 export function FxDock() {
@@ -26,6 +27,7 @@ export function FxDock() {
         )}
         {active !== null && (
           <div className="local-right">
+            <DetachButton panel={active} />
             <button className="lb-btn" title="Float in its own window" onClick={() => floatPanel(active)}>
               <FloatGlyph />
             </button>

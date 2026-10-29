@@ -10,6 +10,7 @@ import { undoRedo } from "./files";
 import * as ops from "./ops";
 import { currentTick, getState, setState } from "./store";
 import { regionsIn, subRegion } from "./audioRange";
+import { detachMenuItems } from "./detach";
 
 export { regionsIn };
 
@@ -362,6 +363,7 @@ export function viewMenu(): MenuItem[] {
       label: "Transient Sensitivity",
       children: SENSITIVITIES.map(([label, v]) => ({ label, checked: Math.abs(st.sensitivity - v) < 0.01, onClick: () => setEd({ sensitivity: v, showTransients: true }) })),
     },
+    ...detachMenuItems("editor"),
   ];
 }
 

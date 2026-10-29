@@ -12,6 +12,7 @@ import { useSelectedTrack } from "./TrackHeaders";
 import { isLooped } from "../loops";
 import { toggleLoop } from "../ops";
 import { loadPlugin } from "../fxHost";
+import { DetachButton } from "./DetachButton";
 
 function Disclosure({ title, children, initial = true }: { title: string; children: React.ReactNode; initial?: boolean }) {
   const [open, setOpen] = useState(initial);
@@ -132,7 +133,9 @@ export function Mixer() {
             Aux
           </button>
         </div>
-        <div className="local-right" />
+        <div className="local-right">
+          <DetachButton panel="mixer" />
+        </div>
       </div>
       <div className="mixer-strips">
         {tracks.map((t) => (
