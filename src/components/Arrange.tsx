@@ -16,6 +16,8 @@ import { automationHover, automationLeave, automationMenu, automationMouseDown, 
 import { refuseFrozen } from "../freeze";
 import { getSettings } from "../prefs";
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
+import { onRevealPlayhead, revealLeft } from "../view";
+import { timeWheel } from "../wheel";
 
 // ---- peaks ----------------------------------------------------------------------------------
 
@@ -572,7 +574,16 @@ export function Arrange() {
         zoomTracks(e.deltaY < 0 ? 1.1 : 1 / 1.1);
         return;
       }
-      if (!(e.ctrlKey || e.metaKey)) return;
+      if (!(e.ctrlKey || e.metaKey)) {
+        // Settings › Editing › Mouse Wheel Scrolls: Horizontally. The default is left to native
+        // scrolling.
+        if (getSettings().ui.wheel_scrolls !== "horizontal") return;
+        e.preventDefault();
+        const { dx, dy } = timeWheel(e, el.clientWidth);
+        el.scrollLeft += dx;
+        el.scrollTop += dy;
+        return;
+      }
       e.preventDefault();
       const { project, pps } = live.current;
       if (!project) return;
@@ -632,6 +643,18 @@ export function Arrange() {
           if (x > vp.width - 30) el.scrollLeft = pos * pps - 60;
           else if (x < 0) el.scrollLeft = Math.max(0, pos * pps - 60);
         }
+      }),
+    [],
+  );
+
+  // Go to Beginning, a second Stop and the like move the playhead while stopped, when Catch
+  // doesn't follow it: bring it into view (horizontally only).
+  useEffect(
+    () =>
+      onRevealPlayhead((pos) => {
+        const el = scrollRef.current!;
+        const left = revealLeft(pos * live.current.pps, el.scrollLeft, el.clientWidth);
+        if (left !== null) el.scrollLeft = left;
       }),
     [],
   );

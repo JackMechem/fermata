@@ -202,7 +202,7 @@ function TransportButtons() {
       <button className="tp-btn" title="Forward (.)" onClick={() => transport.nudgeBars(1)}>
         <Icon.forward />
       </button>
-      <button className="tp-btn" title="Stop" onClick={() => act("stop")}>
+      <button className="tp-btn" title="Stop" onClick={() => transport.stop()}>
         <Icon.stop />
       </button>
       <button className={"tp-btn play" + (t.playing && !t.recording ? " on" : "")} title={`Play (${keyHint("play")})`} onClick={() => act("play")}>

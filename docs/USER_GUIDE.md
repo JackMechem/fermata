@@ -117,7 +117,9 @@ From left to right:
 - **Library, Inspector, Mixer, Editors** buttons.
 - **Transport:** Rewind (`,`, to the previous bar line), Forward (`.`, to the next bar line),
   Stop, Play (Space), Record (R). Stop while stopped returns to the left locator when Cycle is
-  on, otherwise to the start.
+  on, otherwise to the start. When the playhead lands off screen this way, or with Go to
+  Beginning (Enter), Rewind, Forward or Go to Previous / Next Marker, the Tracks area and the
+  open editor scroll sideways to show it near their left edge, whether or not Catch is on.
 - **The LCD:**
   - **BAR / BEAT:** the playhead position. Drag vertically to move the playhead by bars.
   - **TEMPO:** drag vertically to change it, or double-click to type a value (Enter applies,
@@ -146,8 +148,12 @@ From left to right:
   audio and instrument tracks), I (Input Monitoring, audio tracks) buttons, the Freeze
   (snowflake) button, a group badge, and a volume slider with a level meter. The **+** button
   above the headers opens New Tracks; the **H** button turns on hide mode.
-- **Tracks:** regions on lanes. Scroll with the wheel; Ctrl+wheel zooms horizontally around the
-  pointer, Alt+wheel changes track heights. A click without a drag, on a region or on empty
+- **Tracks:** regions on lanes. Scroll with the wheel (Shift+wheel or a sideways trackpad swipe
+  scrolls through time); Ctrl+wheel zooms horizontally around the pointer, Alt+wheel changes
+  track heights. With a mouse that has only a vertical wheel, set Settings › Editing › Mouse
+  Wheel Scrolls to **Horizontally (time)**: the wheel then scrolls through time and Shift+wheel
+  scrolls the tracks. Over the track headers the wheel always scrolls the tracks, and over the
+  ruler and global tracks it always scrolls through time. A click without a drag, on a region or on empty
   space, also moves the playhead there (snapped to the grid). Settings › Editing › Click Moves
   Playhead can limit this to empty space or turn it off.
 
@@ -662,6 +668,9 @@ Logic's, with ideas from Ableton's MIDI editor, Cubase's Key Editor and FL Studi
 - **Zoom:** Ctrl+wheel or the horizontal slider zooms in time, Alt+wheel or the row slider
   changes the row height; Ctrl+Right / Ctrl+Left and Ctrl+Down / Ctrl+Up do the same from the
   keyboard. **Z** (View › Zoom to Fit Region) fits the focused region and its pitch range.
+- **Scroll:** over the notes the wheel scrolls the pitches and Shift+wheel scrolls through time;
+  with Settings › Editing › Mouse Wheel Scrolls set to Horizontally it's the other way round.
+  Over the ruler and the controller lane the wheel always scrolls through time.
 - **Catch Playhead** (button and View menu) pages along with the playhead.
 - **View menu:** Color by Velocity (Logic's violet-to-red scale) or Color by Region; Highlight
   Scale (shades the rows of the project key's scale); Show Velocity / Controller Lane and Lane ›;
@@ -1448,6 +1457,7 @@ The velocity curve applies to MIDI inputs, not to Musical Typing.
 | Nudge Value | Bar, Beat, 1/8 note, 1/16 note, 1/32 note, 10 ms, 1 ms | 1/16 note |
 | Click Moves Playhead | Anywhere in the tracks; Empty space only; Never (a click without a drag moves the playhead there, snapped to the grid) | Anywhere |
 | Anti-click Fades | 0 to 100 ms, for new recordings and imports | 0 |
+| Mouse Wheel Scrolls | Vertically (tracks); Horizontally (time), for a mouse with one wheel: the wheel scrolls through time in the Tracks area and Piano Roll, and Shift+wheel scrolls vertically | Vertically |
 
 ### Plug-ins
 
@@ -1590,6 +1600,8 @@ Control+B.
 
 | Gesture | Action |
 |---|---|
+| Wheel | Scroll the tracks (or through time, see Settings › Editing › Mouse Wheel Scrolls) |
+| Shift+wheel | Scroll through time (or the tracks, with Mouse Wheel Scrolls set to Horizontally) |
 | Ctrl+wheel | Zoom horizontally around the pointer |
 | Alt+wheel | Change track heights |
 | Shift+click a region | Add it to or remove it from the selection |

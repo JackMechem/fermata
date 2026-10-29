@@ -9,6 +9,9 @@ import { mix, theme } from "../theme";
 import { onViewport, RULER_H, viewport } from "../view";
 import { createMarker, drawMarkers, markerAt, markerLaneMenu, markerMenu, renameMarker } from "../markers";
 import { openMenu } from "./Menu";
+import { getSettings } from "../prefs";
+import { scrollTo } from "../view";
+import { timeStripWheel } from "../wheel";
 
 const CYCLE_H = 12;
 /** Bottom of the bar numbers; the Autopunch strip and the marker lane are below. */
@@ -269,9 +272,15 @@ export function Ruler() {
     openMenu(e.clientX, e.clientY, m ? markerMenu(m) : markerLaneMenu(snapped));
   };
 
+  // The wheel scrolls through time here, as over the global tracks.
+  const onWheel = (e: React.WheelEvent) => {
+    const dx = timeStripWheel(e, getSettings().ui.wheel_scrolls ?? "vertical", viewport().width);
+    if (dx) scrollTo(Math.max(0, viewport().left + dx));
+  };
+
   return (
     <div className="ruler-wrap">
-      <canvas ref={ref} className="ruler" onMouseDown={onMouseDown} onContextMenu={onContextMenu} />
+      <canvas ref={ref} className="ruler" onMouseDown={onMouseDown} onContextMenu={onContextMenu} onWheel={onWheel} />
       <div className="ruler-playhead" ref={handleRef} style={{ ["--ph" as string]: theme.playhead }} />
     </div>
   );

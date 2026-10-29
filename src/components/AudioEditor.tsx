@@ -15,6 +15,7 @@ import { ensureWave, waveCache, type Wave } from "../waveform";
 import { drawRegion, FADE_ZONE } from "./Arrange";
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { fmt } from "../keymap";
+import { onRevealPlayhead, revealLeft } from "../view";
 
 /** Ruler height, with the cycle strip at its top. */
 const RULER = 24;
@@ -514,12 +515,18 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
         if (x > el.clientWidth - 30 || x < 0) el.scrollLeft = Math.max(0, pos * pps - 60);
       }
     });
+    // Go to Beginning and a second Stop bring the playhead into view, as in the Tracks area.
+    const offReveal = onRevealPlayhead((pos) => {
+      const left = revealLeft(pos * live.current.pps, el.scrollLeft, el.clientWidth);
+      if (left !== null) el.scrollLeft = left;
+    });
     return () => {
       ro.disconnect();
       el.removeEventListener("wheel", wheel);
       window.removeEventListener("keydown", ed.onEditorKey, true);
       window.removeEventListener("mousedown", ed.onWindowMouseDown, true);
       offFrame();
+      offReveal();
     };
   }, []);
 

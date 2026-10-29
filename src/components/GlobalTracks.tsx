@@ -17,6 +17,8 @@ import { pixelRatio } from "../uiScale";
 import { onViewport, scrollTo, viewport } from "../view";
 import { NumberField } from "./Form";
 import { openMenu, type MenuItem } from "./Menu";
+import { getSettings } from "../prefs";
+import { timeStripWheel } from "../wheel";
 
 /** Height of the Signature lane. */
 export const SIG_H = 20;
@@ -395,9 +397,10 @@ export function GlobalTracks() {
     openMenu(e.clientX, e.clientY, items);
   };
 
-  // Horizontal wheel scrolls the arrange area.
+  // Horizontal wheel scrolls the arrange area (and the plain wheel too with Settings › Editing
+  // › Mouse Wheel Scrolls: Horizontally).
   const onWheel = (e: React.WheelEvent) => {
-    const dx = e.shiftKey ? e.deltaY : e.deltaX;
+    const dx = timeStripWheel(e, getSettings().ui.wheel_scrolls ?? "vertical", viewport().width);
     if (dx) scrollTo(Math.max(0, viewport().left + dx));
   };
 

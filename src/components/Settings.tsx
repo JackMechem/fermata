@@ -22,6 +22,7 @@ import {
 } from "../prefs";
 import { setState, useStore, type Snap, type SettingsTab } from "../store";
 import { Check, NumberField, Select, sheetKey, Slider } from "./Form";
+import type { WheelScrolls } from "../wheel";
 
 const toast = (text: string, ms = 3000) => setState({ toast: { text, at: Date.now(), ms } });
 
@@ -607,6 +608,11 @@ const CLICK_LOCATES: [ClickLocates, string][] = [
   ["off", "Never"],
 ];
 
+const WHEEL_SCROLLS: [WheelScrolls, string][] = [
+  ["vertical", "Vertically (tracks)"],
+  ["horizontal", "Horizontally (time)"],
+];
+
 const NUDGES: [Nudge, string][] = [
   ["bar", "Bar"],
   ["beat", "Beat"],
@@ -644,6 +650,14 @@ function EditingPane({ close }: { close: () => void }) {
             <NumberField value={fade} min={0} max={100} step={0.5} resolution={0.1} onChange={(v) => setPrefs("editing", { fade_ms: v })} />
             <span className="dim">ms</span>
           </div>
+        </Row>
+      </Section>
+      <Section title="Scrolling">
+        <Row
+          label="Mouse Wheel Scrolls:"
+          note="In the Tracks area and the Piano Roll. Horizontally suits a mouse with one wheel: it moves through time, and Shift+wheel scrolls the tracks instead. A trackpad's sideways swipe always scrolls in time."
+        >
+          <Select value={ui.wheel_scrolls ?? "vertical"} options={WHEEL_SCROLLS} onChange={(v) => setUi({ wheel_scrolls: v })} />
         </Row>
       </Section>
       <Foot close={close} />

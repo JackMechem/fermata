@@ -41,6 +41,9 @@ import { currentTick, getState, setState, useStore } from "../store";
 import { lengthBbt, samplesPerBeat, toBbt } from "../time";
 import { barLines, musicalWarp, tempoMap, type Warp } from "../tempo";
 import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu";
+import { getSettings } from "../prefs";
+import { onRevealPlayhead, revealLeft } from "../view";
+import { timeWheel } from "../wheel";
 
 type PNote = me.PNote;
 type PCc = me.PCc;
@@ -470,9 +473,16 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         if (x > v.W - 24 || x < 0) el.scrollLeft = Math.max(0, pos * v.pps - v.W * 0.08);
       }
     });
+    // Go to Beginning and a second Stop bring the playhead into view, as in the Tracks area.
+    const offReveal = onRevealPlayhead((pos) => {
+      const v = view();
+      const left = revealLeft(pos * v.pps, v.left, v.W, v.W * 0.08);
+      if (left !== null) el.scrollLeft = left;
+    });
     return () => {
       ro.disconnect();
       off();
+      offReveal();
     };
   }, []);
 
@@ -1371,6 +1381,13 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       } else if (e.altKey) {
         e.preventDefault();
         zoomY(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientY - el.getBoundingClientRect().top);
+      } else if (getSettings().ui.wheel_scrolls === "horizontal") {
+        // Settings › Editing › Mouse Wheel Scrolls: the wheel moves through time, Shift+wheel
+        // through the pitches. The default is left to native scrolling.
+        e.preventDefault();
+        const { dx, dy } = timeWheel(e, el.clientWidth);
+        el.scrollLeft += dx;
+        el.scrollTop += dy;
       }
     };
     // Over the ruler and the lane the wheel scrolls (or zooms) in time.

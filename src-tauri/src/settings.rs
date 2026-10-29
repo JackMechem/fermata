@@ -54,6 +54,9 @@ pub struct UiPrefs {
     /// Settings › Editing: what a click in the tracks area does to the playhead: "anywhere"
     /// (empty space and regions), "empty" (empty space only) or "off".
     pub click_locates: String,
+    /// Settings › Editing: what the mouse wheel scrolls in the Tracks area and Piano Roll:
+    /// "vertical" (tracks, Shift for time) or "horizontal" (time, Shift for tracks).
+    pub wheel_scrolls: String,
 }
 
 impl Default for UiPrefs {
@@ -68,6 +71,7 @@ impl Default for UiPrefs {
             ui_scale: None,
             wave_style: None,
             click_locates: "anywhere".into(),
+            wheel_scrolls: "vertical".into(),
         }
     }
 }
@@ -138,6 +142,7 @@ mod tests {
         assert_eq!(s.ui.startup, Startup::LastProject);
         assert_eq!(s.ui.nudge, "beat");
         assert_eq!(s.ui.snap, "smart");
+        assert_eq!(s.ui.wheel_scrolls, "vertical");
         assert_eq!(s.audio.sample_rate, AudioConfig::default().sample_rate);
     }
 

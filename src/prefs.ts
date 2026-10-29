@@ -4,6 +4,7 @@ import { useSyncExternalStore } from "react";
 import { act, call, type BitDepth, type ClickSettings, type PluginDesc, type Project, type RecentProject, type Snapshot } from "./api";
 import { getState, setState, type Snap } from "./store";
 import { tempoMap } from "./tempo";
+import type { WheelScrolls } from "./wheel";
 
 export type AudioOverlap = "on_top" | "new_track" | "replace";
 export type MidiOverlap = "new_region" | "merge";
@@ -47,6 +48,8 @@ export interface UiPrefs {
   wave_style?: string | null;
   /** Settings › Editing: what a click in the tracks area does to the playhead. */
   click_locates?: ClickLocates;
+  /** Settings › Editing: what the mouse wheel scrolls in the Tracks area and Piano Roll. */
+  wheel_scrolls?: WheelScrolls;
 }
 
 export interface PluginPrefs {
