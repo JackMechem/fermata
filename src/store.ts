@@ -2,10 +2,12 @@ import { useSyncExternalStore } from "react";
 import type { AutoParam, Id, PluginDesc, Region, Snapshot, Tick } from "./api";
 import type { FxInfo } from "./fx";
 import type { DropTarget } from "./dnd";
+import type { DockPanels } from "./fxDock";
 import type { WaveStyle } from "./waveform";
 
 export type Snap = "smart" | "bar" | "beat" | "off";
-export type BottomPane = "none" | "mixer" | "editor";
+/** What the bottom section shows; "fx" is the docked plug-in panels (fxDock.ts). */
+export type BottomPane = "none" | "mixer" | "editor" | "fx";
 export type SettingsTab = "general" | "audio" | "recording" | "metronome" | "midi" | "editing" | "plugins" | "keys" | "appearance";
 
 /** Resizable pane sizes in CSS pixels (widths, except the bottom panes' heights). */
@@ -17,6 +19,8 @@ export interface PaneSizes {
   editor: number;
   /** Width of the track header column. */
   headers: number;
+  /** Height of the bottom section while it shows docked plug-in panels. */
+  fx: number;
 }
 
 export interface State {
@@ -74,10 +78,12 @@ export interface State {
   moveMidiWithTempo: boolean;
   /** The built-in effects (`list_builtin_effects`). */
   fxList: FxInfo[];
-  /** Built-in effect instances whose panel windows are open, the frontmost last. */
+  /** Built-in effect instances whose panels are open (docked or floating); see `fxDock`. */
   fxPanels: Id[];
   /** The overview strip under the tracks, in place of the horizontal scroll bar (View menu). */
   showOverview: boolean;
+  /** Open plug-in panels and where they show (fxDock.ts). `fxPanels` and `eqEditor` follow it. */
+  fxDock: DockPanels;
 }
 
 let state: State = {
@@ -102,7 +108,7 @@ let state: State = {
   focus: "regions",
   clipboard: [],
   groupSheet: null,
-  paneSizes: { library: 230, inspector: 222, browser: 230, mixer: 400, editor: 300, headers: 296 },
+  paneSizes: { library: 230, inspector: 222, browser: 230, mixer: 400, editor: 300, headers: 296, fx: 420 },
   settingsTab: "audio",
   themeId: "studio",
   uiScale: 1,
@@ -119,6 +125,7 @@ let state: State = {
   fxList: [],
   fxPanels: [],
   showOverview: true,
+  fxDock: { open: [], floating: [], active: null, ret: "none" },
 };
 
 const listeners = new Set<() => void>();

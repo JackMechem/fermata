@@ -5388,6 +5388,9 @@ canvas.pr-cursor-line {
 }
 
 .dyn-seg button.on {
+  background: var(--btn-active);
+  color: var(--text);
+  box-shadow: var(--btn-shadow);
 }
 
 /* Built-in effect panels (components/fx). The window borrows the Channel EQ window's frame. */
@@ -6109,4 +6112,376 @@ canvas.pr-cursor-line {
   left: 0;
   top: 0;
   display: block;
+}
+
+/* ==== Effect panels (fxdock) ==== */
+/* Built-in effect panels and the Channel EQ, docked in the bottom section (fx/FxDock.tsx) or
+   floating in a window of their own (fx/FxWindow.tsx). A panel fills the box it is given: its
+   graphs and meters grow from their old fixed sizes, which are now minimums, the controls keep
+   their size, and the body scrolls when the box is smaller than the panel. Canvases sit
+   absolutely in a measured box, so their size never feeds back into the layout. */
+
+/* The Loudness Meter's readouts: a column, each value and its unit side by side on one
+   baseline. (The grid with align-items: baseline drew the units over the values in WebKit.) */
+.loud-read {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.loud-read-num {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.loud-read-num > .loud-read-value,
+.loud-read-num > .loud-read-unit {
+  flex: none;
+}
+
+.loud-read-value {
+  font-variant-numeric: tabular-nums;
+}
+
+.loud-history {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 84px;
+}
+
+.loud-history-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* The floating window. Its content scrolls inside it, so the window itself doesn't clip: the
+   preset sheet can hang below a short window. */
+.fx-window {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 16px);
+  overflow: visible;
+}
+
+.fx-window > .eq-titlebar {
+  flex: none;
+  border-radius: 10px 10px 0 0;
+  white-space: nowrap;
+}
+
+.fx-window > .fx-body,
+.fx-window > .eq-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 0 0 10px 10px;
+}
+
+.fx-title-gap {
+  margin-left: auto;
+}
+
+.fx-window .eq-close {
+  margin-left: 0;
+}
+
+.fx-mode {
+  width: 24px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  color: var(--dim);
+}
+
+.fx-mode:hover {
+  background: var(--btn-hi);
+  color: var(--text);
+}
+
+/* Resize handles, straddling the window's edges (none along the title bar, which moves it). */
+.fx-resize {
+  position: absolute;
+  z-index: 3;
+}
+
+.fx-resize.e,
+.fx-resize.w {
+  top: 32px;
+  bottom: 9px;
+  width: 6px;
+  cursor: ew-resize;
+}
+
+.fx-resize.e {
+  right: -3px;
+}
+
+.fx-resize.w {
+  left: -3px;
+}
+
+.fx-resize.s {
+  left: 9px;
+  right: 9px;
+  bottom: -3px;
+  height: 6px;
+  cursor: ns-resize;
+}
+
+.fx-resize.se,
+.fx-resize.sw {
+  bottom: -3px;
+  width: 12px;
+  height: 12px;
+}
+
+.fx-resize.se {
+  right: -3px;
+  cursor: nwse-resize;
+}
+
+.fx-resize.sw {
+  left: -3px;
+  cursor: nesw-resize;
+}
+
+/* The panel's body, wherever it shows. Each panel fills the width up to its own maximum, centred
+   beyond that, and takes the height there is. */
+.fx-body {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.fx-body > * {
+  flex: 1 0 auto;
+  width: 100%;
+  margin-inline: auto;
+}
+
+.eq-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.eq-panel > * {
+  flex: none;
+}
+
+.eq-panel > .eq-graph {
+  position: relative;
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 250px;
+}
+
+.eq-graph canvas {
+  position: absolute;
+  inset: 0;
+}
+
+/* The bottom section's dock: tabs for the docked panels, then the shown one. */
+.fx-dock {
+  height: var(--fx-h, 420px);
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--edge);
+  background: var(--bg);
+}
+
+.fx-dock > .fx-body,
+.fx-dock > .eq-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.fx-dock > .eq-panel {
+  background: var(--sheet-bg);
+}
+
+.fx-tabs {
+  flex: 0 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.fx-tab {
+  flex: 0 1 auto;
+  min-width: 64px;
+  max-width: 240px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 3px 0 9px;
+  border-radius: 4px;
+  color: var(--dim);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fx-tab:hover {
+  color: var(--text);
+}
+
+.fx-tab.on {
+  background: var(--btn-active);
+  color: var(--text);
+  box-shadow: var(--btn-shadow);
+}
+
+.fx-tab-name {
+  flex: none;
+}
+
+.fx-tab-track {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.fx-tab-close {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  border-radius: 3px;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--dim);
+  visibility: hidden;
+}
+
+.fx-tab:hover .fx-tab-close,
+.fx-tab.on .fx-tab-close {
+  visibility: visible;
+}
+
+.fx-tab-close:hover {
+  background: var(--btn-hi);
+  color: var(--text);
+}
+
+.fx-dock-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 10px;
+  border-left: 1px solid var(--edge);
+}
+
+.fx-dock-close {
+  margin-left: 0;
+}
+
+/* Compressor: the meter row takes the spare height (the transfer curve follows it, see
+   Compressor.tsx); the knobs and sections keep their size. */
+.dyn-comp {
+  min-width: 600px;
+  max-width: 1100px;
+}
+
+/* The basis is 0, not auto, and the minimum is the In/Out meters' smallest (108 px bar, label
+   and readout), so the curve drawn at the row's height never holds the row open. */
+.dyn-top {
+  flex: 1 1 0;
+  min-height: 143px;
+}
+
+.dyn-top > .dyn-graph {
+  align-self: center;
+}
+
+.dyn-vu {
+  max-height: none;
+}
+
+/* Limiter: the meters grow with the panel. */
+.dyn-lim {
+  min-width: 430px;
+  max-width: 820px;
+}
+
+.dyn-lim-body {
+  flex: 1 1 auto;
+}
+
+/* Noise Gate, DeEsser and the generic panel: the groups share the width, the meters the height. */
+.fx-panel,
+.fx-generic {
+  max-width: 1000px;
+}
+
+.fx-group {
+  flex: 1 1 auto;
+}
+
+.fx-group-body {
+  justify-content: space-around;
+}
+
+.fx-meters {
+  align-items: stretch;
+}
+
+.fx-meter-bar {
+  flex: 1 1 auto;
+}
+
+/* Reverb and Delay: the graph takes the spare height, the groups below share the width. */
+.sp-panel {
+  max-width: 1200px;
+}
+
+.sp-main {
+  flex: 1 1 auto;
+}
+
+.sp-graph {
+  height: auto;
+  min-height: 176px;
+}
+
+.sp-group {
+  flex: 1 1 auto;
+  justify-content: space-around;
+}
+
+/* Tuner: the dial takes the spare height and scales up with it (Tuner.tsx). */
+.tuner {
+  max-width: 900px;
+}
+
+.tuner-face {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.tuner-dial-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 112px;
+}
+
+.tuner-dial-box > .tuner-dial {
+  position: absolute;
+  inset: 0;
+}
+
+/* Loudness Meter: the history takes the spare height (above). */
+.loud {
+  max-width: 1000px;
 }

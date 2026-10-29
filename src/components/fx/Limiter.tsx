@@ -24,8 +24,8 @@ export function LimiterPanel(props: FxPanelProps) {
     <div className="dyn-panel dyn-lim">
       <div className="dyn-lim-body">
         <div className="dyn-lim-meters">
-          <LevelBar db={mIn} label="In" length={150} />
-          <LevelBar db={mOut} label={tp ? "Out TP" : "Out"} length={150} />
+          <LevelBar db={mIn} label="In" length={150} grow />
+          <LevelBar db={mOut} label={tp ? "Out TP" : "Out"} length={150} grow />
         </div>
         <div className="dyn-lim-controls">
           <div className="dyn-lim-gr">

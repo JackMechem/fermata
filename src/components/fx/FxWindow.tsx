@@ -1,17 +1,28 @@
-// Panel windows for built-in effects: one floating window per open instance (like the Channel
-// EQ window), hosting the effect's custom panel from FX_PANELS or the generic one.
-import { useEffect, useRef, useState } from "react";
-import { act, api, call, MASTER_ID, type Id } from "../../api";
-import { FX_PANELS, type FxPanelProps } from "../../fx";
-import { valuesOf } from "../../fxFormat";
-import { closeFxPanel, findFxSlot, fxInfo, openFxPanel } from "../../fxHost";
-import { getState, onTick, useStore } from "../../store";
-import { FxControl, FxMeter, FxSideChain, isReductionMeter } from "./common";
-import { PresetButton, type Preset } from "./Presets";
+// Floating plug-in panels: an in-app window per panel taken out of the bottom section (or opened
+// floating, as Settings › General says), hosting the effect's panel or the Channel EQ. The
+// windows move by their title bar and resize by their edges; each effect type remembers its
+// last size. Also here, because it is always mounted: Esc and closing panels whose instance
+// went away, for docked panels too.
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DEFAULT_WIDTH, keepOnScreen, resizeRect, type Edge, type PanelKey, type Size } from "../../fxDock";
+import { closePanel, dockPanel, escTarget, focusPanel, prunePanels, savedPanelSize, savePanelSize } from "../../fxDockState";
+import { getState, useStore } from "../../store";
+import { DockGlyph, PanelContent, PanelLead, PanelTools, panelExists, usePanelTitle } from "./FxPanel";
 
-/** Every open panel window. */
+/** Where each floating panel was, so floating it again puts it back there. */
+const positions = new Map<PanelKey, { x: number; y: number }>();
+
+/** Every floating panel, plus the Esc key and clean-up for all open panels. */
 export function FxWindows() {
-  const open = useStore((s) => s.fxPanels);
+  const open = useStore((s) => s.fxDock.open);
+  const floating = useStore((s) => s.fxDock.floating);
+  const project = useStore((s) => s.snap?.project);
+
+  // The instance is gone (removed, undone, another project): its panel goes with it.
+  useEffect(() => {
+    if (project && open.length) prunePanels((k) => panelExists(project, k));
+  }, [project, open]);
+
   useEffect(() => {
     if (!open.length) return;
     // Esc closes the frontmost panel, unless it belongs to a sheet, a menu or a field.
@@ -19,83 +30,78 @@ export function FxWindows() {
       if (e.key !== "Escape" || e.defaultPrevented || getState().dialog) return;
       const tgt = e.target as HTMLElement | null;
       if (tgt && ["INPUT", "SELECT", "TEXTAREA"].includes(tgt.tagName)) return;
-      const panels = getState().fxPanels;
-      if (panels.length) {
+      const key = escTarget();
+      if (key !== null) {
         e.preventDefault();
-        closeFxPanel(panels[panels.length - 1]);
+        closePanel(key);
       }
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [open.length]);
+
   return (
     <>
-      {open.map((uid, i) => (
-        <FxWindow key={uid} uid={uid} z={i} />
+      {floating.map((key, i) => (
+        <FloatingPanel key={key} panelKey={key} z={i} />
       ))}
     </>
   );
 }
 
-/** Values set from this panel within this long win over the tick's (which lag a little). */
-const LOCAL_MS = 500;
+const EDGES: Edge[] = ["e", "w", "s", "se", "sw"];
 
-function FxWindow({ uid, z }: { uid: Id; z: number }) {
-  const project = useStore((s) => s.snap?.project);
-  useStore((s) => s.fxList);
-  const at = findFxSlot(project, uid);
-  const info = fxInfo(at?.plugin.plugin_id);
-  const [pos, setPos] = useState(() => ({ x: Math.max(20, window.innerWidth / 2 - 280 + z * 24), y: 120 + z * 24 }));
-  const [meters, setMeters] = useState<number[]>([]);
-  const [live, setLive] = useState<Record<number, number>>({});
-  const local = useRef(new Map<number, { v: number; at: number }>());
+/** The narrowest the window's content allows, at its current settings. */
+function minWidth(el: HTMLElement): number {
+  const w = el.style.width;
+  el.style.width = "min-content";
+  const min = el.offsetWidth;
+  el.style.width = w;
+  return min;
+}
 
-  // The instance is gone (removed, undone, another project): the window goes with it.
-  const gone = !at || !info;
+/** The height the window's content needs at its current width (graphs at their smallest). */
+function naturalHeight(el: HTMLElement): number {
+  const h = el.style.height;
+  el.style.height = "auto";
+  const nat = el.offsetHeight;
+  el.style.height = h;
+  return nat;
+}
+
+function FloatingPanel({ panelKey, z }: { panelKey: PanelKey; z: number }) {
+  const title = usePanelTitle(panelKey);
+  const type = title?.type ?? null;
+  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState(() => positions.get(panelKey) ?? { x: Math.max(20, window.innerWidth / 2 - 280 + z * 24), y: 120 + z * 24 });
+  // Null until the window is first resized: it then sizes to its content.
+  const [size, setSize] = useState<Size | null>(() => (type ? savedPanelSize(type) : null));
+  const sizeType = useRef(type);
+
   useEffect(() => {
-    if (!at && project) closeFxPanel(uid);
-  }, [at, project, uid]);
+    positions.set(panelKey, pos);
+  }, [panelKey, pos]);
 
-  useEffect(() => {
-    call("watch_builtin", { uid, on: true });
-    const off = onTick((t) => {
-      const f = t.fx?.find((x) => x.uid === uid);
-      if (!f) return;
-      setMeters(f.meters);
-      setLive(Object.fromEntries(f.values));
-    });
-    return () => {
-      off();
-      call("watch_builtin", { uid, on: false });
-    };
-  }, [uid]);
+  // The type is known once the effect list has loaded; a remembered size that the content no
+  // longer fits (a larger interface size, another circuit) grows to fit.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!type || !el) return;
+    let s = size;
+    if (sizeType.current !== type) {
+      sizeType.current = type;
+      s = savedPanelSize(type);
+    }
+    if (s) {
+      el.style.width = `${s.w}px`;
+      const fit = { w: Math.max(s.w, minWidth(el)), h: Math.max(s.h, naturalHeight(el)) };
+      if (fit.w !== s.w || fit.h !== s.h || s !== size) setSize(fit);
+    }
+    // Only when the panel's type changes; drags keep the size within limits themselves.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [type]);
 
-  if (gone) return null;
-  const track = at.track;
-  const trackName = track === MASTER_ID ? "Stereo Out" : project?.tracks.find((t) => t.id === track)?.name ?? "";
-  const saved = valuesOf(info.params, at.plugin.params);
-  // What the effect runs with (automation included), except what was just set here.
-  const now = performance.now();
-  const values: Record<number, number> = {};
-  for (const p of info.params) {
-    const l = local.current.get(p.id);
-    values[p.id] = l && now - l.at < LOCAL_MS ? l.v : live[p.id] ?? saved[p.id];
-  }
-
-  const set = (id: number, value: number) => {
-    local.current.set(id, { v: value, at: performance.now() });
-    setLive((cur) => ({ ...cur, [id]: value }));
-    act("set_builtin_param", { track, slot: at.slot, id, value });
-  };
-  const touch = (id: number, on: boolean) => {
-    // Stereo Out isn't automated.
-    if (track === MASTER_ID) return;
-    const spec = info.params.find((p) => p.id === id);
-    act("automation_touch", { track, param: { type: "plugin", value: { uid, param: id, name: `${at.plugin.name}: ${spec?.name ?? id}` } }, touching: on });
-  };
-  const props: FxPanelProps = { info, track, uid, values, set, touch, meters };
-  const Panel = FX_PANELS[info.id] ?? GenericPanel;
-  const norm = (vals: Record<number, number>) => JSON.stringify(info.params.map((p) => vals[p.id]));
+  if (!title) return null;
 
   const startMove = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("button, .fx-presets, .fx-sidechain")) return;
@@ -110,68 +116,71 @@ function FxWindow({ uid, z }: { uid: Id; z: number }) {
     window.addEventListener("mouseup", up);
   };
 
+  const startResize = (edge: Edge) => (e: React.PointerEvent) => {
+    const el = ref.current;
+    if (e.button !== 0 || !el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const r = el.getBoundingClientRect();
+    const start = { x: pos.x, y: pos.y, w: r.width, h: r.height };
+    const minW = minWidth(el);
+    const west = edge === "w" || edge === "sw";
+    const maxW = west ? start.x + start.w : window.innerWidth - start.x;
+    const maxH = window.innerHeight - start.y;
+    let last = start;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - e.clientX;
+      const dy = ev.clientY - e.clientY;
+      // The width first: the height the content needs depends on it (rows wrap).
+      const across = resizeRect(start, edge, dx, 0, { w: minW, h: 0 }, { w: maxW, h: maxH });
+      el.style.width = `${across.w}px`;
+      last = resizeRect(start, edge, dx, dy, { w: minW, h: naturalHeight(el) }, { w: maxW, h: maxH });
+      setPos({ x: last.x, y: last.y });
+      setSize({ w: last.w, h: last.h });
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      document.body.style.cursor = "";
+      if (type && last !== start) savePanelSize(type, last);
+    };
+    document.body.style.cursor = getComputedStyle(handle).cursor;
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
+
+  const at = keepOnScreen({ ...pos, w: size?.w ?? 0, h: size?.h ?? 0 }, { w: window.innerWidth, h: window.innerHeight });
   return (
     <div
-      className="eq-window fx-window"
-      style={{ left: pos.x, top: pos.y, zIndex: 41 + z }}
+      ref={ref}
+      className={"eq-window fx-window" + (size ? " sized" : "")}
+      style={{ left: at.x, top: at.y, zIndex: 41 + z, width: size?.w ?? (type ? DEFAULT_WIDTH[type] : undefined), height: size?.h }}
       onMouseDown={(e) => {
         e.stopPropagation();
-        if (getState().fxPanels[getState().fxPanels.length - 1] !== uid) openFxPanel(uid);
+        focusPanel(panelKey);
       }}
     >
       <div className="eq-titlebar" onMouseDown={startMove}>
-        <button className={"fx-power" + (at.plugin.bypass ? "" : " on")} title={at.plugin.bypass ? "Turn on" : "Bypass"} onClick={() => api.setBypass(track, at.slot, !at.plugin.bypass)}>
-          ⏻
+        <PanelLead panelKey={panelKey} />
+        <span className="eq-title">{title.name}</span>
+        <span className="eq-track">{title.track}</span>
+        <PanelTools panelKey={panelKey} />
+        <span className="fx-title-gap" />
+        <button className="fx-mode" title="Dock in the bottom section" onClick={() => dockPanel(panelKey)}>
+          <DockGlyph />
         </button>
-        <span className="eq-title">{info.name}</span>
-        <span className="eq-track">{trackName}</span>
-        <PresetButton
-          effect={info.id}
-          track={track}
-          slot={at.slot}
-          instance={String(uid)}
-          current={norm(saved)}
-          normalize={(p: Preset) => norm(valuesOf(info.params, p.values))}
-        />
-        {info.sidechain && <FxSideChain uid={uid} />}
-        <button className="eq-close" title="Close (Esc)" onClick={() => closeFxPanel(uid)}>
+        <button className="eq-close" title="Close (Esc)" onClick={() => closePanel(panelKey)}>
           ×
         </button>
       </div>
-      <div className={"fx-body" + (at.plugin.bypass ? " bypassed" : "")}>
-        <Panel {...props} />
-      </div>
-    </div>
-  );
-}
-
-/** The panel for effects without a custom one: a control per parameter and a bar per meter. */
-export function GenericPanel({ info, values, set, touch, meters }: FxPanelProps) {
-  const knobs = info.params.filter((p) => p.kind.type === "continuous");
-  const switches = info.params.filter((p) => p.kind.type !== "continuous");
-  return (
-    <div className="fx-generic">
-      <div className="fx-controls">
-        <div className="fx-knobs">
-          {knobs.map((p) => (
-            <FxControl key={p.id} spec={p} value={values[p.id]} onChange={(v) => set(p.id, v)} onTouch={(on) => touch(p.id, on)} />
-          ))}
-        </div>
-        {switches.length > 0 && (
-          <div className="fx-switches">
-            {switches.map((p) => (
-              <FxControl key={p.id} spec={p} value={values[p.id]} onChange={(v) => set(p.id, v)} />
-            ))}
-          </div>
-        )}
-      </div>
-      {info.meters.length > 0 && (
-        <div className="fx-meters">
-          {info.meters.map((m, i) => (
-            <FxMeter key={m} label={m} value={meters[i] ?? NaN} kind={isReductionMeter(m) ? "reduction" : "level"} />
-          ))}
-        </div>
-      )}
+      <PanelContent panelKey={panelKey} />
+      {EDGES.map((edge) => (
+        <div key={edge} className={`fx-resize ${edge}`} onPointerDown={startResize(edge)} />
+      ))}
     </div>
   );
 }

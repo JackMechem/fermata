@@ -96,14 +96,14 @@ function History({
   scale: (typeof SCALES)[number];
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const [w, setW] = useState(400);
+  // The graph fills its box, which takes the height the panel has to spare (84 px at least).
+  const [{ w, h: H }, setSize] = useState({ w: 400, h: 84 });
   const themeId = useStore((s) => s.themeId);
   const uiScale = useStore((s) => s.uiScale);
-  const H = 84;
 
   useLayoutEffect(() => {
     const el = ref.current!.parentElement!;
-    const ro = new ResizeObserver(([e]) => setW(Math.max(160, Math.floor(e.contentRect.width))));
+    const ro = new ResizeObserver(([e]) => setSize({ w: Math.max(160, Math.floor(e.contentRect.width)), h: Math.max(40, Math.floor(e.contentRect.height)) }));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -202,9 +202,19 @@ function History({
         draw();
       }
     });
-  }, [w, themeId, uiScale, target, scale, history, meters]);
+  }, [w, H, themeId, uiScale, target, scale, history, meters]);
 
   return <canvas ref={ref} className="loud-history-canvas" />;
+}
+
+/** A big readout and its unit, side by side on one baseline. */
+function Reading({ value, unit }: { value: string; unit: string }) {
+  return (
+    <span className="loud-read-num">
+      <span className="loud-read-value">{value}</span>
+      <span className="loud-read-unit">{unit}</span>
+    </span>
+  );
 }
 
 export function LoudnessPanel({ info, values, set, touch, meters }: FxPanelProps) {
@@ -276,18 +286,15 @@ export function LoudnessPanel({ info, values, set, touch, meters }: FxPanelProps
         <div className="loud-readouts">
           <div className="loud-read">
             <span className="loud-read-label">Momentary</span>
-            <span className="loud-read-value">{lufs(momentary)}</span>
-            <span className="loud-read-unit">LUFS</span>
+            <Reading value={lufs(momentary)} unit="LUFS" />
           </div>
           <div className="loud-read">
             <span className="loud-read-label">Short-Term</span>
-            <span className="loud-read-value">{lufs(short)}</span>
-            <span className="loud-read-unit">LUFS</span>
+            <Reading value={lufs(short)} unit="LUFS" />
           </div>
           <div className="loud-read integrated">
             <span className="loud-read-label">Integrated</span>
-            <span className="loud-read-value">{lufs(integrated)}</span>
-            <span className="loud-read-unit">LUFS</span>
+            <Reading value={lufs(integrated)} unit="LUFS" />
             <span className={`loud-delta${offTarget !== null && Math.abs(offTarget) <= 1 ? " on" : ""}`}>
               {offTarget === null ? `Target ${minus(target.toFixed(1))}` : `${signed(offTarget)} LU from target`}
             </span>
@@ -295,18 +302,18 @@ export function LoudnessPanel({ info, values, set, touch, meters }: FxPanelProps
           <div className="loud-small">
             <div className="loud-read small">
               <span className="loud-read-label">Range</span>
-              <span className="loud-read-value">{integrated > SILENT || range > 0 ? range.toFixed(1) : "—"}</span>
-              <span className="loud-read-unit">LU</span>
+              <Reading value={integrated > SILENT || range > 0 ? range.toFixed(1) : "—"} unit="LU" />
             </div>
             <div className={`loud-read small${truePeak > TRUE_PEAK_LIMIT ? " over" : ""}`} title={`Above ${minus(TRUE_PEAK_LIMIT.toFixed(1))} dBTP shows red`}>
               <span className="loud-read-label">True Peak</span>
-              <span className="loud-read-value">{lufs(truePeak)}</span>
-              <span className="loud-read-unit">dBTP</span>
+              <Reading value={lufs(truePeak)} unit="dBTP" />
             </div>
             <div className="loud-read small">
               <span className="loud-read-label">Peak L / R</span>
-              <span className="loud-read-value">
-                {lufs(m(M_PEAK_L))} <i>/</i> {lufs(m(M_PEAK_R))}
+              <span className="loud-read-num">
+                <span className="loud-read-value">
+                  {lufs(m(M_PEAK_L))} <i>/</i> {lufs(m(M_PEAK_R))}
+                </span>
               </span>
             </div>
           </div>

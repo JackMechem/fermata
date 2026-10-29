@@ -4,6 +4,7 @@ import { act, BUILTIN_SYNTH, call, EQ_SLOT, INSTRUMENT_SLOT, MASTER_ID, type Cha
 import type { FxInfo } from "./fx";
 import type { MenuItem } from "./components/Menu";
 import { getState, setState } from "./store";
+import { closePanel, fxKey, openPanel, togglePanel } from "./fxDockState";
 
 /** The preset id of the Channel EQ. */
 export const CHANNEL_EQ = "builtin:channel-eq";
@@ -31,17 +32,18 @@ export function findFxSlot(project: Project | undefined, uid: Id): { track: Id; 
   return i >= 0 ? { track: MASTER_ID, slot: i, plugin: project.master.inserts[i]! } : null;
 }
 
+/** Opens an effect's panel (or brings it forward), docked or floating as Settings say (fxDock.ts). */
 export function openFxPanel(uid: Id) {
-  setState((s) => ({ fxPanels: [...s.fxPanels.filter((u) => u !== uid), uid] }));
+  openPanel(fxKey(uid));
 }
 
 export function closeFxPanel(uid: Id) {
-  setState((s) => ({ fxPanels: s.fxPanels.filter((u) => u !== uid) }));
+  closePanel(fxKey(uid));
 }
 
+/** A slot click: closes the panel if it is on screen, otherwise opens or shows it. */
 export function toggleFxPanel(uid: Id) {
-  if (getState().fxPanels.includes(uid)) closeFxPanel(uid);
-  else openFxPanel(uid);
+  togglePanel(fxKey(uid));
 }
 
 /** Loads a plug-in into a slot; a built-in effect then opens its panel (VST3s their editor). */

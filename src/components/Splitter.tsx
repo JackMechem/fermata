@@ -3,7 +3,7 @@ import { getState, setState, useStore, type PaneSizes } from "../store";
 
 const KEY = "fermata.paneSizes";
 
-export const PANE_DEFAULTS: PaneSizes = { library: 230, inspector: 222, browser: 230, mixer: 400, editor: 300, headers: 296 };
+export const PANE_DEFAULTS: PaneSizes = { library: 230, inspector: 222, browser: 230, mixer: 400, editor: 300, headers: 296, fx: 420 };
 
 /** Limits per pane: [min, max] in CSS pixels. */
 const LIMITS: Record<keyof PaneSizes, [number, number]> = {
@@ -13,6 +13,7 @@ const LIMITS: Record<keyof PaneSizes, [number, number]> = {
   mixer: [180, 900],
   editor: [140, 900],
   headers: [220, 520],
+  fx: [160, 900],
 };
 
 export function loadPaneSizes() {

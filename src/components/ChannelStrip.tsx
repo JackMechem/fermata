@@ -14,6 +14,7 @@ import { StripLatencyBadge, useSlotLatency } from "./Latency";
 import { refuseFrozen } from "../freeze";
 import { isBuiltinFx, loadPlugin, slotMenu, toggleFxPanel } from "../fxHost";
 import { startSlotDrag } from "../slotDrag";
+import { fxKey, usePanelShown } from "../fxDockState";
 
 const PAN = { type: "pan" } as const;
 
@@ -32,7 +33,7 @@ export function PluginSlotView({
 }) {
   const plugins = useStore((s) => s.plugins);
   const openEditors = useStore((s) => s.snap?.open_editors) ?? [];
-  const fxOpen = useStore((s) => (plugin ? s.fxPanels.includes(plugin.uid) : false));
+  const fxOpen = usePanelShown(plugin ? fxKey(plugin.uid) : null);
   useStore((s) => s.fxList);
   // A frozen track's plug-ins are unloaded and can't change until it is unfrozen.
   const frozen = useStore((s) => !!s.snap?.project.tracks.find((t) => t.id === trackId)?.frozen);

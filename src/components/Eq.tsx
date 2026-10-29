@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { call, EQ_SLOT, MASTER_ID, type ChannelEq, type EqBand, type Id, type Project } from "../api";
 import { BAND_COLORS, bandSections, defaultEq, eqSections, formatFreq, isFlat, responseDb } from "../eqMath";
 import { getState, onTick, setState, useStore } from "../store";
+import { eqKey, toggleEqPanel, usePanelShown } from "../fxDockState";
 import { pixelRatio } from "../uiScale";
 import { refuseFrozen } from "../freeze";
 import { fmt } from "../keymap";
@@ -54,7 +55,7 @@ const xf = (x: number, w: number) => MIN_F * Math.pow(MAX_F / MIN_F, Math.min(1,
 export function EqThumb({ trackId, name }: { trackId: Id; name: string }) {
   const eq = useStore((s) => eqOf(s.snap?.project, trackId));
   const sr = useStore((s) => s.snap?.project.sample_rate ?? 48000);
-  const open = useStore((s) => s.eqEditor === trackId);
+  const open = usePanelShown(eqKey(trackId));
   const themeId = useStore((s) => s.themeId);
   const uiScale = useStore((s) => s.uiScale);
   const ref = useRef<HTMLCanvasElement>(null);
@@ -108,7 +109,7 @@ export function EqThumb({ trackId, name }: { trackId: Id; name: string }) {
       onMouseDown={(e) => {
         e.stopPropagation();
         if (e.button !== 0) return;
-        setState({ eqEditor: open ? null : trackId });
+        toggleEqPanel(trackId);
       }}
       onContextMenu={(e) => {
         e.preventDefault();
@@ -181,15 +182,17 @@ function Scrub({ text, value, onScrub, onReset, title }: { text: string; value: 
   );
 }
 
-export function EqEditor() {
-  const trackId = useStore((s) => s.eqEditor);
+/**
+ * The Channel EQ editor for one strip (MASTER_ID = Stereo Out): toolbar, graph and bands. It
+ * fills the box it is given (docked in the bottom section or in a floating window, see
+ * fxDock.ts); the graph takes the height the toolbar and bands leave.
+ */
+export function EqPanel({ track: trackId }: { track: Id }) {
   const project = useStore((s) => s.snap?.project);
-  const eq = trackId === null ? undefined : eqOf(project, trackId);
-  const name = trackId === MASTER_ID ? "Stereo Out" : project?.tracks.find((t) => t.id === trackId)?.name ?? "";
+  const eq = eqOf(project, trackId);
   const sr = project?.sample_rate ?? 48000;
   const [sel, setSel] = useState<number | null>(null);
   const [analyzer, setAnalyzer] = useState(true);
-  const [pos, setPos] = useState(() => ({ x: Math.max(20, window.innerWidth / 2 - 400), y: 110 }));
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const spectrum = useRef<Float32Array | null>(null);
@@ -197,11 +200,9 @@ export function EqEditor() {
   live.current = { eq, sel, sr, analyzer };
   useStore((s) => s.themeId);
   useStore((s) => s.uiScale);
-  const H = 250;
 
   // Feed the analyzer from this strip while the editor is open.
   useEffect(() => {
-    if (trackId === null) return;
     call("set_analyzer", { track: analyzer ? trackId : null });
     spectrum.current = null;
     return () => {
@@ -215,6 +216,7 @@ export function EqEditor() {
     const { eq, sel, sr, analyzer } = live.current;
     if (!cv || !wrap || !eq) return;
     const W = wrap.clientWidth;
+    const H = wrap.clientHeight;
     const dpr = pixelRatio();
     if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) {
       cv.width = Math.round(W * dpr);
@@ -331,7 +333,7 @@ export function EqEditor() {
     const ro = new ResizeObserver(() => draw());
     if (wrapRef.current) ro.observe(wrapRef.current);
     const off = onTick((t) => {
-      if (!t.spectrum || t.spectrum[0] !== getState().eqEditor) return;
+      if (!t.spectrum || t.spectrum[0] !== trackId) return;
       const fresh = t.spectrum[1];
       const prev = spectrum.current;
       // Fast attack, slow release, like an analyzer's peak response.
@@ -344,20 +346,7 @@ export function EqEditor() {
     };
   }, [trackId]);
 
-  useEffect(() => {
-    // Only while the EQ is open, and not when the Esc belongs to a sheet, a menu or a field.
-    if (trackId === null) return;
-    const k = (e: KeyboardEvent) => {
-      if (e.key !== "Escape" || e.defaultPrevented || getState().dialog) return;
-      const tgt = e.target as HTMLElement | null;
-      if (tgt && ["INPUT", "SELECT", "TEXTAREA"].includes(tgt.tagName)) return;
-      setState({ eqEditor: null });
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [trackId]);
-
-  if (trackId === null || !eq) return null;
+  if (!eq) return null;
 
   const setBand = (i: number, patch: Partial<EqBand>) => {
     const cur = live.current.eq!;
@@ -367,6 +356,7 @@ export function EqEditor() {
   const onCanvasDown = (e: React.MouseEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
     const W = rect.width;
+    const H = rect.height;
     const gy = (db: number) => H / 2 - (db / GAIN_RANGE) * (H / 2 - 12);
     const px = e.clientX - rect.left;
     const py = e.clientY - rect.top;
@@ -421,29 +411,9 @@ export function EqEditor() {
     setBand(sel, { q: Math.round(q * 100) / 100 });
   };
 
-  const startMove = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("button")) return;
-    const sx = e.clientX - pos.x;
-    const sy = e.clientY - pos.y;
-    const move = (ev: MouseEvent) => setPos({ x: Math.max(0, ev.clientX - sx), y: Math.max(0, ev.clientY - sy) });
-    const up = () => {
-      window.removeEventListener("mousemove", move);
-      window.removeEventListener("mouseup", up);
-    };
-    window.addEventListener("mousemove", move);
-    window.addEventListener("mouseup", up);
-  };
-
   const defaults = defaultEq();
   return (
-    <div className="eq-window" style={{ left: pos.x, top: pos.y }} onMouseDown={(e) => e.stopPropagation()}>
-      <div className="eq-titlebar" onMouseDown={startMove}>
-        <span className="eq-title">Channel EQ</span>
-        <span className="eq-track">{name}</span>
-        <button className="eq-close" title="Close (Esc)" onClick={() => setState({ eqEditor: null })}>
-          ×
-        </button>
-      </div>
+    <div className="eq-panel">
       <div className="eq-toolbar">
         <button className={"eq-toggle" + (eq.on ? " on" : "")} onClick={() => updateEq(trackId, { ...eq, on: !eq.on })} title="Turn the EQ on or off">
           {eq.on ? "On" : "Bypassed"}

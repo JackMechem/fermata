@@ -57,6 +57,9 @@ pub struct UiPrefs {
     /// Settings › Editing: what the mouse wheel scrolls in the Tracks area and Piano Roll:
     /// "vertical" (tracks, Shift for time) or "horizontal" (time, Shift for tracks).
     pub wheel_scrolls: String,
+    /// Settings › General: where a built-in effect's panel opens: "floating" (a window of its own)
+    /// or "docked" (in the main window's bottom section, like the Mixer).
+    pub fx_panels: String,
 }
 
 impl Default for UiPrefs {
@@ -72,6 +75,7 @@ impl Default for UiPrefs {
             wave_style: None,
             click_locates: "anywhere".into(),
             wheel_scrolls: "vertical".into(),
+            fx_panels: "floating".into(),
         }
     }
 }
@@ -143,6 +147,7 @@ mod tests {
         assert_eq!(s.ui.nudge, "beat");
         assert_eq!(s.ui.snap, "smart");
         assert_eq!(s.ui.wheel_scrolls, "vertical");
+        assert_eq!(s.ui.fx_panels, "floating");
         assert_eq!(s.audio.sample_rate, AudioConfig::default().sample_rate);
     }
 

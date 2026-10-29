@@ -125,17 +125,25 @@ interface Target {
   strobe: boolean;
 }
 
-/** The needle (or strobe) display, drawn on the frame loop. */
+/** The dial's drawing height; a taller box scales the whole drawing up. */
+const DIAL_H = 112;
+/** The width the dial is drawn for at its smallest scale. */
+const DIAL_W = 360;
+
+/**
+ * The needle (or strobe) display, drawn on the frame loop. It fills its box: wider is drawn
+ * wider at the same scale, and once the box is taller than the drawing the whole dial scales up
+ * (as far as the width allows), centred.
+ */
 function TunerDial({ target }: { target: React.RefObject<Target> }) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const [w, setW] = useState(360);
+  const [box, setBox] = useState({ w: DIAL_W, h: DIAL_H });
   const themeId = useStore((s) => s.themeId);
   const uiScale = useStore((s) => s.uiScale);
-  const H = 112;
 
   useLayoutEffect(() => {
     const el = ref.current!.parentElement!;
-    const ro = new ResizeObserver(([e]) => setW(Math.max(200, Math.floor(e.contentRect.width))));
+    const ro = new ResizeObserver(([e]) => setBox({ w: Math.max(200, Math.floor(e.contentRect.width)), h: Math.max(DIAL_H, Math.floor(e.contentRect.height)) }));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
@@ -143,10 +151,15 @@ function TunerDial({ target }: { target: React.RefObject<Target> }) {
   useEffect(() => {
     const cv = ref.current!;
     const dpr = pixelRatio();
-    cv.width = Math.round(w * dpr);
-    cv.height = Math.round(H * dpr);
-    cv.style.width = `${w}px`;
-    cv.style.height = `${H}px`;
+    cv.width = Math.round(box.w * dpr);
+    cv.height = Math.round(box.h * dpr);
+    cv.style.width = `${box.w}px`;
+    cv.style.height = `${box.h}px`;
+    // Everything below draws in a DIAL_H-tall space `w` wide.
+    const k = Math.max(1, Math.min(box.h / DIAL_H, box.w / DIAL_W));
+    const w = box.w / k;
+    const H = DIAL_H;
+    const offY = (box.h - H * k) / 2;
     const ctx = cv.getContext("2d")!;
     const col = readColors(cv);
     let needle = 0;
@@ -269,14 +282,19 @@ function TunerDial({ target }: { target: React.RefObject<Target> }) {
       const key = `${t.strobe}|${t.active}|${needle.toFixed(2)}|${glow.toFixed(2)}|${t.strobe && t.active ? phase.toFixed(1) : ""}`;
       if (key === drawn) return;
       drawn = key;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, H);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.setTransform(dpr * k, 0, 0, dpr * k, 0, dpr * offY);
       if (t.strobe) drawStrobe(t);
       else drawNeedle(t);
     });
-  }, [w, themeId, uiScale, target]);
+  }, [box, themeId, uiScale, target]);
 
-  return <canvas ref={ref} className="tuner-dial" />;
+  return (
+    <div className="tuner-dial-box">
+      <canvas ref={ref} className="tuner-dial" />
+    </div>
+  );
 }
 
 export function TunerPanel({ info, values, set, touch, meters }: FxPanelProps) {

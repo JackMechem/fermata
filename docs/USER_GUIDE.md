@@ -972,8 +972,10 @@ and buses use balance.
 Every strip, Stereo Out included, has a built-in eight-band EQ modelled on Logic's Channel EQ.
 It processes before the Audio FX inserts and costs nothing while flat.
 
-- Click the thumbnail above the Audio FX slots to open the editor. Drag the window by its
-  title; close it with × or Esc.
+- Click the thumbnail above the Audio FX slots to open the editor. It opens like a built-in
+  effect's panel (see [Built-in effects](#built-in-effects)): floating by default, or docked
+  in the bottom section, and it can be moved between the two and resized. Click the thumbnail
+  again, press Esc or click × to close it. One strip's Channel EQ is open at a time.
 - Bands: **Low Cut** (off by default, 30 Hz), **Low Shelf** (80 Hz), **Bell 1–4** (160, 500,
   1500, 5000 Hz), **High Shelf** (10 kHz) and **High Cut** (off by default, 18 kHz). The cuts
   have 12, 24 (default) or 48 dB/oct slopes; click the slope to change it.
@@ -1025,10 +1027,20 @@ Fermata's own effects load in any Audio FX slot like a plug-in: **Compressor**, 
 **Noise Gate** and **De-Esser** (Dynamics), **Reverb**, **Delay**, and **Tuner** and **Loudness
 Meter** (Metering). They are listed first, by category, in the slot menu and the Library.
 
-- **The panel:** click the effect's name in its slot to open its panel window; click again,
-  press Esc or click × to close it. One window per slot; drag it by its title. The header has
-  the power (bypass) button, the effect and track names, the preset pop-up and, for effects
-  with a side-chain, the **Side Chain** pop-up.
+- **The panel:** click the effect's name in its slot to open its panel; click again, press Esc
+  or click × to close it. There is one panel per slot. The panel's header has the power (bypass)
+  button, the effect and track names, the preset pop-up and, for effects with a side-chain, the
+  **Side Chain** pop-up.
+  - **Docked** (see [General](#general) settings): panels open in the bottom
+    section, where the Mixer and the Editors show, with a tab for each open panel. Drag the
+    divider above to make the section taller; graphs and meters grow with it. Showing the Mixer
+    or an Editor hides the panels but keeps them open: click a slot again to bring them back.
+    Closing the last tab gives the section back to what it showed before.
+  - **Floating** (the default): the float button at the right of the dock's bar takes a panel out into a
+    window of its own (and the dock button in a window's header puts it back). Drag a window by
+    its title; drag its sides or bottom corners to resize it. A window can't be made smaller
+    than its controls; Fermata remembers the last size for each kind of effect.
+  - **Esc** closes the frontmost floating panel first, then the docked one on screen.
 - **Knobs:** drag up and down (Shift for fine); double-click or Alt-click for the default;
   double-click the value under a knob to type one ("2.5k", "-6 dB", "1.2 s"). Every change is
   undoable, and a drag is one undo step.
@@ -1187,8 +1199,8 @@ untouched; put it last on Stereo Out to measure the mix.
 
 #### Presets
 
-The Channel EQ and every built-in effect have a preset pop-up in their window header. It shows
-the preset loaded last, with "(edited)" once something changed ("Default" or "Manual" before
+Every built-in effect has a preset pop-up in its panel's header, and the Channel EQ has one in
+its toolbar. It shows the preset loaded last, with "(edited)" once something changed ("Default" or "Manual" before
 any preset). The arrows step to the previous and next preset.
 
 - **Factory** presets come with Fermata (the Channel EQ has Flat, Low Cut 80 Hz, Vocal
@@ -1479,6 +1491,7 @@ Metronome tab (saved with the project).
 | After Recording | Autosave as soon as a recording, Bounce in Place, Freeze or import finishes | On |
 | Undo Steps | 10 to 1000 | 100 |
 | Unsaved Changes | Ask before quitting or closing a project with unsaved changes | On |
+| Open Effect Panels | Floating; Docked in the bottom section (VST3 editors always open in their own window) | Floating |
 
 ### Audio
 

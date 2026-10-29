@@ -249,8 +249,10 @@ const BAR_FLOOR = -60;
 /**
  * A level meter in dBFS for one meter value, with a 1.5 s peak hold and a readout that holds
  * the maximum until clicked. The value arrives about 30 times a second; the bar eases between.
+ * With `grow`, `length` is the bar's smallest and it fills the space its column has.
  */
-export function LevelBar({ db, label, horizontal = false, length = 120 }: { db: number; label: string; horizontal?: boolean; length?: number }) {
+export function LevelBar({ db, label, horizontal = false, length = 120, grow = false }: { db: number; label: string; horizontal?: boolean; length?: number; grow?: boolean }) {
+  const bar = useRef<HTMLDivElement>(null);
   const fill = useRef<HTMLDivElement>(null);
   const hold = useRef<HTMLDivElement>(null);
   const target = useRef(db);
@@ -284,9 +286,19 @@ export function LevelBar({ db, label, horizontal = false, length = 120 }: { db: 
   useEffect(() => {
     if (db > max) setMax(db);
   }, [db, max]);
+  // A growing bar's colours stretch with it, so the zones stay at the same levels.
+  useLayoutEffect(() => {
+    const el = bar.current;
+    if (!grow || !el) return;
+    const ro = new ResizeObserver(([e]) => el.style.setProperty("--dyn-bar-len", `${horizontal ? e.contentRect.width : e.contentRect.height}px`));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [grow, horizontal]);
+  const dim = horizontal ? "width" : "height";
+  const barStyle = grow ? { [horizontal ? "minWidth" : "minHeight"]: length, flex: "1 1 auto" } : { [dim]: length, ["--dyn-bar-len" as string]: `${length}px` };
   return (
     <div className={"dyn-level" + (horizontal ? " horizontal" : "")}>
-      <div className="dyn-level-bar" style={{ [horizontal ? "width" : "height"]: length, ["--dyn-bar-len" as string]: `${length}px` }}>
+      <div className="dyn-level-bar" ref={bar} style={barStyle}>
         <div className="dyn-level-fill" ref={fill} style={{ backgroundImage: gradient }} />
         <div className="dyn-level-hold" ref={hold} />
         <div className="dyn-level-zero" style={horizontal ? { left: `${(-BAR_FLOOR / (6 - BAR_FLOOR)) * 100}%` } : { bottom: `${(-BAR_FLOOR / (6 - BAR_FLOOR)) * 100}%` }} />
@@ -623,6 +635,21 @@ export function CompressorPanel(props: FxPanelProps) {
   const digital = circuit === Circuit.Platinum || circuit === Circuit.Vca;
   const tc = VARI_MU_TC[Math.round(v(P.timeConstant))] ?? VARI_MU_TC[0];
 
+  // The meter row takes the height a taller panel has to spare; the transfer curve grows with
+  // it (square, up to two fifths of the row) while the GR meter takes the rest of the width.
+  const top = useRef<HTMLDivElement>(null);
+  const [graph, setGraph] = useState(136);
+  useLayoutEffect(() => {
+    const el = top.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => {
+      const { width, height } = e.contentRect;
+      setGraph(Math.max(136, Math.min(Math.floor(height) - 6, Math.round(0.4 * width))));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const ratioControl = fet ? (
     <div className="dyn-ratio-buttons">
       <div className="dyn-knob-label">Ratio</div>
@@ -695,11 +722,11 @@ export function CompressorPanel(props: FxPanelProps) {
         ))}
       </div>
 
-      <div className="dyn-top">
-        <LevelBar db={mIn} label="In" length={108} />
+      <div className="dyn-top" ref={top}>
+        <LevelBar db={mIn} label="In" length={108} grow />
         <div className="dyn-meter-face">{circuit === Circuit.Platinum ? <GrBar gr={mGr} /> : <GrNeedle gr={mGr} />}</div>
-        <LevelBar db={mOut} label="Out" length={108} />
-        <TransferGraph v={v} level={mLevel} size={136} />
+        <LevelBar db={mOut} label="Out" length={108} grow />
+        <TransferGraph v={v} level={mLevel} size={graph} />
       </div>
 
       <div className="dyn-main">

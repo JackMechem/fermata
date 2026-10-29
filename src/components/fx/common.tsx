@@ -76,7 +76,7 @@ export function FxKnob({
   const a0 = angle(origin);
   const a1 = angle(n);
   return (
-    <div className="fx-knob" style={{ width: Math.max(size + 16, 64) }}>
+    <div className="fx-knob" style={{ minWidth: Math.max(size + 16, 64) }}>
       <div className="fx-label">{label ?? spec.name}</div>
       <div className="knob" style={{ width: size, height: size }} onMouseDown={down} onDoubleClick={() => onChange(spec.default)} title={`${spec.name}: ${formatValue(spec, value)}`}>
         <svg width={size} height={size}>
@@ -170,6 +170,7 @@ export function FxMeter({
   min?: number;
   max?: number;
   kind?: "level" | "reduction";
+  /** The bar's height at the panel's smallest; it grows when the panel is made taller. */
   height?: number;
   /** A line across the bar at this value, such as the threshold. */
   marker?: number;
@@ -183,7 +184,7 @@ export function FxMeter({
   return (
     <div className="fx-meter">
       <div className="fx-label">{label}</div>
-      <div className={"fx-meter-bar " + kind} style={{ height }}>
+      <div className={"fx-meter-bar " + kind} style={{ minHeight: height }}>
         <div className="fx-meter-fill" style={kind === "reduction" ? { top: 0, height: `${f * 100}%` } : { bottom: 0, height: `${f * 100}%` }} />
         {marker !== undefined && <div className="fx-meter-mark" style={{ bottom: `${Math.min(1, Math.max(0, (marker - lo) / (hi - lo || 1))) * 100}%` }} />}
       </div>

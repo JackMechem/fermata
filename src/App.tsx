@@ -12,8 +12,8 @@ import { commandForEvent } from "./keymap";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
 import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
-import { EqEditor } from "./components/Eq";
 import { FxWindows } from "./components/fx/FxWindow";
+import { FxDock } from "./components/fx/FxDock";
 import { loadFxList } from "./fxHost";
 import { MusicalTyping } from "./components/MusicalTyping";
 import { MenuHost } from "./components/Menu";
@@ -502,6 +502,7 @@ export default function App() {
             "--browser-w": `${panes.browser}px`,
             "--mixer-h": `${panes.mixer}px`,
             "--editor-h": `${panes.editor}px`,
+            "--fx-h": `${panes.fx}px`,
           } as React.CSSProperties
         }
       >
@@ -514,6 +515,7 @@ export default function App() {
           {s.bottom !== "none" && <Splitter pane={s.bottom} dir="y" sign={-1} />}
           {s.bottom === "mixer" && <Mixer />}
           {s.bottom === "editor" && <Editor />}
+          {s.bottom === "fx" && <FxDock />}
         </div>
         {s.showBrowser && <Splitter pane="browser" dir="x" sign={-1} />}
         {s.showBrowser && <Browser />}
@@ -528,7 +530,6 @@ export default function App() {
       {s.dialog === "recovery" && <RecoverySheet />}
       {groupSheet !== null && <GroupSheet />}
       {showMarkerList && <MarkerList />}
-      <EqEditor />
       <FxWindows />
       {showTyping && <MusicalTyping />}
       <MenuHost />
