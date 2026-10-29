@@ -146,8 +146,9 @@ From left to right:
   - the **marker lane** (see [Markers](#8-markers)).
 - **Track headers:** colour, number, icon, name, the M (Mute), S (Solo), R (Record Enable,
   audio and instrument tracks), I (Input Monitoring, audio tracks) buttons, the Freeze
-  (snowflake) button, a group badge, and a volume slider with a level meter. The **+** button
-  above the headers opens New Tracks; the **H** button turns on hide mode.
+  (snowflake) button, a group badge, and a volume slider whose groove is the track's level
+  meter. Short tracks put it all on one line (see below). The **+** button above the headers
+  opens New Tracks; the **H** button turns on hide mode.
 - **Tracks:** regions on lanes. Scroll with the wheel (Shift+wheel or a sideways trackpad swipe
   scrolls through time); Ctrl+wheel zooms horizontally around the pointer, Alt+wheel changes
   track heights. With a mouse that has only a vertical wheel, set Settings › Editing › Mouse
@@ -162,12 +163,25 @@ Track headers:
 - **Select** a track by clicking its header; Ctrl+click adds or removes a track; Shift+click
   selects a range.
 - **Rename** by double-clicking the name.
-- **Reorder** by dragging the track number or icon. A track dropped among a stack's subtracks
+- **Reorder** by dragging the track number or icon (just the number on the shortest tracks,
+  which have no icon). A track dropped among a stack's subtracks
   (or right under an open stack's header) goes into that stack.
 - **Resize** by dragging the header's bottom edge. Alt-drag resizes every track, and
   double-clicking the edge resets the track. Ctrl+Down and Ctrl+Up (or Alt+wheel, or View ›
-  Taller / Shorter Tracks, or View › Track Height) change all tracks. Heights are remembered per
-  project.
+  Taller / Shorter Tracks, or View › Track Height: Mini, Compact, Small, Medium, Large, Extra
+  Large) change all tracks. Tracks go from 22 to 260 px; heights are remembered per project.
+- **Short tracks:** from 52 px up the name sits above the buttons. Below that the header is a
+  single line with a smaller icon (32 to 51 px), or without the icon and in a smaller size
+  (below 32 px). The M, S, R, I and Freeze buttons then move into the **⋯** menu, which lists
+  them with check marks (and their keys), plus the lane's parameter while automation is shown.
+  A switch that is on stays in the header, so a muted, soloed, armed, monitored or frozen track
+  still shows it; click it to turn it off. Regions on short tracks get a slimmer name bar over a
+  thin strip of waveform or notes.
+- **Volume:** drag the slider (Shift for fine), double-click or Alt-click it for 0 dB; its
+  tooltip shows the level. In a group with volume linked, the other members follow. The meter
+  inside the groove is post-fader and uses the slider's own scale, so a full-scale signal
+  reaches the thumb, and only a hotter one passes it; peaks are held for 2 s, in red above
+  0 dBFS. A folder stack's slider has no meter (it moves every subtrack).
 
 ### Inspector
 
@@ -1231,7 +1245,8 @@ regions. Region editing is off while it is shown.
 
 - The track header gets a **parameter pop-up** (Volume, Pan, Mute, each used send as
   "Send N → bus", and a submenu per plug-in with its parameters; lanes holding points are marked
-  ●) and the **mode pop-up**. The pop-up also has Delete *parameter* Automation and Delete All
+  ●) and the **mode pop-up**. On a one-line (short) header the mode pop-up stays and the
+  parameters are in the **⋯** menu. The pop-up also has Delete *parameter* Automation and Delete All
   Automation on Track.
 - **Add a point:** click empty lane space (snapped in time; the value is where you click).
 - **Select:** click a point (Shift adds or removes); drag on empty lane space for a rubber band.

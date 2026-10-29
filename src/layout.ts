@@ -2,7 +2,9 @@ import type { Id, Track } from "./api";
 import { getState, setState, useStore } from "./store";
 import { takeRowsHeight } from "./takes";
 
-export const MIN_TRACK_H = 44;
+/** Smallest track height: one line of text. Headers lay out in tiers by height (see
+ *  trackHeader.ts), and regions slim their name bar (regionBar.ts). */
+export const MIN_TRACK_H = 22;
 export const MAX_TRACK_H = 260;
 
 /** Vertical position of every track: per-track heights fall back to the global height. Tracks

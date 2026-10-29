@@ -5907,3 +5907,174 @@ canvas.pr-cursor-line {
 .insp-row.replaced {
   opacity: 0.45;
 }
+
+/* ---- track headers at small heights, and the volume slider with its meter ------------------
+   Tiers come from headerTier() in trackHeader.ts: full (the name above the buttons), compact
+   (one line, smaller icon, buttons in the "⋯" menu) and tiny (one line, no icon). */
+
+.track-header.tier-compact .th-main,
+.track-header.tier-tiny .th-main {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.track-header.tier-compact .th-name,
+.track-header.tier-tiny .th-name,
+.track-header.tier-compact .th-rename,
+.track-header.tier-tiny .th-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.track-header.tier-compact .th-buttons,
+.track-header.tier-tiny .th-buttons {
+  flex: none;
+  align-items: center;
+}
+
+.track-header.tier-compact .th-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+}
+
+.track-header.tier-compact .th-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.track-header.tier-compact .th-buttons .tbtn {
+  width: 22px;
+  height: 19px;
+  font-size: 11px;
+}
+
+.track-header.tier-compact .th-group {
+  height: 19px;
+}
+
+.track-header.tier-tiny {
+  gap: 6px;
+}
+
+.track-header.tier-tiny .th-num {
+  font-size: 11px;
+}
+
+.track-header.tier-tiny .th-name,
+.track-header.tier-tiny .th-rename {
+  font-size: 12px;
+}
+
+.track-header.tier-tiny .th-rename {
+  height: 18px;
+}
+
+.track-header.tier-tiny .th-buttons {
+  gap: 3px;
+}
+
+.track-header.tier-tiny .th-buttons .tbtn {
+  width: 18px;
+  height: 16px;
+  font-size: 10px;
+  border-radius: 3px;
+}
+
+.track-header.tier-tiny .th-buttons .tbtn svg {
+  width: 11px;
+  height: 11px;
+}
+
+.track-header.tier-tiny .th-group {
+  height: 16px;
+  min-width: 20px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 9.5px;
+}
+
+.track-header.tier-tiny .auto-mode {
+  height: 16px;
+  font-size: 9.5px;
+  border-radius: 3px;
+}
+
+.track-header.tier-tiny .auto-mode.compact {
+  width: 38px;
+}
+
+.track-header.tier-tiny .th-disclosure {
+  height: 16px;
+}
+
+/* A thinner grab strip, so it doesn't cover the buttons on a one-line header. */
+.track-header.tier-tiny .th-resize {
+  height: 4px;
+}
+
+.track-header.tier-tiny .th-resize:hover {
+  background: linear-gradient(transparent 2px, var(--accent) 2px);
+}
+
+/* The "⋯" button: quieter than the switches it stands in for. */
+.th-buttons .tbtn.th-more {
+  background: none;
+  box-shadow: none;
+  color: var(--dim);
+}
+
+.th-buttons .tbtn.th-more:hover {
+  background: var(--tbtn-hi);
+  color: var(--text);
+}
+
+/* The header volume slider: the track's meter is its groove, the thumb sits on top. */
+.level-slider {
+  position: relative;
+  flex: none;
+  display: flex;
+  align-items: center;
+}
+
+.level-groove {
+  position: relative;
+  width: 100%;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+/* A recessed edge, drawn over the meter canvas. */
+.level-groove::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 1.5px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.level-meter {
+  display: block;
+}
+
+.level-thumb {
+  position: absolute;
+  top: 0;
+  border-radius: 3px;
+  background: var(--slider-thumb);
+  box-shadow: var(--slider-thumb-shadow);
+  pointer-events: none;
+}
+
+/* A grip line down the middle, like a fader cap. */
+.level-thumb::after {
+  content: "";
+  position: absolute;
+  left: calc(50% - 0.5px);
+  top: 25%;
+  bottom: 25%;
+  width: 1px;
+  background: rgba(0, 0, 0, 0.35);
+}

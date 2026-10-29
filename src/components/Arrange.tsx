@@ -19,6 +19,7 @@ import { crossfadeLaws, crossfadesByRegion, draggedFadeOut, fadeCurve, fadeHandl
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
+import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
 
 // ---- peaks ----------------------------------------------------------------------------------
 
@@ -90,7 +91,9 @@ export function drawRegion(
   waveScale = 1,
 ) {
   const color = r.muted ? "#6c6c70" : r.color ?? t.color;
-  const headerH = 14;
+  // Short tracks get a slimmer name bar, so the body keeps a strip of its own.
+  const geom = regionBar(h);
+  const headerH = geom.bar;
   const style = theme.region;
   // Body, name bar and content (waveform / notes) colours for each region style:
   //   glass — translucent tint over the lane (Studio)
@@ -128,19 +131,21 @@ export function drawRegion(
   if (badge) drawFolderBadge(ctx, r as Region & { takes: NonNullable<Region["takes"]> }, x, y, style === "light" ? "#ffffff" : theme.ink);
   if (w > 24 + badge && !ghost) {
     ctx.fillStyle = style === "light" ? "#ffffff" : theme.ink;
-    ctx.font = "600 11px Inter, 'SF Pro Text', system-ui, sans-serif";
+    ctx.font = `600 ${geom.font}px Inter, 'SF Pro Text', system-ui, sans-serif`;
     ctx.textBaseline = "middle";
     ctx.fillText(r.muted ? `${r.name} (muted)` : r.name, Math.max(x, 0) + 5 + badge, y + headerH / 2 + 0.5, Math.max(0, w - 8 - badge));
   }
-  const bodyTop = y + headerH + 2;
-  const bodyH = h - headerH - 4;
-  if (r.content.type === "audio") {
+  const bodyTop = y + geom.bodyTop;
+  const bodyH = geom.bodyH;
+  // A body too short to read (the smallest track heights) shows no waveform or notes.
+  const showBody = bodyH >= MIN_BODY_H;
+  if (showBody && r.content.type === "audio") {
     const wave = waveCache.get(r.content.clip);
     if (isFolder(r)) drawCompWave(ctx, r, x, w, bodyTop, bodyH, pps, content, visX0, visX1, shift, waveScale * 10 ** (r.content.gain_db / 20));
     else if (wave) drawWave(ctx, wave, r.content.offset + shift, x, w, bodyTop, bodyH, pps, content, visX0, visX1, undefined, waveScale);
     const [fi, fo] = fades ?? [r.content.fade_in, r.content.fade_out];
     drawFades(ctx, r, x - shift * pps, x, w, bodyTop, bodyH, fi, fo, pps, content, handles, ghost ? undefined : regionCrossfades(r.id));
-  } else {
+  } else if (showBody && r.content.type === "midi") {
     const notes = r.content.notes;
     if (notes.length) {
       let lo = 127;
@@ -204,7 +209,7 @@ function drawLoops(
     // The notch: a small wedge at the top edge and a hairline down the name bar.
     const nx = Math.round(x) + 0.5;
     ctx.fillStyle = "rgba(0,0,0,0.45)";
-    ctx.fillRect(nx - 0.5, y, 1, 14);
+    ctx.fillRect(nx - 0.5, y, 1, regionBar(h).bar);
     ctx.beginPath();
     ctx.moveTo(nx - 4, y);
     ctx.lineTo(nx + 4, y);
@@ -395,16 +400,24 @@ export function Arrange() {
       const inside = new Set<number>([t.id]);
       for (const c of project.tracks) if (c.parent !== null && inside.has(c.parent)) inside.add(c.id);
       const subs = project.tracks.filter((c) => c.id !== t.id && inside.has(c.id) && c.regions.length);
-      const rowH = Math.max(2, Math.min(8, (th - 10) / Math.max(1, subs.length)));
+      // A row per subtrack down the lane; on short lanes the margins shrink and the rows
+      // thin out (down to a pixel), clipped so they never spill into the next lane.
+      const pad = th >= 30 ? 5 : 3;
+      const rowH = Math.min(8, (th - 1 - 2 * pad) / Math.max(1, subs.length));
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, y + pad, W, Math.max(0, th - 1 - 2 * pad));
+      ctx.clip();
       subs.forEach((c, k) => {
         ctx.fillStyle = mix(c.color, theme.regionBase, 0.25, 0.85);
         for (const r of c.regions) {
           const x = r.start * pps - vp.left;
           const w = Math.max(2, (regionEnd(r) - r.start) * pps);
           if (x > W || x + w < 0) continue;
-          ctx.fillRect(x, y + 5 + k * rowH, w, Math.max(1.5, rowH - 1));
+          ctx.fillRect(x, y + pad + k * rowH, w, Math.max(1, rowH - 1));
         }
       });
+      ctx.restore();
     });
 
     // Regions
@@ -509,8 +522,9 @@ export function Arrange() {
       ctx.fill();
       ctx.clip();
       ctx.fillStyle = theme.red;
-      ctx.fillRect(x, y, w, 14);
-      drawWave(ctx, { frames: take.frames, bucket: PEAK_BUCKET, levels: [{ min: null, max: take.peaks }] }, passFrom, x, w, y + 16, h - 18, pps, theme.region === "light" ? mix(theme.red, "#000000", 0.35) : mix(theme.red, "#ffffff", 0.4), 0, W);
+      const g = regionBar(h);
+      ctx.fillRect(x, y, w, g.bar);
+      if (g.bodyH >= MIN_BODY_H) drawWave(ctx, { frames: take.frames, bucket: PEAK_BUCKET, levels: [{ min: null, max: take.peaks }] }, passFrom, x, w, y + g.bodyTop, g.bodyH, pps, theme.region === "light" ? mix(theme.red, "#000000", 0.35) : mix(theme.red, "#ffffff", 0.4), 0, W);
       ctx.restore();
     }
     // Where dragged audio files will land: the target lane (or a ghost lane for a new track),
@@ -539,12 +553,15 @@ export function Arrange() {
       const label = `${isNew ? "New track · " : ""}${b.bar} ${b.beat}`;
       ctx.font = "600 11px Inter, system-ui, sans-serif";
       const tw = ctx.measureText(label).width + 12;
+      // The tag shrinks to fit the shortest lanes.
+      const tagH = Math.min(18, h - 4);
+      const tagY = y + Math.min(4, (h - tagH) / 2);
       ctx.beginPath();
-      ctx.roundRect(x + 4, y + 4, tw, 18, 4);
+      ctx.roundRect(x + 4, tagY, tw, tagH, 4);
       ctx.fill();
       ctx.fillStyle = ink;
       ctx.textBaseline = "middle";
-      ctx.fillText(label, x + 10, y + 13.5);
+      ctx.fillText(label, x + 10, tagY + tagH / 2 + 0.5);
     }
     const mq = marqueeRef.current;
     if (mq) {
@@ -739,7 +756,7 @@ export function Arrange() {
       }
     }
     const localY = ti >= 0 ? y - layout.tops[ti] : 0;
-    return { x, y, ti, track, region, inLoop, localY, sample: x / pps, row };
+    return { x, y, ti, track, region, inLoop, localY, laneH, sample: x / pps, row };
   };
 
   /** What a press at `h` on a region grabs: the loop (the name bar at the region's or its loop's
@@ -753,14 +770,15 @@ export function Arrange() {
     const rw = r.length * pps;
     // Trim zones are 8 px wide, or a quarter of a narrow region so its middle still moves it.
     const edge = Math.min(8, rw / 4);
-    // The name bar (14 px in drawRegion) and the lane margin above it: the loop handle is up
-    // there, trims and fades below.
-    const bodyTop = 16;
+    // The name bar (see regionBar; regions are drawn 1 px into the lane and 3 px shorter) and
+    // the lane margin above it: the loop handle is up there, trims and fades below.
+    const { bodyTop, bodyH } = regionBar(h.laneH - 3);
+    const zone = fadeZone(bodyH, FADE_ZONE);
     const looped = isLooped(r);
     const endX = regionEnd(r) * pps;
     if (h.localY <= bodyTop && h.x > endX - (looped ? Math.min(8, (endX - rx - rw) / 2) : edge)) return "loop";
     if (h.inLoop) return "move";
-    if (r.content.type === "audio" && h.localY > bodyTop && h.localY < bodyTop + FADE_ZONE) {
+    if (r.content.type === "audio" && h.localY > bodyTop && h.localY < bodyTop + zone) {
       // A crossfade's handle is at its start; a region crossfaded into has no fade-in handle.
       const hd = fadeHandles(r.start, r.length, r.content.fade_in, r.content.fade_out, regionCrossfades(r.id));
       const fiX = rx + r.content.fade_in * pps;
@@ -793,7 +811,7 @@ export function Arrange() {
     if (!h.region) return startMarquee(e, h);
     const r = h.region;
     // A take folder's triangle opens it; its badge opens the take folder menu.
-    if (isFolder(r) && h.localY <= 14 && !h.inLoop) {
+    if (isFolder(r) && h.localY <= regionBar(h.laneH - 3).bar && !h.inLoop) {
       const bx = Math.max(r.start * pps, scrollRef.current!.scrollLeft);
       if (h.x < bx + 17) {
         toggleFolder(r.id);

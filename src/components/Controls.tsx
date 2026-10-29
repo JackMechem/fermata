@@ -7,7 +7,7 @@ import { theme } from "../theme";
 import { dbToFader, faderToDb, gainToDb } from "../time";
 
 /** Shared vertical/horizontal drag helper. Shift gives fine control, like Logic. */
-function useDrag(onDelta: (d: number, fine: boolean) => void, onEnd?: () => void) {
+export function useDrag(onDelta: (d: number, fine: boolean) => void, onEnd?: () => void) {
   return (e: React.MouseEvent, axis: "x" | "y") => {
     e.preventDefault();
     let last = axis === "x" ? e.clientX : e.clientY;
@@ -151,6 +151,8 @@ export function Meter({
   horizontal = false,
   onPeak,
   resetKey = 0,
+  scale = level,
+  className = "meter",
 }: {
   source: MeterSource;
   resetKey?: number;
@@ -158,6 +160,10 @@ export function Meter({
   width?: number;
   horizontal?: boolean;
   onPeak?: (db: number) => void;
+  /** Maps a level in dB to a fraction of the meter's length (a linear dB scale by default).
+   *  Pass a stable function: a new one restarts the meter. */
+  scale?: (db: number) => number;
+  className?: string;
 }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const src = JSON.stringify(source);
@@ -183,8 +189,8 @@ export function Meter({
     const stops = theme.meterStops;
     if (theme.meterStyle === "stepped") {
       // Three solid bands with hard edges.
-      const mid = level(-12);
-      const high = level(-3);
+      const mid = scale(-12);
+      const high = scale(-3);
       grad.addColorStop(0, stops[0]);
       grad.addColorStop(mid, stops[0]);
       grad.addColorStop(mid, stops[1]);
@@ -193,10 +199,10 @@ export function Meter({
       grad.addColorStop(1, stops[2]);
     } else {
       grad.addColorStop(0, stops[0]);
-      grad.addColorStop(level(-18), stops[1]);
-      grad.addColorStop(level(-6), stops[2]);
-      grad.addColorStop(level(-1), stops[3]);
-      grad.addColorStop(level(0), stops[4]);
+      grad.addColorStop(scale(-18), stops[1]);
+      grad.addColorStop(scale(-6), stops[2]);
+      grad.addColorStop(scale(-1), stops[3]);
+      grad.addColorStop(scale(0), stops[4]);
       grad.addColorStop(1, stops[5]);
     }
     const key = s.kind === "master" ? -1 : s.kind === "input" ? -100 - s.ch : s.id;
@@ -250,8 +256,8 @@ export function Meter({
           hold[i] = Math.max(db, METER_FLOOR);
           holdAt[i] = now;
         }
-        const l = Math.round(level(disp[i]) * len);
-        const hp = hold[i] > METER_FLOOR ? Math.round(level(hold[i]) * len) : 0;
+        const l = Math.round(scale(disp[i]) * len);
+        const hp = hold[i] > METER_FLOOR ? Math.round(scale(hold[i]) * len) : 0;
         levels.push(l);
         holds.push(hp);
         if (l !== painted[i * 2] || hp !== painted[i * 2 + 1]) changed = true;
@@ -260,7 +266,7 @@ export function Meter({
       }
       if (changed) paint(levels, holds);
     });
-  }, [src, height, width, horizontal, onPeak, resetKey, themeId, uiScale]);
+  }, [src, height, width, horizontal, onPeak, resetKey, themeId, uiScale, scale]);
   const style = horizontal ? { width: height, height: width } : { width, height };
-  return <canvas ref={ref} className="meter" style={style} />;
+  return <canvas ref={ref} className={className} style={style} />;
 }

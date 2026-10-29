@@ -97,7 +97,9 @@ export function TracksArea() {
     {
       label: "Track Height",
       children: [
-        ["Small", 48],
+        ["Mini", 24],
+        ["Compact", 36],
+        ["Small", 52],
         ["Medium", 64],
         ["Large", 96],
         ["Extra Large", 150],

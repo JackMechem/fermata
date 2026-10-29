@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { act, api, canRecord, isStack, type Group, type Id, type Track } from "../api";
 import { Icon } from "../icons";
 import { getState, setState, useStore } from "../store";
 import { clampHeight, setTrackHeight, useLayout } from "../layout";
 import { onViewport, viewport } from "../view";
 import { clickTrack, selectedTracks, setHidden, toggleCollapsed, trackMenu } from "../ops";
-import { HSlider, Meter } from "./Controls";
-import { openMenu } from "./Menu";
-import { automatable, useAutomation, VOLUME } from "../automation";
-import { AutomationControls } from "./AutomationHeader";
+import { openMenu, openMenuAt, type MenuItem } from "./Menu";
+import { automatable, paramMenu, useAutomation, VOLUME } from "../automation";
+import { AutoModeButton, AutomationControls } from "./AutomationHeader";
 import { canFreeze, toggleFreeze } from "../freeze";
 import { takeRowsHeight } from "../takes";
-import { fmt } from "../keymap";
+import { fmt, keyHint } from "../keymap";
+import { headerTier } from "../trackHeader";
+import { LevelSlider } from "./LevelSlider";
 
 const INDENT = 12;
 
@@ -22,6 +23,28 @@ function StackIcon({ summing }: { summing: boolean }) {
       {summing && <path d="M7 12.2h6M10 9.2v6" />}
     </svg>
   );
+}
+
+/** The "⋯" of the button menu on short headers. */
+function MoreIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+      <circle cx="2" cy="6" r="1.25" />
+      <circle cx="6" cy="6" r="1.25" />
+      <circle cx="10" cy="6" r="1.25" />
+    </svg>
+  );
+}
+
+/** One of a header's switches (M S R I, freeze): its button and its item in the "⋯" menu. */
+interface Switch {
+  cls: string;
+  label: ReactNode;
+  name: string;
+  on: boolean;
+  title: string;
+  hint?: string;
+  toggle: () => void;
 }
 
 /** Two signals merging into one bus. */
@@ -76,21 +99,49 @@ function Header({
   const [editing, setEditing] = useState(false);
   const stack = isStack(track.kind);
   const [volume, volumeTouch] = useAutomation(track, VOLUME, track.volume_db);
+  // Short headers put everything on one line and move the buttons into a "⋯" menu.
+  const tier = headerTier(height);
+  const full = tier === "full";
   // The automation row takes a third line on tall tracks, or the buttons' place.
   const automation = useStore((s) => s.showAutomation) && automatable(track);
-  const autoRow = automation && height >= 76;
-  const btn = (cls: string, on: boolean, label: string, patch: Partial<Track>, title: string) => (
+  const autoRow = full && automation && height >= 76;
+  const switches: Switch[] = [
+    { cls: "mute", label: "M", name: "Mute", on: track.mute, title: "Mute", hint: keyHint("track-mute"), toggle: () => api.updateTrack(track.id, { mute: !track.mute }) },
+    { cls: "solo", label: "S", name: "Solo", on: track.solo, title: "Solo", hint: keyHint("track-solo"), toggle: () => api.updateTrack(track.id, { solo: !track.solo }) },
+  ];
+  if (canRecord(track.kind)) switches.push({ cls: "rec", label: "R", name: "Record Enable", on: track.armed, title: "Record Enable", hint: keyHint("track-arm"), toggle: () => api.updateTrack(track.id, { armed: !track.armed }) });
+  if (track.kind === "audio") switches.push({ cls: "mon", label: "I", name: "Input Monitoring", on: track.monitor, title: "Input Monitoring", toggle: () => api.updateTrack(track.id, { monitor: !track.monitor }) });
+  if (canFreeze(track)) {
+    switches.push({
+      cls: "freeze",
+      label: <Icon.snowflake />,
+      name: "Freeze",
+      on: !!track.frozen,
+      title: track.frozen ? "Frozen: plays a render, plug-ins unloaded. Click to unfreeze" : "Freeze: render the instrument and plug-ins, then unload them",
+      // Acts on the selection when this track is part of it, as Logic's buttons do.
+      toggle: () => toggleFreeze(selected ? selectedTracks() : [track.id]),
+    });
+  }
+  const btn = (sw: Switch) => (
     <button
-      className={`tbtn ${cls}` + (on ? " on" : "")}
-      title={title}
+      key={sw.cls}
+      className={`tbtn ${sw.cls}` + (sw.on ? " on" : "")}
+      title={sw.title}
       onMouseDown={(e) => {
         e.stopPropagation();
-        api.updateTrack(track.id, patch);
+        sw.toggle();
       }}
     >
-      {label}
+      {sw.label}
     </button>
   );
+  // The "⋯" menu: every switch, checked when on, then the automation lane's parameter when
+  // automation is shown (its mode button stays in the header).
+  const openMore = async (el: HTMLElement) => {
+    const items: MenuItem[] = switches.map((sw) => ({ label: sw.name, checked: sw.on, hint: sw.hint, onClick: sw.toggle }));
+    if (automation) items.push({ separator: true }, { label: "Automation Parameter", children: await paramMenu(track) });
+    openMenuAt(el, items);
+  };
   // Drag the bottom edge to resize this track; Alt-drag sizes every track.
   const startResize = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -121,7 +172,7 @@ function Header({
   };
   return (
     <div
-      className={"track-header" + (selected ? " selected" : "") + (primary ? " primary" : "") + (stack ? " stack" : "") + (track.hidden ? " is-hidden" : "") + (track.frozen ? " frozen" : "")}
+      className={`track-header tier-${tier}` + (selected ? " selected" : "") + (primary ? " primary" : "") + (stack ? " stack" : "") + (track.hidden ? " is-hidden" : "") + (track.frozen ? " frozen" : "")}
       style={{ height }}
       onMouseDown={(e) => {
         if (e.button === 0) clickTrack(track.id, e);
@@ -145,9 +196,11 @@ function Header({
           {Icon.disclosure(!track.collapsed)}
         </button>
       )}
-      <div className="th-icon" style={{ color: track.color }} onMouseDown={(e) => onReorderStart(e, index)} title={stack ? (track.kind === "summing" ? "Summing Stack" : "Folder Stack") : track.kind === "aux" ? `Aux · Bus ${track.bus}` : undefined}>
-        {track.kind === "audio" ? <Icon.waveform /> : track.kind === "instrument" ? <Icon.keyboard /> : track.kind === "aux" ? <AuxIcon /> : <StackIcon summing={track.kind === "summing"} />}
-      </div>
+      {tier !== "tiny" && (
+        <div className="th-icon" style={{ color: track.color }} onMouseDown={(e) => onReorderStart(e, index)} title={stack ? (track.kind === "summing" ? "Summing Stack" : "Folder Stack") : track.kind === "aux" ? `Aux · Bus ${track.bus}` : undefined}>
+          {track.kind === "audio" ? <Icon.waveform /> : track.kind === "instrument" ? <Icon.keyboard /> : track.kind === "aux" ? <AuxIcon /> : <StackIcon summing={track.kind === "summing"} />}
+        </div>
+      )}
       <div className="th-main">
         {editing ? (
           <input
@@ -171,25 +224,11 @@ function Header({
             {track.name}
           </div>
         )}
-        {automation && !autoRow && <AutomationControls track={track} />}
-        <div className="th-buttons" hidden={automation && !autoRow}>
-          {btn("mute", track.mute, "M", { mute: !track.mute }, "Mute")}
-          {btn("solo", track.solo, "S", { solo: !track.solo }, "Solo")}
-          {canRecord(track.kind) && btn("rec", track.armed, "R", { armed: !track.armed }, "Record Enable")}
-          {track.kind === "audio" && btn("mon", track.monitor, "I", { monitor: !track.monitor }, "Input Monitoring")}
-          {canFreeze(track) && (
-            <button
-              className={"tbtn freeze" + (track.frozen ? " on" : "")}
-              title={track.frozen ? "Frozen: plays a render, plug-ins unloaded. Click to unfreeze" : "Freeze: render the instrument and plug-ins, then unload them"}
-              onMouseDown={(e) => {
-                e.stopPropagation();
-                // Acts on the selection when this track is part of it, as Logic's buttons do.
-                toggleFreeze(selected ? selectedTracks() : [track.id]);
-              }}
-            >
-              <Icon.snowflake />
-            </button>
-          )}
+        {full && automation && !autoRow && <AutomationControls track={track} />}
+        <div className="th-buttons" hidden={full && automation && !autoRow}>
+          {/* Short headers keep only the switches that are on, so a muted, soloed, armed or
+              frozen track still shows it; the rest are in the "⋯" menu. */}
+          {(full ? switches : switches.filter((sw) => sw.on)).map(btn)}
           {group && <GroupBadge group={group} onClick={() => setState({ groupSheet: group.id })} />}
           {hideMode && (
             <button
@@ -203,12 +242,32 @@ function Header({
               H
             </button>
           )}
+          {!full && automation && <AutoModeButton track={track} compact />}
+          {!full && (
+            <button
+              className="tbtn th-more"
+              title="Mute, Solo, Record and more"
+              onMouseDown={(e) => {
+                e.stopPropagation();
+                openMore(e.currentTarget);
+              }}
+            >
+              <MoreIcon />
+            </button>
+          )}
         </div>
         {autoRow && <AutomationControls track={track} />}
       </div>
-      <div className="th-volume" title={track.kind === "folder" ? "Folder volume: moves every subtrack" : undefined}>
-        <HSlider db={volume} onChange={(db) => api.updateTrack(track.id, { volume_db: db })} width={Math.max(56, 88 - depth * INDENT)} {...volumeTouch} />
-        {track.kind !== "folder" && <Meter source={{ kind: "track", id: track.id }} height={Math.max(56, 88 - depth * INDENT)} width={4} horizontal />}
+      <div className="th-volume">
+        <LevelSlider
+          db={volume}
+          onChange={(db) => api.updateTrack(track.id, { volume_db: db })}
+          width={Math.max(56, 88 - depth * INDENT)}
+          tier={tier}
+          track={track.kind === "folder" ? null : track.id}
+          label={track.kind === "folder" ? "Folder volume (moves every subtrack)" : "Volume"}
+          {...volumeTouch}
+        />
       </div>
       <div
         className="th-resize"
