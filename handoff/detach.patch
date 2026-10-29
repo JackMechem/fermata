@@ -1,0 +1,486 @@
+diff --git a/src-tauri/capabilities/default.json b/src-tauri/capabilities/default.json
+index 15ecd1d..1ee6f4a 100644
+--- a/src-tauri/capabilities/default.json
++++ b/src-tauri/capabilities/default.json
+@@ -1,7 +1,7 @@
+ {
+   "$schema": "../gen/schemas/desktop-schema.json",
+   "identifier": "default",
+-  "description": "Main window",
+-  "windows": ["main"],
+-  "permissions": ["core:default", "core:window:allow-destroy", "core:webview:allow-set-webview-zoom", "dialog:default"]
++  "description": "The main window and detached panel windows (src/detach.ts)",
++  "windows": ["main", "panel-*"],
++  "permissions": ["core:default", "core:window:allow-destroy", "core:window:allow-set-title", "core:webview:allow-set-webview-zoom", "dialog:default"]
+ }
+diff --git a/src-tauri/src/main.rs b/src-tauri/src/main.rs
+index 8049044..e286874 100644
+--- a/src-tauri/src/main.rs
++++ b/src-tauri/src/main.rs
+@@ -7,6 +7,7 @@ mod recent;
+ #[cfg(target_os = "linux")]
+ mod glib_loop;
+ mod settings;
++mod windows;
+ 
+ use std::sync::Arc;
+ use std::time::Duration;
+@@ -71,6 +72,7 @@ fn main() {
+     tauri::Builder::default()
+         .plugin(tauri_plugin_dialog::init())
+         .manage(AppState { session: session.clone() })
++        .on_window_event(windows::on_window_event)
+         .setup(move |app| {
+             menu::install(app)?;
+             let handle = app.handle().clone();
+@@ -285,6 +287,10 @@ fn main() {
+             commands::set_region_fade_shape,
+             commands::crossfade_regions,
+             commands::set_drag_mode,
++            windows::open_panel_window,
++            windows::close_panel_window,
++            windows::focus_panel_window,
++            windows::broadcast_snapshot,
+         ])
+         .run(tauri::generate_context!())
+         .expect("error while running Fermata");
+diff --git a/src-tauri/src/menu.rs b/src-tauri/src/menu.rs
+index ab5cd5d..7d9e6d5 100644
+--- a/src-tauri/src/menu.rs
++++ b/src-tauri/src/menu.rs
+@@ -1,7 +1,8 @@
+-//! The native menu bar. Items emit a `menu` event carrying their id to the frontend.
++//! The native menu bar. Items emit a `menu` event carrying their id to the frontend (to the
++//! focused detached panel window, if any; see windows.rs).
+ 
+ use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
+-use tauri::{App, Emitter, Runtime};
++use tauri::{App, Runtime};
+ 
+ /// Logic's ⌃B. Elsewhere Ctrl+B is already Bounce Project (⌘B), so Bounce in Place adds Alt.
+ const BOUNCE_IN_PLACE_KEY: &str = if cfg!(target_os = "macos") { "Ctrl+B" } else { "Ctrl+Alt+B" };
+@@ -118,6 +119,9 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
+         .item(&item("inspector", "Inspector", None)?)
+         .item(&item("mixer", "Mixer", None)?)
+         .item(&item("editor", "Editors", None)?)
++        // Toggles: a detached panel's own window, or back into the main window.
++        .item(&item("detach:mixer", "Mixer in Separate Window", None)?)
++        .item(&item("detach:editor", "Editor in Separate Window", None)?)
+         .item(&item("browser", "Browsers", None)?)
+         .item(&item("automation", "Show Automation", None)?)
+         .item(&item("global-tracks", "Show Global Tracks", None)?)
+@@ -138,8 +142,6 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
+ 
+     let menu = MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &track, &record, &navigate, &view]).build()?;
+     app.set_menu(menu)?;
+-    app.on_menu_event(|app, ev| {
+-        let _ = app.emit("menu", ev.id().0.clone());
+-    });
++    app.on_menu_event(|app, ev| crate::windows::route_menu(app, ev.id().0.clone()));
+     Ok(())
+ }
+diff --git a/src-tauri/src/windows.rs b/src-tauri/src/windows.rs
+new file mode 100644
+index 0000000..b703b69
+--- /dev/null
++++ b/src-tauri/src/windows.rs
+@@ -0,0 +1,138 @@
++//! Detached panel windows: a bottom-section panel (the Mixer, the editor, a Channel EQ…) shown
++//! in its own window, labelled `panel-<key>`. The frontend decides what is detached and keeps
++//! the windows' UI state in step (src/detach.ts); this module opens, focuses and closes the
++//! windows, sends a fresh snapshot to the other windows after one of them edits the project,
++//! routes native menu items to the focused window, and closes the panels with the main window.
++
++use serde::Deserialize;
++use tauri::window::Color;
++use tauri::{AppHandle, Emitter, EventTarget, Manager, PhysicalPosition, PhysicalSize, Runtime, State, WebviewUrl, WebviewWindowBuilder, Window, WindowEvent};
++
++use crate::{commands, AppState};
++
++/// Labels of panel windows start with this; the capability in `capabilities/default.json`
++/// grants `panel-*` the same access as the main window.
++pub const PANEL_PREFIX: &str = "panel-";
++
++/// The event carrying a snapshot to the windows that didn't make the edit (src/detach.ts).
++const SYNC_EVENT: &str = "project-sync";
++
++/// Whether `label` names a panel window (and only characters Tauri accepts in a label).
++pub fn is_panel_label(label: &str) -> bool {
++    label.len() > PANEL_PREFIX.len()
++        && label.starts_with(PANEL_PREFIX)
++        && label.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | ':' | '/'))
++}
++
++/// A window's outer position and inner size in physical pixels, already fitted to the monitors
++/// that are connected now (src/detachModel.ts `fitToMonitors`).
++#[derive(Deserialize)]
++pub struct Geometry {
++    x: i32,
++    y: i32,
++    w: u32,
++    h: u32,
++}
++
++/// Opens a panel window, or brings it to the front if it is already open. `width`/`height` are
++/// the logical size for a first opening; `geometry` restores where it was last time.
++///
++/// Async because creating a window from a synchronous command deadlocks on Windows.
++#[tauri::command]
++pub async fn open_panel_window(app: AppHandle, label: String, title: String, width: f64, height: f64, geometry: Option<Geometry>) -> Result<(), String> {
++    if !is_panel_label(&label) {
++        return Err(format!("not a panel window: {label}"));
++    }
++    if let Some(w) = app.get_webview_window(&label) {
++        let _ = w.unminimize();
++        let _ = w.set_focus();
++        return Ok(());
++    }
++    let w = WebviewWindowBuilder::new(&app, &label, WebviewUrl::default())
++        .title(title)
++        .inner_size(width, height)
++        .min_inner_size(360.0, 180.0)
++        .background_color(Color(0x1c, 0x1c, 0x1e, 0xff))
++        // Placed before it is shown, so it doesn't appear in one spot and jump to another.
++        .visible(false)
++        .build()
++        .map_err(|e| e.to_string())?;
++    if let Some(g) = geometry {
++        let _ = w.set_size(PhysicalSize::new(g.w.max(1), g.h.max(1)));
++        // Ignored on native Wayland, where the compositor places windows.
++        let _ = w.set_position(PhysicalPosition::new(g.x, g.y));
++    }
++    let _ = w.show();
++    let _ = w.set_focus();
++    Ok(())
++}
++
++/// Closes a panel window without asking it (attaching the panel, or its content went away).
++#[tauri::command]
++pub fn close_panel_window(app: AppHandle, label: String) {
++    if !is_panel_label(&label) {
++        return;
++    }
++    if let Some(w) = app.get_webview_window(&label) {
++        let _ = w.destroy();
++    }
++}
++
++/// Brings a panel window to the front (its toggle was used while it is detached).
++#[tauri::command]
++pub fn focus_panel_window(app: AppHandle, label: String) {
++    if let Some(w) = app.get_webview_window(&label).filter(|_| is_panel_label(&label)) {
++        let _ = w.unminimize();
++        let _ = w.set_focus();
++    }
++}
++
++/// Sends the current snapshot to every window but the caller, which already has it from the
++/// command it ran. Serialized once, however many windows there are.
++#[tauri::command]
++pub fn broadcast_snapshot(webview: tauri::Webview, state: State<AppState>) -> Result<(), String> {
++    let from = webview.label().to_string();
++    let snap = commands::snapshot(&state.session.lock());
++    let json = serde_json::to_string(&snap).map_err(|e| e.to_string())?;
++    // The windows listen for it on their own label (`getCurrentWebviewWindow().listen`), so a
++    // filter on the target reaches exactly the other windows.
++    webview
++        .app_handle()
++        .emit_str_filter(SYNC_EVENT, json, |t| matches!(t, EventTarget::WebviewWindow { label } if *label != from))
++        .map_err(|e| e.to_string())
++}
++
++/// Sends a native menu item to the focused panel window, which handles what belongs to its
++/// panel (Select All in a detached Piano Roll) and passes the rest on to the main window;
++/// otherwise to the main window, as before panels could be detached.
++pub fn route_menu<R: Runtime>(app: &AppHandle<R>, id: String) {
++    let panel = app.webview_windows().into_iter().find(|(label, w)| is_panel_label(label) && w.is_focused().unwrap_or(false)).map(|(label, _)| label);
++    let _ = app.emit_to(EventTarget::webview_window(panel.as_deref().unwrap_or("main")), "menu", id);
++}
++
++/// Panel windows close with the main window, so quitting doesn't leave them behind (and the
++/// app exits when the last one goes, as it did with one window). Their detached state is kept
++/// for the next launch: being destroyed, they don't ask to be attached.
++pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
++    if window.label() == "main" && matches!(event, WindowEvent::Destroyed) {
++        for (label, w) in window.app_handle().webview_windows() {
++            if is_panel_label(&label) {
++                let _ = w.destroy();
++            }
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::is_panel_label;
++
++    #[test]
++    fn panel_labels() {
++        assert!(is_panel_label("panel-mixer"));
++        assert!(is_panel_label("panel-eq:12"));
++        assert!(!is_panel_label("panel-"));
++        assert!(!is_panel_label("main"));
++        assert!(!is_panel_label("panel-a b"));
++    }
++}
+diff --git a/src/detachModel.ts b/src/detachModel.ts
+new file mode 100644
+index 0000000..87480e5
+--- /dev/null
++++ b/src/detachModel.ts
+@@ -0,0 +1,194 @@
++// Detached panel windows, the pure part: panel keys and window labels, the bookkeeping of what
++// is detached, which UI state the windows share, and fitting a remembered window to the
++// monitors connected now. detach.ts does the wiring; tests/detach.test.ts covers this file.
++
++/** Window labels of detached panels: `panel-<key>` (src-tauri/src/windows.rs). */
++export const PANEL_PREFIX = "panel-";
++
++/**
++ * A panel key names one detachable panel: its kind ("mixer", "editor"), plus an argument for
++ * kinds that have several instances ("eq:12" is the Channel EQ of track 12).
++ */
++export function panelKey(kind: string, arg: string | number = ""): string {
++  return arg === "" ? kind : `${kind}:${arg}`;
++}
++
++export function parsePanelKey(key: string): { kind: string; arg: string } {
++  const i = key.indexOf(":");
++  return i < 0 ? { kind: key, arg: "" } : { kind: key.slice(0, i), arg: key.slice(i + 1) };
++}
++
++/** Tauri labels allow letters, digits and - / : _, so a key is its own label suffix. */
++export function panelLabel(key: string): string {
++  return PANEL_PREFIX + key;
++}
++
++/** The panel a window shows, from its label; null for the main window. */
++export function keyOfLabel(label: string): string | null {
++  return label.startsWith(PANEL_PREFIX) && label.length > PANEL_PREFIX.length ? label.slice(PANEL_PREFIX.length) : null;
++}
++
++/** Adds a panel to the detached list (once). */
++export function withDetached(list: string[], key: string): string[] {
++  return list.includes(key) ? list : [...list, key];
++}
++
++export function withoutDetached(list: string[], key: string): string[] {
++  return list.includes(key) ? list.filter((k) => k !== key) : list;
++}
++
++/** Kinds with at least one detached panel. */
++export function detachedKinds(list: string[]): string[] {
++  return [...new Set(list.map((k) => parsePanelKey(k).kind))];
++}
++
++/**
++ * What the bottom section shows once the panel `kind` leaves it (detached, or its toggle used
++ * while it is detached): what was there before it, unless that is detached too.
++ */
++export function bottomAfterHide(kind: string, before: string, detached: string[]): string {
++  if (before === kind || before === "none") return "none";
++  return detachedKinds(detached).includes(before) ? "none" : before;
++}
++
++// ---- shared UI state ------------------------------------------------------------------------
++
++/**
++ * The UI-store fields every window keeps the same, so a detached panel behaves as it would in
++ * the main window: the selection (the editor follows it, the keys act on it), the region
++ * clipboard, the snap mode, what is shown of the tracks, the plug-in lists, the appearance, and
++ * which panels are detached. Window layout (the bottom section, pane sizes, open sheets and
++ * floating editors, zoom) stays per window. The snapshot and the settings travel separately.
++ */
++export const SYNCED_FIELDS = [
++  "selectedRegions",
++  "selectedTracks",
++  "focus",
++  "clipboard",
++  "snapMode",
++  "catchPlayhead",
++  "showHidden",
++  "openFolders",
++  "autoLane",
++  "plugins",
++  "fxList",
++  "themeId",
++  "uiScale",
++  "waveStyle",
++  "detached",
++] as const;
++
++export type SyncedField = (typeof SYNCED_FIELDS)[number];
++
++/** The shared fields that changed between two states (by identity), or null if none did. */
++export function syncPatch<S extends Record<SyncedField, unknown>>(prev: S, next: S): Partial<S> | null {
++  const patch: Partial<S> = {};
++  let changed = false;
++  for (const f of SYNCED_FIELDS) {
++    if (prev[f] !== next[f]) {
++      patch[f] = next[f];
++      changed = true;
++    }
++  }
++  return changed ? patch : null;
++}
++
++/** Every shared field, for a window that has just opened. */
++export function syncedState<S extends Record<SyncedField, unknown>>(s: S): Partial<S> {
++  const out: Partial<S> = {};
++  for (const f of SYNCED_FIELDS) out[f] = s[f];
++  return out;
++}
++
++/** Drops anything but shared fields from a patch another window sent. */
++export function cleanPatch(patch: Record<string, unknown>): Record<string, unknown> {
++  const out: Record<string, unknown> = {};
++  for (const f of SYNCED_FIELDS) if (f in patch) out[f] = patch[f];
++  return out;
++}
++
++// ---- window geometry --------------------------------------------------------------------------
++
++/** A rectangle in physical pixels: a window's outer position and inner size, or a monitor's
++ *  work area. */
++export interface Rect {
++  x: number;
++  y: number;
++  w: number;
++  h: number;
++}
++
++/** Where detached panels were, kept across launches. */
++export interface PanelMemory {
++  /** Panels detached when the app last ran, reopened at launch. */
++  open: string[];
++  /** The last window geometry of each panel kind. */
++  geometry: Record<string, Rect>;
++}
++
++const isRect = (r: unknown): r is Rect => {
++  const o = r as Rect;
++  return !!o && [o.x, o.y, o.w, o.h].every((v) => typeof v === "number" && Number.isFinite(v)) && o.w > 0 && o.h > 0;
++};
++
++/** Reads saved panel memory, ignoring anything malformed. */
++export function parseMemory(raw: string | null): PanelMemory {
++  const mem: PanelMemory = { open: [], geometry: {} };
++  if (!raw) return mem;
++  try {
++    const v = JSON.parse(raw) as Partial<PanelMemory>;
++    if (Array.isArray(v.open)) mem.open = [...new Set(v.open.filter((k): k is string => typeof k === "string" && k.length > 0))];
++    if (v.geometry && typeof v.geometry === "object") {
++      for (const [k, r] of Object.entries(v.geometry)) if (isRect(r)) mem.geometry[k] = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
++    }
++  } catch {
++    // A damaged entry just means the panels open docked.
++  }
++  return mem;
++}
++
++function overlap(a: Rect, b: Rect): number {
++  const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
++  const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
++  return w > 0 && h > 0 ? w * h : 0;
++}
++
++const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
++
++/**
++ * Fits a remembered window onto the monitors there are now: onto the one it overlaps most, or
++ * if it is on none of them (that monitor was unplugged), onto the nearest. It is shrunk to fit
++ * and moved fully inside, so its title bar can always be reached. No monitors known: unchanged.
++ */
++export function fitToMonitors(g: Rect, monitors: Rect[]): Rect {
++  const mons = monitors.filter((m) => m.w > 0 && m.h > 0);
++  if (!mons.length) return g;
++  let best = mons[0];
++  let bestArea = -1;
++  for (const m of mons) {
++    const a = overlap(g, m);
++    if (a > bestArea) {
++      best = m;
++      bestArea = a;
++    }
++  }
++  if (bestArea <= 0) {
++    const cx = g.x + g.w / 2;
++    const cy = g.y + g.h / 2;
++    const dist = (m: Rect) => Math.hypot(clamp(cx, m.x, m.x + m.w) - cx, clamp(cy, m.y, m.y + m.h) - cy);
++    best = mons.reduce((a, m) => (dist(m) < dist(a) ? m : a));
++  }
++  const w = Math.min(g.w, best.w);
++  const h = Math.min(g.h, best.h);
++  return {
++    x: Math.round(clamp(g.x, best.x, best.x + best.w - w)),
++    y: Math.round(clamp(g.y, best.y, best.y + best.h - h)),
++    w: Math.round(w),
++    h: Math.round(h),
++  };
++}
++
++/** Offsets the n-th window of a kind (n = how many are open already) so they don't stack. */
++export function cascade(g: Rect, n: number, step = 28): Rect {
++  return n > 0 ? { ...g, x: g.x + n * step, y: g.y + n * step } : g;
++}
+diff --git a/src/prefs.ts b/src/prefs.ts
+index 6e1585c..9321f7e 100644
+--- a/src/prefs.ts
++++ b/src/prefs.ts
+@@ -114,6 +114,20 @@ export function useSettings<T>(sel: (s: AppSettings) => T): T {
+   );
+ }
+ 
++/** Calls `l` whenever the settings change (detach.ts passes them to the other windows). */
++export function onSettingsChange(l: () => void): () => void {
++  listeners.add(l);
++  return () => {
++    listeners.delete(l);
++  };
++}
++
++/** Takes settings another window changed (and already saved). */
++export function receiveSettings(s: AppSettings) {
++  settings = s;
++  listeners.forEach((l) => l());
++}
++
+ export async function loadSettings() {
+   const s = await call<AppSettings>("get_settings");
+   if (s) settings = s;
+diff --git a/src/store.ts b/src/store.ts
+index 7ee3db4..384a923 100644
+--- a/src/store.ts
++++ b/src/store.ts
+@@ -78,6 +78,8 @@ export interface State {
+   fxPanels: Id[];
+   /** The overview strip under the tracks, in place of the horizontal scroll bar (View menu). */
+   showOverview: boolean;
++  /** Panels shown in their own windows, by panel key ("mixer", "eq:12"; see detach.ts). */
++  detached: string[];
+ }
+ 
+ let state: State = {
+@@ -119,6 +121,7 @@ let state: State = {
+   fxList: [],
+   fxPanels: [],
+   showOverview: true,
++  detached: [],
+ };
+ 
+ const listeners = new Set<() => void>();
+@@ -138,6 +141,14 @@ function subscribe(l: () => void) {
+   return () => listeners.delete(l);
+ }
+ 
++/** Calls `l` after every state change (detach.ts shares some of the state between windows). */
++export function subscribeState(l: () => void): () => void {
++  listeners.add(l);
++  return () => {
++    listeners.delete(l);
++  };
++}
++
+ export function useStore<T>(sel: (s: State) => T): T {
+   return useSyncExternalStore(subscribe, () => sel(state));
+ }
