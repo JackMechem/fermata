@@ -51,7 +51,7 @@ export interface UiPrefs {
   /** Settings › Editing: what the mouse wheel scrolls in the Tracks area and Piano Roll. */
   wheel_scrolls?: WheelScrolls;
   /** Settings › General: where built-in effect panels open (fxDock.ts). */
-  fx_panels?: "docked" | "floating";
+  fx_panels?: "docked" | "floating" | "window";
 }
 
 export interface PluginPrefs {

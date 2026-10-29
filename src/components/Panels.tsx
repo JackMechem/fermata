@@ -138,11 +138,13 @@ export function Mixer() {
         </div>
       </div>
       <div className="mixer-strips">
-        {tracks.map((t) => (
-          <ChannelStrip key={t.id} track={t} selected={t.id === selected} />
-        ))}
-        <div className="mixer-gap" />
-        <ChannelStrip track={null} />
+        <div className="mixer-row">
+          {tracks.map((t) => (
+            <ChannelStrip key={t.id} track={t} selected={t.id === selected} />
+          ))}
+          <div className="mixer-gap" />
+          <ChannelStrip track={null} />
+        </div>
       </div>
     </div>
   );

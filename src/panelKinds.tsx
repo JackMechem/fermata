@@ -6,8 +6,8 @@ import { MASTER_ID, type Id, type Project, type Region, type Track } from "./api
 import { bottomPanel, registerPanelKind, type PanelKind } from "./detach";
 import { panelKey } from "./detachModel";
 import * as dock from "./fxDock";
-import { closePanel, dockPatch, panelMode } from "./fxDockState";
-import { findFxSlot, fxInfo } from "./fxHost";
+import { closePanel, dockPatch, panelMode, savedPanelSize } from "./fxDockState";
+import { CHANNEL_EQ, findFxSlot, fxInfo } from "./fxHost";
 import type { BottomPane, State } from "./store";
 import { getState } from "./store";
 import { DetachButton } from "./components/DetachButton";
@@ -79,11 +79,18 @@ registerPanelKind(
  * An effect panel or Channel EQ (fxDock.ts keys "fx:<uid>" and "eq:<track>"). It counts as shown
  * in a window while it is open there, docked or floating, so a window never has a copy of a
  * detached one. Attached again, it opens in the main window as Settings › General › Open Effect
- * Panels says (docked, or floating).
+ * Panels says (docked, or floating). Each type of effect remembers its own window's place and
+ * size, and a first window takes the size the panel last had floating.
  */
 function plugPanel(kind: "fx" | "eq", title: (arg: string, s: State) => string, size: PanelKind["size"]): PanelKind {
   const key = (arg: string) => panelKey(kind, arg);
+  const type = (arg: string, s: State) => (kind === "eq" ? CHANNEL_EQ : (findFxSlot(s.snap?.project, Number(arg))?.plugin.plugin_id ?? null));
   return {
+    memoryKey: (arg, s) => `${kind}:${type(arg, s) ?? ""}`,
+    sizeOf: (arg, s) => {
+      const t = type(arg, s);
+      return (t && savedPanelSize(t)) || { w: (t && dock.DEFAULT_WIDTH[t]) || size.w, h: size.h };
+    },
     title,
     render: (arg) => <OwnPlugPanel panelKey={key(arg)} />,
     shown: (arg, s) => s.fxDock.open.includes(key(arg)),

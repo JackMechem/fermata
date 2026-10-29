@@ -1202,9 +1202,12 @@ select {
   color: #fff;
 }
 
+/* The fader and meter are drawn at the box's measured height, so the box takes no size from
+   them (contain: size): it gets the strip's spare height, and at least 60px. */
 .strip-fader {
   flex: 1;
   min-height: 60px;
+  contain: size;
   display: flex;
   justify-content: center;
   gap: 6px;
@@ -1276,12 +1279,19 @@ select {
   color: var(--text);
 }
 
+/* The strips scroll both ways when the Mixer is too small for them. The row is at least as
+   tall as the view and as tall as the tallest strip, so every strip ends on the same line. */
 .mixer-strips {
   flex: 1;
-  display: flex;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: auto;
   min-height: 0;
+}
+
+.mixer-row {
+  display: flex;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
 }
 
 .mixer-gap {

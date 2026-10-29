@@ -77,6 +77,10 @@ export interface PanelKind {
   restore?: boolean;
   /** A first window's size, in logical pixels. */
   size: { w: number; h: number };
+  /** Where its window's geometry is remembered, if not per kind (one per type of effect). */
+  memoryKey?(arg: string, s: State): string;
+  /** A first window's size when it depends on the panel (an effect's natural size). */
+  sizeOf?(arg: string, s: State): { w: number; h: number };
 }
 
 const kinds = new Map<string, PanelKind>();
@@ -271,7 +275,7 @@ function onPanelMsg(m: PanelMsg & { from: string }) {
       keyAction(m.id);
       break;
     case "geometry":
-      memory.geometry[parsePanelKey(m.key).kind] = m.rect;
+      memory.geometry[memoryKey(m.key)] = m.rect;
       saveMemory();
       break;
   }
@@ -315,18 +319,26 @@ async function monitorRects(): Promise<Rect[]> {
   }
 }
 
-async function openWindow(key: string) {
+/** The `memory.geometry` entry a panel's window uses. */
+function memoryKey(key: string): string {
   const { k, kind, arg } = kindOf(key);
+  return k?.memoryKey?.(arg, getState()) ?? kind;
+}
+
+async function openWindow(key: string) {
+  const { k, arg } = kindOf(key);
   if (!k) return;
-  const saved = memory.geometry[kind];
+  const mem = memoryKey(key);
+  const saved = memory.geometry[mem];
   let geometry: (Rect & { logical: boolean }) | null = null;
   if (saved) {
-    // Another EQ or effect window of the same kind opens a little lower and to the right.
-    const others = getState().detached.filter((d) => d !== key && parsePanelKey(d).kind === kind).length;
+    // Another window remembered in the same place opens a little lower and to the right.
+    const others = getState().detached.filter((d) => d !== key && memoryKey(d) === mem).length;
     geometry = { ...fitToMonitors(cascade(saved, others), await monitorRects()), logical: LOGICAL };
   }
+  const size = k.sizeOf?.(arg, getState()) ?? k.size;
   try {
-    await invoke("open_panel_window", { label: panelLabel(key), title: k.title(arg, getState()), width: k.size.w, height: k.size.h, geometry });
+    await invoke("open_panel_window", { label: panelLabel(key), title: k.title(arg, getState()), width: size.w, height: size.h, geometry });
   } catch (e) {
     const s = getState();
     setState({ detached: withoutDetached(s.detached, key), ...k.show(arg, s), toast: { text: `Couldn't open a window: ${e}`, at: Date.now() } });

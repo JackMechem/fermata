@@ -28,6 +28,15 @@ All notable changes to Fermata are recorded here. The format follows
 - Saves are atomic and keep the previous `project.json` as `project.json.bak`; a damaged
   project file falls back to the autosave or the backup. A panic on the main thread writes an
   emergency autosave.
+- **Separate windows:** the Mixer, the Editors (Piano Roll, Audio Track Editor), built-in
+  effect panels and the Channel EQ can be detached into windows of their own, for example on
+  another monitor (the pop-out button in their bar, or View › Mixer / Editor in Separate
+  Window). They stay in sync with the main window, reopen where they were, and come back onto
+  a connected monitor if theirs is gone.
+- **Docked effect panels:** built-in effect panels and the Channel EQ can dock in the bottom
+  section, with a tab for each, or float (Settings › General › Open Effect Panels; Floating by
+  default), or open in separate OS windows. Floating panels resize from their sides and bottom corners, their graphs and meters
+  grow with them, and each effect type remembers its last size.
 - A LICENSE file (MIT), shipped in every bundle.
 - CI runs the headless checks that need no third-party plug-ins on Linux
   (`scripts/headless-checks.sh`).
@@ -43,6 +52,10 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Fixed
 
+- The Mixer cut off the bottom of its channel strips when it was too short, with no way to
+  scroll to them; it now scrolls, and every strip ends on the same line.
+- The Loudness Meter drew "LUFS" and "LU" over its values.
+- The Compressor's circuit tabs and other segmented buttons didn't show the current choice.
 - Opening Group Settings (including from New Group from Track) blanked the window.
 - Play or Record right after moving the playhead could start from the old position.
 

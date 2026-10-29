@@ -4,6 +4,7 @@
 import type { Id } from "./api";
 import * as dock from "./fxDock";
 import { eqKey, fxKey, parseKey, type DockState, type PanelKey, type PanelMode, type Size } from "./fxDock";
+import { closeDetached, detachPanel } from "./detach";
 import { getSettings } from "./prefs";
 import { getState, setState, useStore, type State } from "./store";
 
@@ -11,8 +12,12 @@ export { eqKey, fxKey, parseKey, type PanelKey };
 
 const dockOf = (s: State): DockState => ({ ...s.fxDock, bottom: s.bottom });
 
-/** Where new panels open (Settings › General › Open Effect Panels). */
+/** Where new panels open in the main window (Settings › General › Open Effect Panels); with
+ *  "Separate windows", a panel attached back to the main window floats there. */
 export const panelMode = (): PanelMode => (getSettings().ui.fx_panels === "docked" ? "docked" : "floating");
+
+/** Settings › General › Open Effect Panels is "Separate windows": panels open in OS windows (detach.ts). */
+const inWindows = () => getSettings().ui.fx_panels === "window";
 
 /** The store change a dock transition makes to `s`, or null if it changes nothing (also used
  *  by panelKinds.tsx to show and hide detached panels). */
@@ -35,9 +40,21 @@ function apply(f: (s: DockState) => DockState) {
   if (p) setState(p);
 }
 
-export const openPanel = (key: PanelKey, mode: PanelMode = panelMode()) => apply((s) => dock.openPanel(s, key, mode));
+/** Opens a panel (or brings it forward) as Settings say, or with `mode` in the main window. */
+export function openPanel(key: PanelKey, mode?: PanelMode) {
+  if (!mode && inWindows()) detachPanel(key);
+  else apply((s) => dock.openPanel(s, key, mode ?? panelMode()));
+}
 export const closePanel = (key: PanelKey) => apply((s) => dock.closePanel(s, key));
-export const togglePanel = (key: PanelKey) => apply((s) => dock.togglePanel(s, key, panelMode()));
+/** A slot or EQ thumbnail click. With "Separate windows", a panel in its own window closes
+ *  (from a panel's window, which doesn't know what is detached, it comes to the front instead);
+ *  otherwise a detached panel's window comes to the front (detach.ts). */
+export function togglePanel(key: PanelKey) {
+  const s = getState();
+  if (inWindows() && s.detached.includes(key)) closeDetached(key);
+  else if (inWindows() && !s.fxDock.open.includes(key)) detachPanel(key);
+  else apply((d) => dock.togglePanel(d, key, panelMode()));
+}
 export const floatPanel = (key: PanelKey) => apply((s) => dock.floatPanel(s, key));
 export const dockPanel = (key: PanelKey) => apply((s) => dock.dockPanel(s, key));
 export const focusPanel = (key: PanelKey) => apply((s) => dock.focusPanel(s, key));
@@ -47,9 +64,9 @@ export const prunePanels = (exists: (key: PanelKey) => boolean) => apply((s) => 
 /** What Esc would close now. */
 export const escTarget = (): PanelKey | null => dock.escTarget(dockOf(getState()));
 
-/** Whether a panel is on screen (lights its slot or EQ thumbnail). */
+/** Whether a panel is on screen, here or in its own window (lights its slot or EQ thumbnail). */
 export function usePanelShown(key: PanelKey | null): boolean {
-  return useStore((s) => key !== null && dock.isShown(dockOf(s), key));
+  return useStore((s) => key !== null && (dock.isShown(dockOf(s), key) || s.detached.includes(key)));
 }
 
 /** The Channel EQ thumbnail's click. */

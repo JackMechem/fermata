@@ -254,7 +254,10 @@ window of their own, for example to put the Mixer on a second monitor.
   Effect Panels says (docked or floating).
 - **One place at a time:** while a panel has its own window, it isn't shown in the main window.
   X (Mixer), E (Editors), an insert slot or a Channel EQ thumbnail bring its window to the
-  front instead.
+  front instead (with Open Effect Panels set to Separate windows, the slot or thumbnail closes
+  it).
+- **Effect panels in separate windows by default:** Settings › General › Open Effect Panels ›
+  Separate windows opens every built-in effect panel and Channel EQ in its own window.
 - **Everything stays live.** Meters, the playhead, the selection (the editor follows it), the
   theme, the interface size and the settings are the same in every window. Key commands and the
   menu bar work in a separate window as in the main one; the Edit menu acts on the separate
@@ -263,10 +266,11 @@ window of their own, for example to put the Mixer on a second monitor.
   the Mixer's window.
 - An effect panel's or Channel EQ's own × (or Esc) closes it altogether, and its window goes
   with it. So does removing the effect or deleting the track.
-- **Remembered:** each kind of window reopens where it was last, with its size, on the same
-  monitor if it is still connected (otherwise on the nearest one, moved and shrunk to fit). The
-  Mixer and the Editors reopen in their own windows at the next launch if they were detached
-  when Fermata quit. Separate windows close with the main window.
+- **Remembered:** each kind of window (the Mixer, the Editors, the Channel EQ, each type of
+  effect) reopens where it was last, with its size, on the same monitor if it is still
+  connected (otherwise on the nearest one, moved and shrunk to fit). The Mixer and the Editors
+  reopen in their own windows at the next launch if they were detached when Fermata quit.
+  Separate windows close with the main window.
 
 ---
 
@@ -1070,6 +1074,9 @@ Meter** (Metering). They are listed first, by category, in the slot menu and the
     window of its own (and the dock button in a window's header puts it back). Drag a window by
     its title; drag its sides or bottom corners to resize it. A window can't be made smaller
     than its controls; Fermata remembers the last size for each kind of effect.
+  - **Separate windows:** each panel opens in an OS window of its own, which you can move to
+    another monitor (see [Separate windows](#separate-windows)). Clicking the slot again closes
+    it; the pop-in button in its bar puts it in the main window, floating.
   - **Esc** closes the frontmost floating panel first, then the docked one on screen.
 - **Knobs:** drag up and down (Shift for fine); double-click or Alt-click for the default;
   double-click the value under a knob to type one ("2.5k", "-6 dB", "1.2 s"). Every change is
@@ -1521,7 +1528,7 @@ Metronome tab (saved with the project).
 | After Recording | Autosave as soon as a recording, Bounce in Place, Freeze or import finishes | On |
 | Undo Steps | 10 to 1000 | 100 |
 | Unsaved Changes | Ask before quitting or closing a project with unsaved changes | On |
-| Open Effect Panels | Floating; Docked in the bottom section (VST3 editors always open in their own window) | Floating |
+| Open Effect Panels | Floating; Docked in the bottom section; Separate windows (VST3 editors always open in their own window) | Floating |
 
 ### Audio
 

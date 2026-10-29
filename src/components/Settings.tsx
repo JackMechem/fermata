@@ -243,13 +243,14 @@ function GeneralPane({ close }: { close: () => void }) {
       <Section title="Plug-in Windows">
         <Row
           label="Open Effect Panels:"
-          note="Where a built-in effect's panel or the Channel EQ opens when you click it. Each panel can still be floated or docked from its header. VST3 editors always open in their own window."
+          note="Where a built-in effect's panel or the Channel EQ opens when you click it: floating inside the main window, docked in its bottom section, or in a window of its own that you can move to another monitor. Each panel can still be floated, docked or detached from its header. VST3 editors always open in their own window."
         >
           <Select
             value={s.ui.fx_panels ?? "floating"}
             options={[
               ["floating", "Floating"],
               ["docked", "Docked in the bottom section"],
+              ["window", "Separate windows"],
             ]}
             onChange={(v) => setUi({ fx_panels: v })}
           />

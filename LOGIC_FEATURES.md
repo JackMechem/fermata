@@ -74,7 +74,7 @@ hosting, automation and undo. This stage is mostly done.
 - [~] Zoom to fit selection or all content (Z) (p. 47). *In the Piano Roll and Audio Track Editor; not in the Tracks area.*
 - [x] Scale the whole interface (90–200%) (p. 48)
 - [x] Catch playhead (`) (p. 49)
-- [~] Open, close and focus windows (p. 45). *One window with panes; nothing detaches.*
+- [~] Open, close and focus windows (p. 45). *One main window with panes; the Mixer, Editors, effect panels and Channel EQ can detach into windows of their own.*
 
 ### Undo and redo (p. 60–62)
 
@@ -269,7 +269,7 @@ hosting, automation and undo. This stage is mostly done.
 - [ ] Time handles: stretch selected notes (p. 398)
 - [ ] Note labels on notes (p. 396)
 - [ ] Drum names and Collapse Mode views (p. 379)
-- [ ] Piano Roll as a separate window, with Link mode (p. 379–380)
+- [~] Piano Roll as a separate window, with Link mode (p. 379–380). *The Editor detaches and follows the selection; no Link modes.*
 - [ ] Lock event positions (p. 395)
 - [ ] Assign notes to MIDI channels by pitch (p. 399)
 - [ ] Track and region automation shown in the Piano Roll (p. 401)
@@ -668,7 +668,7 @@ Audio File Editor (p. 499–523)
 
 ### Windows and workspace (p. 45–54)
 
-- [ ] Detach editors, Mixer and lists into separate windows (p. 22–39)
+- [~] Detach editors, Mixer and lists into separate windows (p. 22–39). *Mixer, Editors, effect panels and Channel EQ; no lists yet.*
 - [ ] Screensets: create, recall, lock, copy and import (p. 51–54)
 - [ ] Save and recall zoom settings; navigation snapshots (p. 48)
 - [ ] Link and Content Catch modes (p. 50)

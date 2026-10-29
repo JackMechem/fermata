@@ -57,8 +57,8 @@ pub struct UiPrefs {
     /// Settings › Editing: what the mouse wheel scrolls in the Tracks area and Piano Roll:
     /// "vertical" (tracks, Shift for time) or "horizontal" (time, Shift for tracks).
     pub wheel_scrolls: String,
-    /// Settings › General: where a built-in effect's panel opens: "floating" (a window of its own)
-    /// or "docked" (in the main window's bottom section, like the Mixer).
+    /// Settings › General: where a built-in effect's panel opens: "floating" (inside the main
+    /// window), "docked" (in its bottom section, like the Mixer) or "window" (an OS window).
     pub fx_panels: String,
 }
 
