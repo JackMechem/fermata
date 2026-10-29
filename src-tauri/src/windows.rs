@@ -132,6 +132,19 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     }
 }
 
+/// The event carrying a key that a plug-in editor window didn't use to the main window, which
+/// handles it as if pressed there (src/pluginKeys.ts).
+const PLUGIN_KEY_EVENT: &str = "plugin-key";
+
+/// Plug-in editor windows pass the keys their plug-in doesn't use to the main window, as
+/// Logic's do (macOS; elsewhere editors don't report keys).
+pub fn forward_plugin_keys<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    vst3_host::keys::set_key_forwarder(Box::new(move |k| {
+        let _ = app.emit_to(EventTarget::webview_window("main"), PLUGIN_KEY_EVENT, k);
+    }));
+}
+
 #[cfg(test)]
 mod tests {
     use super::is_panel_label;

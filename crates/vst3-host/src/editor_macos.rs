@@ -1,7 +1,7 @@
 //! Plugin editor windows on macOS: an NSWindow whose content view the plugin's NSView is added
 //! to. Plug-ins drive their own timers through the main run loop, so unlike Linux there is no
 //! IRunLoop. AppKit may only be touched on the main thread; `close` and `raise` hop there when
-//! called from elsewhere.
+//! called from elsewhere. Keys the plug-in doesn't use go to the host (`keys::set_key_forwarder`).
 
 use std::cell::Cell;
 use std::ffi::c_void;
@@ -12,7 +12,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{define_class, msg_send, DefinedClass, MainThreadMarker, MainThreadOnly};
 use objc2_app_kit::{
-    NSBackingStoreType, NSFloatingWindowLevel, NSWindow, NSWindowCollectionBehavior, NSWindowDelegate, NSWindowStyleMask,
+    NSBackingStoreType, NSEvent, NSEventModifierFlags, NSFloatingWindowLevel, NSResponder, NSWindow, NSWindowCollectionBehavior,
+    NSWindowDelegate, NSWindowStyleMask,
 };
 use objc2_foundation::{NSNotification, NSPoint, NSRect, NSSize, NSString};
 use vst3::Steinberg::*;
@@ -196,13 +197,7 @@ impl Editor {
             if resizable {
                 style |= NSWindowStyleMask::Resizable;
             }
-            let window = NSWindow::initWithContentRect_styleMask_backing_defer(
-                NSWindow::alloc(mtm),
-                NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h)),
-                style,
-                NSBackingStoreType::Buffered,
-                false,
-            );
+            let window = PlugInWindow::new(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h)), style);
             // We own the window through the Retained; the close button just orders it out.
             window.setReleasedWhenClosed(false);
             window.setTitle(&NSString::from_str(title));
@@ -283,4 +278,68 @@ impl Editor {
         OPEN.set(OPEN.get().saturating_sub(1));
         drop(self.frame);
     }
+}
+
+// ---- keys the plug-in doesn't use -----------------------------------------------------------
+
+define_class!(
+    /// The editor window. A key the plug-in's view doesn't handle travels up the responder
+    /// chain to here (its text fields keep theirs), and goes to the host's key forwarder rather
+    /// than beeping. ⌘ shortcuts of the main menu never get here: the menu takes them first.
+    // SAFETY: NSWindow may be subclassed; PlugInWindow has no ivars and doesn't implement Drop.
+    #[unsafe(super(NSWindow, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[name = "FermataPlugInWindow"]
+    struct PlugInWindow;
+
+    impl PlugInWindow {
+        #[unsafe(method(keyDown:))]
+        fn key_down(&self, event: &NSEvent) {
+            if !forward_key(event, false) {
+                unsafe {
+                    let _: () = msg_send![super(self), keyDown: event];
+                }
+            }
+        }
+
+        /// Releases too, for Musical Typing.
+        #[unsafe(method(keyUp:))]
+        fn key_up(&self, event: &NSEvent) {
+            if !forward_key(event, true) {
+                unsafe {
+                    let _: () = msg_send![super(self), keyUp: event];
+                }
+            }
+        }
+    }
+);
+
+impl PlugInWindow {
+    fn new(mtm: MainThreadMarker, content: NSRect, style: NSWindowStyleMask) -> Retained<NSWindow> {
+        let this = Self::alloc(mtm).set_ivars(());
+        let this: Retained<Self> = unsafe {
+            msg_send![super(this), initWithContentRect: content, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false]
+        };
+        Retained::into_super(this)
+    }
+}
+
+/// Sends a key event to the forwarder; false if there is none or the key has no name.
+fn forward_key(event: &NSEvent, up: bool) -> bool {
+    if !crate::keys::has_forwarder() {
+        return false;
+    }
+    let chars = event.charactersIgnoringModifiers().map(|s| s.to_string()).unwrap_or_default();
+    let Some((key, code)) = crate::keys::mac_key(event.keyCode(), &chars) else { return false };
+    let flags = event.modifierFlags();
+    crate::keys::forward(crate::keys::KeyInfo {
+        up,
+        key,
+        code,
+        shift_key: flags.contains(NSEventModifierFlags::Shift),
+        ctrl_key: flags.contains(NSEventModifierFlags::Control),
+        alt_key: flags.contains(NSEventModifierFlags::Option),
+        meta_key: flags.contains(NSEventModifierFlags::Command),
+        repeat: !up && event.isARepeat(),
+    })
 }

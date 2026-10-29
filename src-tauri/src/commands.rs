@@ -35,6 +35,9 @@ pub struct Snapshot {
     pdc: PdcReport,
     /// Why the edit was refused and undone (it touched a frozen track).
     refused: Option<String>,
+    /// Something the command did went wrong without failing it (the editor of a plug-in just
+    /// inserted didn't open); shown as a toast.
+    warning: Option<String>,
     /// Where regions crossfade, for drawing.
     crossfades: Vec<Crossfade>,
     /// Instance ids of VST3 slots whose plug-in isn't installed (or didn't load).
@@ -56,6 +59,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         redo: s.redo_label(),
         pdc: s.pdc_report(),
         refused: None,
+        warning: None,
         crossfades: s.crossfades(),
         missing: s.missing_plugins().iter().map(|p| p.uid).collect(),
     }
@@ -505,17 +509,21 @@ fn slot_index(slot: i64) -> usize {
 
 #[tauri::command]
 pub fn set_plugin(state: State<AppState>, track: Id, slot: i64, plugin_id: String, open: bool) -> R<Snapshot> {
-    try_edit(&state, "Insert Plug-in", None, true, |s| {
+    let mut warning = None;
+    let snap = try_edit(&state, "Insert Plug-in", None, true, |s| {
         let uid = s.set_plugin(track, slot_index(slot), &plugin_id)?;
         // Built-in effects open their panel in the UI instead.
         if open && !plugin_id.starts_with("builtin:") {
             let title = s.project.track(track).map(|t| t.name.clone()).unwrap_or_else(|| "Stereo Out".into());
+            // The plug-in stays inserted; the user hears why its window didn't open.
             if let Err(e) = s.open_editor(uid, &title) {
                 log::warn!("{e}");
+                warning = Some(format!("Couldn't open the plug-in's window: {e}"));
             }
         }
         Ok(())
-    })
+    })?;
+    Ok(Snapshot { warning, ..snap })
 }
 
 #[tauri::command]

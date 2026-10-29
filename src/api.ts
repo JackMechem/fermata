@@ -292,6 +292,8 @@ export interface Snapshot {
   pdc?: PdcReport;
   /** Why the edit was refused and put back (it touched a frozen track). */
   refused?: string | null;
+  /** Something the command did went wrong without failing it (an inserted plug-in's window didn't open). */
+  warning?: string | null;
   /** Where regions crossfade, as playback hears them. */
   crossfades?: Crossfade[];
   /** Instance ids of VST3 slots whose plug-in isn't installed (their settings are kept). */
@@ -411,6 +413,7 @@ export async function act(cmd: string, args?: Record<string, unknown>): Promise<
     const snap = res && "snapshot" in res ? res.snapshot : res;
     if (snap) setState({ snap });
     if (snap?.refused) report(snap.refused);
+    if (snap?.warning) report(snap.warning);
     return snap;
   } catch (e) {
     report(e);

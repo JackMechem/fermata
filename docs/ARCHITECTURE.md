@@ -731,7 +731,14 @@ stores the pair as base64 in `PluginSlot::state` and restores it straight after 
   the plug-in attaches to. The windows float (`NSFloatingWindowLevel`, `FullScreenAuxiliary`)
   and hide while another app is active (`hidesOnDeactivate`), like Logic's; several cascade. An
   NSWindowDelegate reports the close button (`windowWillClose:`, read by `pump`) and applies
-  `checkSizeConstraint` during live resizes, then `onSize`. `IPlugFrame::resizeView` resizes the
+  `checkSizeConstraint` during live resizes, then `onSize`. The window is a small NSWindow
+  subclass (`FermataPlugInWindow`) whose `keyDown:`/`keyUp:` get only the keys the plug-in's
+  view didn't use; they go to the hook set with `keys::set_key_forwarder` (`keys.rs` maps macOS
+  key codes to KeyboardEvent `key`/`code`). The app emits them to the main window as
+  `plugin-key`, and `src/pluginKeys.ts` re-dispatches each as a synthetic KeyboardEvent, so key
+  commands, the user's keymap and Musical Typing all apply. Menu ⌘-shortcuts are taken by the
+  menu first, so nothing runs twice. Linux doesn't forward keys: the plug-in's child window
+  takes KeyPress itself. `IPlugFrame::resizeView` resizes the
   content keeping the top-left corner. There is no IRunLoop: plug-ins use the main run loop.
   `open` fails off the main thread; `close` and `raise` called from another thread (an async
   command, a controller dropped elsewhere) are queued on the main queue, and `close` keeps the

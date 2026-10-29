@@ -1,6 +1,7 @@
 //! Minimal VST3 hosting: module loading, scanning, instantiation, processing and editor windows.
 
 pub mod host;
+pub mod keys;
 pub mod module;
 pub mod plugin;
 pub mod process;

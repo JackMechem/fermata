@@ -39,6 +39,8 @@ All notable changes to Fermata are recorded here. The format follows
   grow with them, and each effect type remembers its last size.
 - **VST3 editor windows on macOS:** a plug-in's own interface opens in a window that floats
   above Fermata's, resizes within the plug-in's limits and hides while another app is in front.
+  Keys the plug-in doesn't use (Space, key commands, Musical Typing) reach Fermata.
+- A plug-in whose window can't open when it's inserted now says why, instead of only logging it.
 - **Missing plug-ins:** a project opened where a plug-in isn't installed opens and plays
   without it, says which are missing, shows their slots struck through and keeps their
   settings. A plug-in installed in another folder than on the computer that saved the project

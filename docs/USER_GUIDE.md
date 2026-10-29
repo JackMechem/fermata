@@ -1925,8 +1925,10 @@ blank, because WebKit then draws on the CPU.
 ## 19. Known limitations
 
 - **Platforms:** plug-in editor windows open on Linux (X11) and macOS; Windows (HWND)
-  embedding is planned. Keys pressed while a plug-in's window is in front go to the plug-in, so
-  Space doesn't start playback there (menu shortcuts still work). The input level check is Linux only. On Windows and macOS only the
+  embedding is planned. On macOS, keys a plug-in's window doesn't use itself (Space, R, other
+  key commands, Musical Typing) go to Fermata, while typing into the plug-in's own fields stays
+  there; Esc doesn't close the window. On Linux only menu shortcuts work while a plug-in's
+  window is in front. The input level check is Linux only. On Windows and macOS only the
   system's default audio driver is available (no ASIO).
 - **Plug-in formats:** VST3 only; no CLAP, AU or VST2.
 - **Tempo:** moving regions in the tracks area is in samples, not bars, across tempo changes;

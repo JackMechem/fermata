@@ -76,6 +76,7 @@ fn main() {
         .setup(move |app| {
             menu::install(app)?;
             let handle = app.handle().clone();
+            windows::forward_plugin_keys(&handle);
 
             // Meters, playhead and recording previews at ~30 Hz.
             let s = session.clone();

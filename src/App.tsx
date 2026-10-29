@@ -9,6 +9,7 @@ import * as ops from "./ops";
 import { ProjectChooser } from "./components/ProjectChooser";
 import { ProjectSettingsSheet, RecoverySheet } from "./components/Settings";
 import { commandForEvent } from "./keymap";
+import { installPluginKeys } from "./pluginKeys";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
 import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
@@ -477,6 +478,8 @@ export default function App() {
       // On this window only: menu items for a focused panel window go there (windows.rs), and a
       // plain listen() would hear those too.
       getCurrentWebviewWindow().listen<string>("menu", (e) => handleMenu(e.payload)),
+      // Keys a plug-in's editor window didn't use (pluginKeys.ts).
+      installPluginKeys(),
       getCurrentWindow().onCloseRequested(async (e) => {
         if (!(await confirmDiscard("Quit"))) e.preventDefault();
       }),
