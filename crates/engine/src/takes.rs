@@ -333,7 +333,7 @@ mod tests {
             length,
             muted: false,
             color: None,
-            content: RegionContent::Audio { clip: 10, offset, gain_db: 0.0, fade_in: 0, fade_out: 0 },
+            content: RegionContent::Audio { clip: 10, offset, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
             loop_end: None,
             takes: Some(f),
         }
@@ -380,7 +380,7 @@ mod tests {
         let mut r2 = r.clone();
         r2.start = 5200;
         r2.length = 800;
-        r2.content = RegionContent::Audio { clip: 10, offset: 200, gain_db: 0.0, fade_in: 0, fade_out: 0 };
+        r2.content = RegionContent::Audio { clip: 10, offset: 200, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() };
         let p = pass_pieces(&r2, r2.takes.as_ref().unwrap(), 5200, 800, 100);
         assert_eq!((p[0].start, p[0].offset), (5200, 1200));
         assert_eq!(flat_pieces(&r2, r2.takes.as_ref().unwrap()), vec![(5200, 300, 1, 1200), (5500, 500, 2, 2500)]);

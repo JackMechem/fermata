@@ -23,5 +23,7 @@ export function subRegion(r: Region, a: number, b: number): Region {
   const c = r.content;
   const fadeIn = s > rs ? 0 : Math.min(c.fade_in, length);
   const fadeOut = e < re ? 0 : Math.min(c.fade_out, length - fadeIn);
-  return { ...r, start: s, length, loop_end: null, content: { ...c, offset: c.offset + cut, fade_in: fadeIn, fade_out: fadeOut } };
+  // A cut end loses its fade type too (a speed fade or a crossfade), as in the engine.
+  const shape = c.fade_shape && { ...c.fade_shape, ...(s > rs ? { in_type: "fade" as const } : {}), ...(e < re ? { out_type: "out" as const } : {}) };
+  return { ...r, start: s, length, loop_end: null, content: { ...c, offset: c.offset + cut, fade_in: fadeIn, fade_out: fadeOut, ...(shape ? { fade_shape: shape } : {}) } };
 }

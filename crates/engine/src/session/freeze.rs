@@ -59,7 +59,7 @@ impl Session {
         let f = t.frozen?;
         let clip = self.clips.get(&f.clip)?.clone();
         let length = clip.frames() as i64;
-        Some(Arc::new(vec![RegionDsp::Audio { start: f.start, length, offset: 0, gain: 1.0, clip, fade_in: (f.start, 0), fade_out: (f.start + length, 0) }]))
+        Some(Arc::new(vec![RegionDsp::Audio { start: f.start, length, offset: 0, gain: 1.0, clip, fade_in: (f.start, 0), fade_out: (f.start + length, 0), laws: Default::default() }]))
     }
 
     /// Freeze, step one: renders each track in `ids` through its instrument, Channel EQ and

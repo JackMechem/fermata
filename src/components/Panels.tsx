@@ -6,6 +6,7 @@ import { importMidiFiles, isMidiPath } from "../midiFiles";
 import { currentTick, getState, setState, useStore } from "../store";
 import { formatTime, inputLabel, toBbt } from "../time";
 import { ChannelStrip } from "./ChannelStrip";
+import { FadeRows } from "./FadeRows";
 import { NumberField } from "./Form";
 import { useSelectedTrack } from "./TrackHeaders";
 import { isLooped } from "../loops";
@@ -70,14 +71,7 @@ export function Inspector() {
                     <NumberField value={Math.round(region.content.gain_db * 10) / 10} step={0.5} resolution={0.1} min={-96} max={30} width={70} onChange={(db) => act("set_region_gain", { ids: [region.id], db, delta: null })} />
                     <span className="dim"> dB</span>
                   </Row>
-                  <Row label="Fade In">
-                    <NumberField value={Math.round((region.content.fade_in / project.sample_rate) * 1000)} step={10} resolution={1} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: Math.round((v / 1000) * project.sample_rate), fadeOut: null })} />
-                    <span className="dim"> ms</span>
-                  </Row>
-                  <Row label="Fade Out">
-                    <NumberField value={Math.round((region.content.fade_out / project.sample_rate) * 1000)} step={10} resolution={1} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: null, fadeOut: Math.round((v / 1000) * project.sample_rate) })} />
-                    <span className="dim"> ms</span>
-                  </Row>
+                  <FadeRows region={region} sampleRate={project.sample_rate} />
                 </>
               )}
             </>

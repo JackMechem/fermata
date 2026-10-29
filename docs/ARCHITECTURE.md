@@ -412,7 +412,20 @@ Details of each stage:
   region hides older audio like Logic's "No Overlap" playback without deleting anything, and a
   region body always wins over a loop repetition. Muted regions are left out. Take folders lay
   their comp pieces side by side so their crossfades overlap. Fades are stored as timeline
-  `(start, length)` and shaped with a quarter-sine curve in `play_audio`.
+  `(start, length)` plus a `FadeLaw` per side, and shaped in `play_audio`.
+- **Fades and crossfades** (`fades.rs`, session side in `session/crossfades.rs`). Each audio
+  region's `fade_shape: FadeShape` holds the curves and types (Speed Up, Slow Down, and the
+  crossfade types X, EqP and X S); the default is the old quarter sine. `fades::crossfades`
+  pairs a region whose fade-out type crossfades with the `following` region on the track
+  (touching or overlapping) and places the crossfade where both files have audio (sliding and
+  shortening it, or falling back to butt fades). `regions_dsp` then stretches both regions over
+  the crossfade and lays them without cutting each other (`keep`), so both sound there.
+  Speed fades carry a table of how far the read position lags (`speed_table`), which
+  `play_audio` reads with linear interpolation; no allocation on the audio thread. Every render
+  (playback, bounce, export, freeze, bounce in place) goes through `play_audio`, and Join mixes
+  through it too (`dsp::mix_regions`). The X-Fade drag mode (`Project::drag_mode`) is applied by
+  `auto_crossfade` at the end of `move_region(s)`, `resize_region`, `nudge_regions` and
+  `paste_regions`. The snapshot carries `crossfades` for drawing.
 - **Audio tracks being recorded** are silent (or, with Autopunch, silent only inside the punch
   range, so the old take is heard before and after). Input is heard when the I button is on,
   or on armed tracks when Auto Input Monitoring is on.

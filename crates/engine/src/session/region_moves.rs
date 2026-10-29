@@ -18,6 +18,8 @@ impl Session {
     /// only changes track onto one of its own kind, and moved regions come to the front so they
     /// win where they now overlap. Each touched track is pushed to the engine once.
     pub fn move_regions(&mut self, moves: &[RegionMove]) {
+        let ids: Vec<Id> = moves.iter().map(|m| m.id).collect();
+        let pairs = self.crossfade_pairs(&ids);
         // Take every region out first, so a region moving onto a track another one leaves
         // can't be confused with it.
         let mut taken = Vec::new();
@@ -42,6 +44,7 @@ impl Session {
             self.push_regions(t);
         }
         self.dirty = true;
+        self.auto_crossfade(&ids, pairs);
     }
 }
 

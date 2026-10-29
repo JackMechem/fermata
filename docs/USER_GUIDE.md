@@ -172,7 +172,8 @@ Track headers:
 ### Inspector
 
 The Inspector shows a **Region** section (mute, position, length, loop, and for audio regions
-gain and fade lengths) and a **Track** section (type, input, instrument, region or subtrack
+gain and the fade rows described under [Fades and crossfades](#fades-and-crossfades)) and a
+**Track** section (type, input, instrument, region or subtrack
 count, group), both collapsed by default, followed by the selected track's channel strip and
 the Stereo Out strip.
 
@@ -237,7 +238,8 @@ track** below with the same settings, or **replaces** what's underneath (the old
 trimmed; their files are kept).
 
 A newer region always hides the older audio it overlaps during playback, as in Logic. The
-older regions are not deleted; move or trim the newer one to hear them again.
+older regions are not deleted; move or trim the newer one to hear them again. Regions that
+crossfade are the exception: both play across the crossfade.
 
 ### Count-in and pre-roll
 
@@ -368,6 +370,11 @@ The pointer changes over a region's hot zones:
 - Moves, trims and loop ends follow the **Snap** setting (Smart, Bar, Beat or Off). Smart
   snaps to sixteenths, beats or bars depending on the zoom. Fades are never snapped.
 - A moved region comes to the front, so it plays over whatever it now overlaps.
+- **Drag mode** (the **Drag** pop-up in the tracks area's bar, next to Snap): **Overlap** (the
+  default) leaves overlapping regions as they are; **X-Fade** crossfades audio regions that a
+  move, trim, nudge, paste or Alt-drag copy leaves overlapping, over the overlap (type X), and
+  removes such a crossfade when an edit pulls the two apart. The mode is saved with the
+  project and isn't an undo step.
 - **Nudge:** Alt+Left / Alt+Right move the selected regions by the Nudge Value (Settings ›
   Editing; 1/16 note by default). A run of nudges is one undo step.
 - Regions on a frozen track can be selected but not changed.
@@ -397,14 +404,49 @@ As in Logic, a looping region repeats its own content from its end up to its **l
 - **Convert Loops to Real Copies** turns the repetitions into regions. Split, Join, Repeat and
   Paste work on the whole looped length; splitting a loop converts it first.
 
-### Fades and gain (audio regions)
+### Fades and crossfades
 
 - **Fades:** drag the handles at the top corners of a selected or hovered audio region (a
   looped region's fade-out is set from the menu or the Inspector), use the
   region menu's **Fade In** and **Fade Out** submenus (None, 10 ms, 50 ms, 250 ms, 1 Beat,
-  1 Bar), or type lengths in the Inspector. Fades use an equal-power (quarter-sine) curve.
+  1 Bar), or type lengths in the Inspector.
+- **Inspector rows**, as in Logic's Region inspector:
+
+  | Row | What it sets |
+  |---|---|
+  | **Fade In** | The fade-in length in ms. Click the label to choose **Fade In** or **Speed Up**. |
+  | **Curve** | The fade-in's curve, -100 to 100. |
+  | **Fade Out** | The fade-out length in ms. Click the label to choose **Fade Out** or **Slow Down**. |
+  | **Type** | **Out** (a plain fade-out), or a crossfade with the following region: **X** (the two levels add up to unity), **EqP** (equal power, for material that isn't the same on both sides) or **X S** (S-shaped). |
+  | **Curve** | The fade-out's curve, -100 to 100 (also shapes an X crossfade). |
+
+- **Curves:** 0 is a straight line. Positive values bow outwards (a fade-in rises quickly,
+  a fade-out holds its level longer), negative values inwards. The default, 50, is the
+  quarter sine every fade used before curves could be set, so older projects sound the same.
+- **Speed Up and Slow Down** change the playback speed over the fade, like a tape starting or
+  stopping, following the curve; the level fades with it. The audio after a Speed Up and before
+  a Slow Down plays where it always did. They are drawn with a dashed curve.
+- **Crossfades:** a crossfade type on a region whose end meets the next region on the track
+  (touching or overlapping) crossfades the two over the Fade Out length, centred on the
+  junction (or the middle of the overlap). Choosing a crossfade type for a region without a
+  fade-out gives it 20 ms (or the overlap). The next region's own fade-in isn't used meanwhile;
+  its Fade In rows are dimmed. Followed by a gap, the type fades out like Out.
+- Region menu › **Crossfade** (None, 10 ms, 20 ms, 50 ms, 250 ms, 1 Beat) crossfades each selected
+  audio region with the one that follows it, as EqP unless it already has a crossfade type;
+  None removes it. It is greyed out when no selected region is followed directly.
+- A crossfade plays audio from the outgoing region's file past its end and from the incoming
+  one's before its start. Where a file has none to spare, the crossfade slides and shortens to
+  fit; where neither has any, the two regions fade out and in at the junction, over half the
+  length each (a short dip rather than a click).
+- Crossfades are drawn across the junction: both regions' curves, crossing. Drag the handle at
+  the crossfade's start (on the outgoing region) to lengthen or shorten it about its centre.
+- Playback, Bounce, Export, Bounce in Place, Freeze and Join all render fades and crossfades
+  identically.
 - **Anti-click fades:** Settings › Editing › Anti-click Fades gives new recordings and imports
   short fades (0 ms by default).
+
+### Gain and reverse (audio regions)
+
 - **Gain:** region menu › Gain › +6, +3, +1, -1, -3, -6 dB, Reset to 0 dB, or Normalize (the
   loudest sample reaches 0 dBFS); or the Inspector's Gain field. Gain ranges from -96 to +30 dB.
 - **Reverse** writes a reversed copy of the audio to a new file, so the original stays intact.
@@ -818,7 +860,8 @@ tools of Logic's Audio File Editor.
 ### Editing regions
 
 Drag a region's name bar to move it, its lower edges to trim it, and the handles at the top of
-the waveform to set fades, as in the tracks area. The **Gain** field in the local bar sets the
+the waveform to set fades, as in the tracks area (fade curves and crossfades are drawn the same
+way, and a crossfade's handle works the same). The **Gain** field in the local bar sets the
 selected region's gain: drag it (Shift for fine), scroll it (±0.5 dB), or double-click for 0 dB.
 
 ### Range actions
@@ -1778,7 +1821,13 @@ blank, because WebKit then draws on the CPU.
 - **Tempo:** moving regions in the tracks area is in samples, not bars, across tempo changes;
   Move MIDI Regions with Tempo doesn't move automation or markers, isn't applied to base-tempo
   edits in Project Settings, and isn't remembered between sessions.
-- **Editing:** no Marquee tool, crossfades, fade curve shapes or region gain drag.
+- **Editing:** no Marquee tool, Fade tool or region gain drag. Drag modes are Overlap and
+  X-Fade only (no No Overlap or Shuffle). Apply Last Fade, fade marquee selections and the
+  Crossfade Time and Curve settings aren't implemented.
+- **Crossfades** are only between plain audio regions: not take folders, looping regions or
+  muted regions (those fade out as Out). A crossfade's handle can't be grabbed where the
+  incoming region is drawn over it (an overlap with the newer region on top); use the
+  Inspector. The Inspector's fade rows edit the one selected region.
 - **Plug-in delay compensation:** the mix plays behind the playhead by the total latency rather
   than reading regions early, so live input on a monitored track that isn't recording is delayed
   with everything else (Low Latency Mode avoids that). Low Latency Mode only switches off

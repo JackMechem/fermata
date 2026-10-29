@@ -71,13 +71,16 @@ fn sub_region(r: &Region, a: i64, b: i64, id: Id) -> Region {
     let length = (b - a).max(1);
     let mut out = Region { id, start: a, length, ..r.clone() };
     match &mut out.content {
-        RegionContent::Audio { offset, fade_in, fade_out, .. } => {
+        RegionContent::Audio { offset, fade_in, fade_out, fade_shape, .. } => {
             *offset += cut;
+            // A cut end loses its fade, and its fade type (a speed fade or a crossfade).
             if a > rs {
                 *fade_in = 0;
+                fade_shape.in_type = Default::default();
             }
             if b < re {
                 *fade_out = 0;
+                fade_shape.out_type = Default::default();
             }
             *fade_in = (*fade_in).min(length);
             *fade_out = (*fade_out).min(length - *fade_in);
@@ -251,7 +254,7 @@ mod tests {
         let path = s.dir.join("Audio Files").join("ramp.wav");
         let clip = s.add_clip(&path, Clip::from_channels(path.clone(), 48000, vec![ramp]));
         let id = s.project.alloc_id();
-        let content = RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 1000, fade_out: 2000 };
+        let content = RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 1000, fade_out: 2000, fade_shape: Default::default() };
         s.project.track_mut(t).unwrap().regions.push(Region { id, name: "Ramp".into(), start: 10_000, length: frames as i64, muted: false, color: None, content, loop_end: None, takes: None });
         s.push_regions(t);
         (s, t, id)

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { setState } from "./store";
 import type { SigEvent, TempoEvent } from "./tempo";
+import type { Crossfade, DragMode, FadeShape } from "./fades";
 
 export type Id = number;
 export type TrackKind = "audio" | "instrument" | "folder" | "summing" | "aux";
@@ -43,7 +44,7 @@ export interface CcEvent {
 }
 
 export type RegionContent =
-  | { type: "audio"; clip: Id; offset: number; gain_db: number; fade_in: number; fade_out: number }
+  | { type: "audio"; clip: Id; offset: number; gain_db: number; fade_in: number; fade_out: number; fade_shape?: FadeShape }
   | { type: "midi"; notes: Note[]; cc?: CcEvent[] };
 
 export interface Region {
@@ -241,6 +242,8 @@ export interface Project {
   tempo_map: TempoEvent[];
   /** The Signature track; empty means `sig_num/sig_den` throughout. */
   signatures: SigEvent[];
+  /** The Tracks area's drag mode: "xfade" crossfades audio regions that edits overlap. */
+  drag_mode?: DragMode;
 }
 
 export type BitDepth = "int24" | "float32";
@@ -289,6 +292,8 @@ export interface Snapshot {
   pdc?: PdcReport;
   /** Why the edit was refused and put back (it touched a frozen track). */
   refused?: string | null;
+  /** Where regions crossfade, as playback hears them. */
+  crossfades?: Crossfade[];
 }
 
 /** session::StripLatency: frames. */

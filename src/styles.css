@@ -5890,3 +5890,20 @@ canvas.pr-cursor-line {
 .slot.slot-drop {
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
+
+/* Region inspector: a label or value that is a pop-up (Fade In / Speed Up, the fade Type). */
+.insp-popup {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+}
+
+.insp-popup:hover {
+  color: var(--text);
+}
+
+/* A fade-in a crossfade replaces. */
+.insp-row.replaced {
+  opacity: 0.45;
+}

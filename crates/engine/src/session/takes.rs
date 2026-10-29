@@ -115,7 +115,7 @@ impl Session {
         Some(Region {
             start: fs,
             length: len,
-            content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade },
+            content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
             takes: Some(folder),
             ..plain
         })
@@ -244,15 +244,23 @@ impl Session {
         let mut made = Vec::new();
         for pass in r.real_copies() {
             let (pass_start, pass_end) = (pass.start, pass.start + pass.length);
-            let (fi, fo) = match pass.content {
-                RegionContent::Audio { fade_in, fade_out, .. } => (fade_in, fade_out),
-                _ => (0, 0),
+            let (fi, fo, shape) = match pass.content {
+                RegionContent::Audio { fade_in, fade_out, fade_shape, .. } => (fade_in, fade_out, fade_shape),
+                _ => (0, 0, FadeShape::default()),
             };
             for (start, length, take, offset) in flat_pieces(&pass, &folder) {
                 let t = folder.take(take).unwrap();
                 let small = self.default_fade(length);
                 let fade_in = if start == pass_start { fi.min(length) } else { small };
                 let fade_out = if start + length == pass_end { fo.min(length - fade_in) } else { small };
+                // The folder's fade shapes go with its own fades, on the outer pieces.
+                let mut fade_shape = FadeShape::default();
+                if start == pass_start {
+                    (fade_shape.in_curve, fade_shape.in_type) = (shape.in_curve, shape.in_type);
+                }
+                if start + length == pass_end {
+                    (fade_shape.out_curve, fade_shape.out_type) = (shape.out_curve, shape.out_type);
+                }
                 let id = self.project.alloc_id();
                 made.push(Region {
                     id,
@@ -261,7 +269,7 @@ impl Session {
                     length,
                     muted: r.muted,
                     color: r.color.clone(),
-                    content: RegionContent::Audio { clip: t.clip, offset, gain_db: gain_db + t.gain_db, fade_in, fade_out },
+                    content: RegionContent::Audio { clip: t.clip, offset, gain_db: gain_db + t.gain_db, fade_in, fade_out, fade_shape },
                     loop_end: None,
                     takes: None,
                 });
@@ -281,9 +289,9 @@ impl Session {
         let Some((track, idx)) = self.find_region(region) else { return Ok(Vec::new()) };
         let r = self.project.track(track).unwrap().regions[idx].clone();
         let Some(folder) = r.takes.clone() else { return Ok(Vec::new()) };
-        let RegionContent::Audio { offset, gain_db, fade_in, fade_out, .. } = r.content else { return Ok(Vec::new()) };
+        let RegionContent::Audio { offset, gain_db, fade_in, fade_out, fade_shape, .. } = r.content else { return Ok(Vec::new()) };
         // Rendered without the folder's gain and fades, which stay adjustable on the region.
-        let plain = Region { content: RegionContent::Audio { clip: 0, offset, gain_db: 0.0, fade_in: 0, fade_out: 0 }, loop_end: None, ..r.clone() };
+        let plain = Region { content: RegionContent::Audio { clip: 0, offset, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: FadeShape::default() }, loop_end: None, ..r.clone() };
         let channels = folder.takes.iter().filter_map(|t| self.clips.get(&t.clip)).map(|c| c.channels.len().min(2)).max().unwrap_or(1);
         let audio = self.render_comp(&plain, &folder, channels);
         let rate = self.sample_rate() as u32;
@@ -291,7 +299,7 @@ impl Session {
         crate::decode::write_wav(&path, rate, &audio)?;
         let clip = self.add_clip(&path, Clip::from_channels(path.clone(), rate, audio));
         let id = self.project.alloc_id();
-        let merged = Region { id, content: RegionContent::Audio { clip, offset: 0, gain_db, fade_in, fade_out }, takes: None, ..r };
+        let merged = Region { id, content: RegionContent::Audio { clip, offset: 0, gain_db, fade_in, fade_out, fade_shape }, takes: None, ..r };
         self.project.track_mut(track).unwrap().regions[idx] = merged;
         self.push_regions(track);
         self.dirty = true;
@@ -322,7 +330,7 @@ impl Session {
                     length,
                     muted: true,
                     color: r.color.clone(),
-                    content: RegionContent::Audio { clip: t.clip, offset: t.offset + a, gain_db: gain_db + t.gain_db, fade_in: fade, fade_out: fade },
+                    content: RegionContent::Audio { clip: t.clip, offset: t.offset + a, gain_db: gain_db + t.gain_db, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
                     loop_end: None,
                     takes: None,
                 };
@@ -372,7 +380,7 @@ impl Session {
             length: fe - fs,
             muted: false,
             color: newest.color.clone(),
-            content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade },
+            content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
             loop_end: None,
             takes: Some(folder),
         };

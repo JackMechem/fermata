@@ -233,6 +233,7 @@ impl Session {
 
     /// Moves regions by `delta` samples (the Nudge keys).
     pub fn nudge_regions(&mut self, ids: &[Id], delta: i64) {
+        let pairs = self.crossfade_pairs(ids);
         let mut touched = Vec::new();
         for t in &mut self.project.tracks {
             for r in t.regions.iter_mut().filter(|r| ids.contains(&r.id)) {
@@ -246,6 +247,7 @@ impl Session {
             self.push_regions(t);
         }
         self.dirty = true;
+        self.auto_crossfade(ids, pairs);
     }
 
     /// MIDI input ports and whether each is in use.
@@ -407,7 +409,7 @@ mod tests {
             length,
             muted: false,
             color: None,
-            content: RegionContent::Audio { clip: 0, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0 },
+            content: RegionContent::Audio { clip: 0, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
             loop_end: None,
             takes: None,
         };

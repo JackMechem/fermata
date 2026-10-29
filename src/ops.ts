@@ -14,6 +14,7 @@ import { currentTick, getState, setState } from "./store";
 import { tempoMap } from "./tempo";
 import { TRACK_COLORS } from "./view";
 import { isFolder, packTakeFolder, takeFolderMenu } from "./takes";
+import { followingRegion } from "./fades";
 
 const project = () => getState().snap?.project;
 const tracks = (): Track[] => project()?.tracks ?? [];
@@ -331,6 +332,18 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
         ["1 Bar", Math.round(bar)],
       ] as [string, number][]
     ).map(([label, v]) => ({ label, onClick: () => act("set_region_fades", { ids: audio, fadeIn: which === "fade_in" ? v : null, fadeOut: which === "fade_out" ? v : null }) }));
+  // Crossfade with the following region (Logic's EqP by default, or the region's own type).
+  const meets = regs.filter((x) => x.content.type === "audio" && followingRegion(trackOf(x.id)?.regions ?? [], x)).map((x) => x.id);
+  const crossfades = (
+    [
+      ["None", 0],
+      ["10 ms", ms(p, 10)],
+      ["20 ms", ms(p, 20)],
+      ["50 ms", ms(p, 50)],
+      ["250 ms", ms(p, 250)],
+      ["1 Beat", Math.round(beat)],
+    ] as [string, number][]
+  ).map(([label, v]): MenuItem => ({ label, onClick: () => act("crossfade_regions", { ids: meets, length: v }) }));
   const muted = regs.every((x) => x.muted);
   const looped = regs.filter(isLooped);
   const items: MenuItem[] = [
@@ -365,6 +378,7 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
       },
       { label: "Fade In", children: fades("fade_in") },
       { label: "Fade Out", children: fades("fade_out") },
+      { label: "Crossfade", disabled: !meets.length, children: crossfades },
       { label: "Reverse", onClick: () => act("reverse_regions", { ids: audio }) },
     );
     // Take folders: the folder's own menu, and Pack Take Folder for plain regions on one track.

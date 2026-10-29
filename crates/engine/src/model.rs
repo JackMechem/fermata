@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::fades::{DragMode, FadeShape};
 use crate::prefs::{BitDepth, ClickSettings};
 use crate::tempo::{SigEvent, TempoEvent};
 
@@ -172,6 +173,9 @@ pub enum RegionContent {
         fade_in: i64,
         #[serde(default)]
         fade_out: i64,
+        /// Fade curves and types (see `fades.rs`).
+        #[serde(default, skip_serializing_if = "FadeShape::is_default")]
+        fade_shape: FadeShape,
     },
     Midi {
         notes: Vec<Note>,
@@ -646,6 +650,9 @@ pub struct Project {
     /// is at bar 1 and `sig_num/sig_den` mirror it.
     #[serde(default)]
     pub signatures: Vec<SigEvent>,
+    /// The Tracks area's drag mode: whether overlapping audio regions crossfade.
+    #[serde(default)]
+    pub drag_mode: DragMode,
 }
 
 pub const INSERT_SLOTS: usize = 8;
@@ -682,6 +689,7 @@ impl Project {
             punch: Punch::default(),
             tempo_map: Vec::new(),
             signatures: Vec::new(),
+            drag_mode: DragMode::Overlap,
         }
     }
 
@@ -974,7 +982,7 @@ mod tests {
             length,
             muted: false,
             color: None,
-            content: RegionContent::Audio { clip: 9, offset: 100, gain_db: 0.0, fade_in: 10, fade_out: 30 },
+            content: RegionContent::Audio { clip: 9, offset: 100, gain_db: 0.0, fade_in: 10, fade_out: 30, fade_shape: FadeShape::default() },
             loop_end,
             takes: None,
         }

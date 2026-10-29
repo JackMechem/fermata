@@ -280,6 +280,9 @@ fn main() {
             commands::delete_preset,
             commands::rename_preset,
             commands::move_plugin,
+            commands::set_region_fade_shape,
+            commands::crossfade_regions,
+            commands::set_drag_mode,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

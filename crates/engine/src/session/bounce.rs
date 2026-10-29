@@ -311,7 +311,7 @@ impl Session {
                 length: b.frames,
                 muted: false,
                 color: None,
-                content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0 },
+                content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
                 loop_end: None,
                 takes: None,
             };

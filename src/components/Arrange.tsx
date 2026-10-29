@@ -15,6 +15,7 @@ import { isLooped, loopEnd, loopPasses, regionEnd } from "../loops";
 import { automationHover, automationLeave, automationMenu, automationMouseDown, drawAutomation } from "../automation";
 import { refuseFrozen } from "../freeze";
 import { getSettings } from "../prefs";
+import { crossfadeLaws, crossfadesByRegion, draggedFadeOut, fadeCurve, fadeHandles, resized, shapeOf, type Crossfade, type RegionCrossfades } from "../fades";
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
@@ -138,7 +139,7 @@ export function drawRegion(
     if (isFolder(r)) drawCompWave(ctx, r, x, w, bodyTop, bodyH, pps, content, visX0, visX1, shift, waveScale * 10 ** (r.content.gain_db / 20));
     else if (wave) drawWave(ctx, wave, r.content.offset + shift, x, w, bodyTop, bodyH, pps, content, visX0, visX1, undefined, waveScale);
     const [fi, fo] = fades ?? [r.content.fade_in, r.content.fade_out];
-    drawFades(ctx, x, w, bodyTop, bodyH, fi * pps, fo * pps, content, handles);
+    drawFades(ctx, r, x - shift * pps, x, w, bodyTop, bodyH, fi, fo, pps, content, handles, ghost ? undefined : regionCrossfades(r.id));
   } else {
     const notes = r.content.notes;
     if (notes.length) {
@@ -217,38 +218,79 @@ function drawLoops(
 const LOOP_CURSOR =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 18 18'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 9a5 5 0 1 1-1.5-3.6' stroke='%23000' stroke-width='3.4'/%3E%3Cpath d='M14 9a5 5 0 1 1-1.5-3.6' stroke='%23fff' stroke-width='1.6'/%3E%3Cpath d='M13.5 2.5v3.2h-3.2' stroke='%23000' stroke-width='3.4'/%3E%3Cpath d='M13.5 2.5v3.2h-3.2' stroke='%23fff' stroke-width='1.6'/%3E%3C/g%3E%3C/svg%3E\") 9 9, ew-resize";
 
-/** Fade curves over a region body: the faded part shaded, the curve drawn, and (when `handles`)
- *  the grab points at the top. */
-function drawFades(ctx: CanvasRenderingContext2D, x: number, w: number, top: number, h: number, fi: number, fo: number, ink: string, handles: boolean) {
-  const curve = (u: number) => Math.sin(Math.max(0, Math.min(1, u)) * Math.PI * 0.5);
-  const side = (x0: number, len: number, rising: boolean) => {
+/** Fade curves over a region body: the faded part shaded, the curve drawn (dashed for a
+ *  Speed Up or Slow Down), and (when `handles`) the grab points at the top. `origin` is where
+ *  the region's own start is drawn. A crossfade replaces the fade on its side and shows both
+ *  regions' curves crossing; each region draws the part over itself. */
+function drawFades(
+  ctx: CanvasRenderingContext2D,
+  r: Region,
+  origin: number,
+  x: number,
+  w: number,
+  top: number,
+  h: number,
+  fi: number,
+  fo: number,
+  pps: number,
+  ink: string,
+  handles: boolean,
+  xf: RegionCrossfades | undefined,
+) {
+  const shape = shapeOf(r.content);
+  // `gain(u)` for u from 0 at the left of the fade to 1 at its right.
+  const side = (x0: number, len: number, gain: (u: number) => number, dashed: boolean, shade: boolean) => {
     if (len < 1) return;
     const steps = Math.max(8, Math.min(64, Math.round(len / 3)));
-    const pt = (k: number) => {
-      const u = k / steps;
-      const g = curve(rising ? u : 1 - u);
-      return [x0 + u * len, top + h * (1 - g)] as const;
-    };
-    ctx.beginPath();
-    ctx.moveTo(x0, top);
-    for (let k = 0; k <= steps; k++) ctx.lineTo(...pt(k));
-    ctx.lineTo(rising ? x0 + len : x0, top);
-    ctx.closePath();
-    ctx.fillStyle = "rgba(0,0,0,0.28)";
-    ctx.fill();
+    const pt = (k: number) => [x0 + (k / steps) * len, top + h * (1 - gain(k / steps))] as const;
+    if (shade) {
+      ctx.beginPath();
+      ctx.moveTo(x0, top);
+      for (let k = 0; k <= steps; k++) ctx.lineTo(...pt(k));
+      ctx.lineTo(x0 + len, top);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.fill();
+    }
     ctx.beginPath();
     for (let k = 0; k <= steps; k++) (k ? ctx.lineTo : ctx.moveTo).call(ctx, ...pt(k));
     ctx.strokeStyle = ink;
     ctx.lineWidth = 1.2;
+    if (dashed) ctx.setLineDash([3, 2]);
     ctx.stroke();
+    ctx.setLineDash([]);
   };
-  side(x, fi, true);
-  side(x + w - fo, fo, false);
-  if (handles) {
-    ctx.fillStyle = ink;
-    ctx.fillRect(Math.round(x + fi) - 3, top, 6, 6);
-    ctx.fillRect(Math.round(x + w - fo) - 3, top, 6, 6);
+  const at = (frame: number) => origin + (frame - r.start) * pps;
+  if (!xf?.in) side(x, fi * pps, (u) => fadeCurve(u, shape.in_curve), shape.in_type === "speed_up", true);
+  if (!xf?.out) side(x + w - fo * pps, fo * pps, (u) => fadeCurve(1 - u, shape.out_curve), shape.out_type === "slow_down", true);
+  for (const c of [xf?.in, xf?.out]) {
+    if (!c) continue;
+    const [outLaw, inLaw] = crossfadeLaws(c);
+    side(at(c.fade_out[0]), c.fade_out[1] * pps, (u) => outLaw(1 - u), false, c === xf?.out);
+    side(at(c.fade_in[0]), c.fade_in[1] * pps, inLaw, false, c === xf?.in);
   }
+  if (handles) {
+    const hd = fadeHandles(r.start, r.length, fi, fo, xf);
+    ctx.fillStyle = ink;
+    if (hd.fadeIn !== null) ctx.fillRect(Math.round(x + hd.fadeIn * pps) - 3, top, 6, 6);
+    ctx.fillRect(Math.round(xf?.out ? at(r.start + hd.fadeOut) : x + w - fo * pps) - 3, top, 6, 6);
+  }
+}
+
+/** A crossfade whose handle is being dragged: its outgoing region and the length shown. */
+let crossfadeDrag: { region: Id; length: number } | null = null;
+
+export function setCrossfadeDrag(v: { region: Id; length: number } | null) {
+  crossfadeDrag = v;
+}
+
+/** The crossfades a region takes part in, with a handle drag in progress applied. */
+export function regionCrossfades(id: Id): RegionCrossfades | undefined {
+  const x = crossfadesByRegion(getState().snap?.crossfades).get(id);
+  const d = crossfadeDrag;
+  if (!x || !d) return x;
+  const fix = (c?: Crossfade) => (c && c.out_region === d.region ? resized(c, d.length) : c);
+  return { out: fix(x.out), in: fix(x.in) };
 }
 
 /** Height of the band at the top of an audio region's body where its fade handles are. */
@@ -719,11 +761,13 @@ export function Arrange() {
     if (h.localY <= bodyTop && h.x > endX - (looped ? Math.min(8, (endX - rx - rw) / 2) : edge)) return "loop";
     if (h.inLoop) return "move";
     if (r.content.type === "audio" && h.localY > bodyTop && h.localY < bodyTop + FADE_ZONE) {
+      // A crossfade's handle is at its start; a region crossfaded into has no fade-in handle.
+      const hd = fadeHandles(r.start, r.length, r.content.fade_in, r.content.fade_out, regionCrossfades(r.id));
       const fiX = rx + r.content.fade_in * pps;
-      const foX = rx + rw - r.content.fade_out * pps;
+      const foX = rx + hd.fadeOut * pps;
       // How close to a fade point counts as grabbing it, again shrinking on narrow regions.
       const near = Math.min(7, rw / 4);
-      if (Math.abs(h.x - fiX) <= near || (r.content.fade_in === 0 && h.x < rx + edge)) return "fadeIn";
+      if (hd.fadeIn !== null && (Math.abs(h.x - fiX) <= near || (r.content.fade_in === 0 && h.x < rx + edge))) return "fadeIn";
       // A looping region's fade-out is at the loop end; set it from the menu or inspector.
       if (!looped && (Math.abs(h.x - foX) <= near || (r.content.fade_out === 0 && h.x > rx + rw - edge))) return "fadeOut";
     }
@@ -785,6 +829,8 @@ export function Arrange() {
     let moved = false;
     dragRef.current = { kind, ids: kind === "move" ? sel : [r.id], dx: 0, dTrack: 0, grabbed: r.id };
     const fadeFrom = r.content.type === "audio" ? (kind === "fadeIn" ? r.content.fade_in : r.content.fade_out) : 0;
+    // Dragging a crossfade's handle resizes it about its centre.
+    const crossfading = kind === "fadeOut" && !!regionCrossfades(r.id)?.out;
     const snap = (v: number) => snapPos(project, v, getState().snapMode, getState().pxPerBeat);
     // An audio region can't be trimmed out past the ends of its file.
     const audio = r.content.type === "audio" ? r.content : null;
@@ -805,7 +851,8 @@ export function Arrange() {
       if (kind === "fadeIn" || kind === "fadeOut") {
         const other = r.content.type === "audio" ? (kind === "fadeIn" ? r.content.fade_out : r.content.fade_in) : 0;
         const v = fadeFrom + (kind === "fadeIn" ? d.dx : -d.dx);
-        d.fade = Math.round(Math.max(0, Math.min(r.length - other, v)));
+        d.fade = crossfading ? draggedFadeOut(fadeFrom, d.dx, true, r.length - other) : Math.round(Math.max(0, Math.min(r.length - other, v)));
+        if (crossfading) setCrossfadeDrag({ region: r.id, length: d.fade });
       } else if (kind === "right") {
         d.start = r.start;
         d.length = Math.min(maxLength, Math.max(PEAK_BUCKET, snap(r.start + r.length + d.dx) - r.start));
@@ -824,6 +871,7 @@ export function Arrange() {
       window.removeEventListener("mouseup", up);
       const d = dragRef.current!;
       dragRef.current = null;
+      setCrossfadeDrag(null);
       if (!moved) {
         clickLocate(e, true);
         requestDraw();

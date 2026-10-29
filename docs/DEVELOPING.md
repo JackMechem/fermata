@@ -108,7 +108,8 @@ same CPU headroom for audio as a release build.
 `cargo test -p daw-engine --lib` runs the engine's unit tests. They need no audio device.
 They cover, among others: loops and real copies, routing order and loop pruning (`model.rs`);
 the click's levels, accent, divisions and delay compensation (`dsp.rs`); delay line taps and the
-PDC solver; take folder comping, crossfades and recording plans (`takes.rs`); automation
+PDC solver; take folder comping, crossfades and recording plans (`takes.rs`); fade curves,
+crossfade gain sums and placement (`fades.rs`, `session/crossfades.rs`); automation
 evaluation and thinning; Channel EQ filters; resampling; transient detection; Standard MIDI
 Files; bounce trimming, normalizing and 16-bit dither; range edits; autosave and recovery,
 undo limits and recording placement (`session/options.rs`); preferences parsing; the
@@ -144,6 +145,7 @@ cargo run -q -p daw-engine --example stack_check -- /path/to/tone.wav /tmp/ferma
 | `sends_check` | audio file, scratch dir | Sends pre and post fader, aux buses, output routing, solo through routing, loop refusal. |
 | `send_auto_check` | audio file, scratch dir | A send-level automation lane changes what reaches the aux. |
 | `bounce_check` | audio file, scratch dir | Bounce, Export All Tracks, Export Region and Bounce in Place: ranges, tails, formats, normalize, placement. |
+| `crossfade_check` | audio file, scratch dir | Fade curves, Speed Up and Slow Down, and X, EqP and X S crossfades, measured in offline renders of synthetic files (X sums to unity, EqP to constant power); butt fades and gaps; the X-Fade drag mode with undo and redo; and that playback, Bounce, Export, Bounce in Place, Freeze, Join and save/reopen all sound the same. |
 | `range_edit_check` | audio file, scratch dir | Audio Track Editor range edits and Split at Transients: what plays after each edit, and that one undo reverts it. |
 | `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too. |
 | `pdc_check` | audio file, scratch dir | Plug-in delay compensation with a real latent plug-in, measured by cross-correlating offline renders. Needs **ZaMaximX2** (zam-plugins) in the plug-in cache. |

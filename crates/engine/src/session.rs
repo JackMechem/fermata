@@ -20,6 +20,7 @@ use crate::audio_io::{self, AudioConfig, AudioIo, AudioStatus};
 use crate::automation::lanes_dsp;
 use crate::clip::Clip;
 use crate::dsp::*;
+use crate::fades::{DragMode, FadeInType, FadeLaw, FadeOutType, FadeShape};
 use crate::midi_io::MidiIo;
 use crate::model::*;
 use crate::prefs::*;
@@ -49,6 +50,7 @@ pub use builtin::{builtin_effects, BuiltinInfo, FxTick};
 mod presets;
 pub use presets::EQ_SLOT;
 mod insert_order;
+mod crossfades;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -475,11 +477,16 @@ impl Session {
     /// body (they are laid down first), so a loop dragged over another region never hides it,
     /// as in Logic where the region covers the loop. The fade-in shapes the start of the first
     /// pass and the fade-out the end of the last one, at the loop end.
+    ///
+    /// Two regions that crossfade (see [`crate::fades::crossfades`]) both play across the
+    /// crossfade, the outgoing one past its end and the incoming one from before its start;
+    /// outside it, the earlier one is heard before and the later one after, whichever is newer.
     fn regions_dsp(&self, t: &Track) -> Arc<Vec<RegionDsp>> {
         if let Some(f) = self.freeze_dsp(t) {
             return f;
         }
         struct Seg {
+            region: Id,
             start: i64,
             end: i64,
             offset: i64,
@@ -487,19 +494,20 @@ impl Session {
             clip: Arc<Clip>,
             fade_in: (i64, i64),
             fade_out: (i64, i64),
+            laws: [FadeLaw; 2],
         }
         let mut segs: Vec<Seg> = Vec::new();
         let mut out = Vec::new();
-        // Cuts away the older audio under `rs..re`.
-        let cut = |segs: &mut Vec<Seg>, rs: i64, re: i64| {
+        // Cuts away the older audio under `rs..re`, except a crossfade partner's (`keep`).
+        let cut = |segs: &mut Vec<Seg>, rs: i64, re: i64, keep: &[Id]| {
             let mut kept = Vec::with_capacity(segs.len() + 1);
             for sg in segs.drain(..) {
-                if sg.end <= rs || sg.start >= re {
+                if sg.end <= rs || sg.start >= re || keep.contains(&sg.region) {
                     kept.push(sg);
                     continue;
                 }
                 if sg.start < rs {
-                    kept.push(Seg { start: sg.start, end: rs, clip: sg.clip.clone(), ..sg });
+                    kept.push(Seg { start: sg.start, end: rs, clip: sg.clip.clone(), laws: sg.laws.clone(), ..sg });
                 }
                 if sg.end > re {
                     kept.push(Seg { start: re, offset: sg.offset + (re - sg.start), ..sg });
@@ -508,11 +516,12 @@ impl Session {
             *segs = kept;
         };
         // Lays a new piece of audio over what's there.
-        let lay = |segs: &mut Vec<Seg>, new: Seg| {
-            cut(segs, new.start, new.end);
+        let lay = |segs: &mut Vec<Seg>, new: Seg, keep: &[Id]| {
+            cut(segs, new.start, new.end, keep);
             segs.push(new);
         };
         let xfade = (crate::takes::COMP_XFADE_MS * self.project.sample_rate as f64 / 1000.0).round() as i64;
+        let crossfades = crate::fades::crossfades(&t.regions, |c| self.clips.get(&c).map(|c| c.frames() as i64));
         // Loop repetitions first, then the region bodies, so bodies always win.
         for repeats in [true, false] {
             for r in t.regions.iter().filter(|r| !r.muted) {
@@ -520,26 +529,47 @@ impl Session {
                 let picked = if repeats { &passes[1..] } else { &passes[..1] };
                 match &r.content {
                     // A take folder plays its comp: each pass covers what's under it, then its
-                    // pieces go in side by side so their crossfades overlap.
-                    RegionContent::Audio { gain_db, .. } if r.takes.is_some() => {
+                    // pieces go in side by side so their crossfades overlap. The folder's own
+                    // fades take its shape; the comp's crossfades stay quarter sines.
+                    RegionContent::Audio { gain_db, fade_in, fade_out, fade_shape, .. } if r.takes.is_some() => {
                         let folder = r.takes.as_ref().unwrap();
+                        let last = passes.last().map(|p| p.1).unwrap_or(r.length);
+                        let fi = (*fade_in).clamp(0, r.length);
+                        let fo = if r.is_looped() { (*fade_out).clamp(0, last) } else { (*fade_out).clamp(0, r.length - fi) };
+                        let own = ((r.start, fi), (r.end() - fo, fo));
                         for &(ps, pl) in picked {
-                            cut(&mut segs, ps, ps + pl);
+                            cut(&mut segs, ps, ps + pl, &[]);
                             for p in crate::takes::pass_pieces(r, folder, ps, pl, xfade) {
                                 let Some(c) = self.clips.get(&p.clip) else { continue };
                                 let gain = volume_gain(*gain_db + p.gain_db);
-                                segs.push(Seg { start: p.start, end: p.end, offset: p.offset, gain, clip: c.clone(), fade_in: p.fade_in, fade_out: p.fade_out });
+                                let law_in = if fi > 0 && p.fade_in == own.0 { FadeLaw::fade_in(fade_shape) } else { FadeLaw::default() };
+                                let law_out = if fo > 0 && p.fade_out == own.1 { FadeLaw::fade_out(fade_shape) } else { FadeLaw::default() };
+                                segs.push(Seg { region: r.id, start: p.start, end: p.end, offset: p.offset, gain, clip: c.clone(), fade_in: p.fade_in, fade_out: p.fade_out, laws: [law_in, law_out] });
                             }
                         }
                     }
-                    RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out } => {
+                    RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out, fade_shape } => {
                         let Some(c) = self.clips.get(clip) else { continue };
                         let (end, last) = (r.end(), passes.last().map(|p| p.1).unwrap_or(r.length));
                         let fi = (*fade_in).clamp(0, r.length);
                         let fo = if r.is_looped() { (*fade_out).clamp(0, last) } else { (*fade_out).clamp(0, r.length - fi) };
+                        let mut fades = ((r.start, fi), (end - fo, fo));
+                        let mut laws = [FadeLaw::fade_in(fade_shape), FadeLaw::fade_out(fade_shape)];
+                        // A crossfade stretches the region (which then doesn't loop) to cover it.
+                        let (mut from, mut to) = (r.start, end);
+                        let mut keep = Vec::new();
+                        if let Some(x) = crossfades.iter().find(|x| x.in_region == r.id) {
+                            (fades.0, laws[0], from) = (x.fade_in, x.laws().1, x.fade_in.0);
+                            keep.push(x.out_region);
+                        }
+                        if let Some(x) = crossfades.iter().find(|x| x.out_region == r.id) {
+                            (fades.1, laws[1], to) = (x.fade_out, x.laws().0, x.fade_out.0 + x.fade_out.1);
+                            keep.push(x.in_region);
+                        }
                         for &(ps, pl) in picked {
-                            let seg = Seg { start: ps, end: ps + pl, offset: *offset, gain: volume_gain(*gain_db), clip: c.clone(), fade_in: (r.start, fi), fade_out: (end - fo, fo) };
-                            lay(&mut segs, seg);
+                            let (s, e) = if keep.is_empty() { (ps, ps + pl) } else { (from, to) };
+                            let seg = Seg { region: r.id, start: s, end: e, offset: *offset + (s - ps), gain: volume_gain(*gain_db), clip: c.clone(), fade_in: fades.0, fade_out: fades.1, laws: laws.clone() };
+                            lay(&mut segs, seg, &keep);
                         }
                     }
                     RegionContent::Midi { notes, cc } => {
@@ -568,6 +598,7 @@ impl Session {
             clip: s.clip,
             fade_in: s.fade_in,
             fade_out: s.fade_out,
+            laws: s.laws,
         }));
         Arc::new(out)
     }
@@ -751,6 +782,8 @@ impl Session {
     fn restore(&mut self, target: Project) {
         self.auto_abort();
         let current = std::mem::replace(&mut self.project, target);
+        // The drag mode is a setting, not part of the edit history.
+        self.project.drag_mode = current.drag_mode;
         let uid = |s: &Option<PluginSlot>| s.as_ref().map(|s| s.uid);
 
         // Tracks that no longer exist.
@@ -1023,7 +1056,7 @@ impl Session {
                 length,
                 muted: false,
                 color: None,
-                content: RegionContent::Audio { clip: clip_id, offset, gain_db: 0.0, fade_in: fade, fade_out: fade },
+                content: RegionContent::Audio { clip: clip_id, offset, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
                 loop_end: None,
                 takes: None,
             };
@@ -1629,6 +1662,7 @@ impl Session {
     /// Moves a region in time and optionally onto another track of the same kind.
     pub fn move_region(&mut self, id: Id, start: i64, track: Option<Id>) {
         let Some((from, idx)) = self.find_region(id) else { return };
+        let pairs = self.crossfade_pairs(&[id]);
         let to = track.unwrap_or(from);
         let kind_ok = match (self.project.track(from), self.project.track(to)) {
             (Some(a), Some(b)) => a.kind == b.kind,
@@ -1644,12 +1678,14 @@ impl Session {
             self.push_regions(to);
         }
         self.dirty = true;
+        self.auto_crossfade(&[id], pairs);
     }
 
     /// Trims a region's edges. `start`/`length` are timeline samples. A loop keeps its end and
     /// repeats the new window; it goes when the region now reaches past it.
     pub fn resize_region(&mut self, id: Id, start: i64, length: i64) {
         let Some((track, idx)) = self.find_region(id) else { return };
+        let pairs = self.crossfade_pairs(&[id]);
         let clips = &self.clips;
         let t = self.project.track_mut(track).unwrap();
         let r = &mut t.regions[idx];
@@ -1676,6 +1712,7 @@ impl Session {
         }
         self.push_regions(track);
         self.dirty = true;
+        self.auto_crossfade(&[id], pairs);
     }
 
     pub fn delete_regions(&mut self, ids: &[Id]) {
@@ -1879,6 +1916,7 @@ impl Session {
             self.push_regions(t);
         }
         self.dirty = true;
+        self.auto_crossfade(&made, Vec::new());
         made
     }
 
@@ -2025,10 +2063,11 @@ impl Session {
             return self.render_comp(r, f, channels);
         }
         let mut out = vec![vec![0.0f32; r.length.max(0) as usize]; channels];
-        let RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out } = &r.content else { return out };
+        let RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out, fade_shape } = &r.content else { return out };
         let Some(c) = self.clips.get(clip) else { return out };
         let g = volume_gain(*gain_db);
         let (fi, fo) = (*fade_in, *fade_out);
+        let (law_in, law_out) = (FadeLaw::Curve(fade_shape.in_curve), FadeLaw::Curve(fade_shape.out_curve));
         for i in 0..r.length.max(0) {
             let src = offset + i;
             if src < 0 || src as usize >= c.frames() {
@@ -2036,10 +2075,10 @@ impl Session {
             }
             let mut gain = g;
             if fi > 0 && i < fi {
-                gain *= ((i as f32 / fi as f32) * std::f32::consts::FRAC_PI_2).sin();
+                gain *= law_in.gain(i as f32 / fi as f32);
             }
             if fo > 0 && i >= r.length - fo {
-                gain *= (((r.length - i) as f32 / fo as f32) * std::f32::consts::FRAC_PI_2).sin();
+                gain *= law_out.gain((r.length - i) as f32 / fo as f32);
             }
             for (ch, o) in out.iter_mut().enumerate() {
                 let s = c.channels[ch.min(c.channels.len() - 1)][src as usize];
@@ -2062,16 +2101,16 @@ impl Session {
         for &id in ids {
             let Some((track, idx)) = self.find_region(id) else { continue };
             let r = self.project.track(track).unwrap().regions[idx].clone();
-            let RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out } = r.content else { continue };
+            let RegionContent::Audio { clip, offset, gain_db, fade_in, fade_out, fade_shape } = r.content else { continue };
             // Render without gain and fades, which stay adjustable on the new region.
-            let plain = Region { content: RegionContent::Audio { clip, offset, gain_db: 0.0, fade_in: 0, fade_out: 0 }, ..r.clone() };
+            let plain = Region { content: RegionContent::Audio { clip, offset, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: FadeShape::default() }, ..r.clone() };
             let mut audio = self.render_region(&plain, self.region_channels(&r));
             audio.iter_mut().for_each(|c| c.reverse());
             let path = self.unique_audio_path(&format!("{} Reversed", r.name));
             crate::decode::write_wav(&path, rate, &audio)?;
             let clip = self.add_clip(&path, Clip::from_channels(path.clone(), rate, audio));
             if let Some(reg) = self.region_mut(id) {
-                reg.content = RegionContent::Audio { clip, offset: 0, gain_db, fade_in: fade_out, fade_out: fade_in };
+                reg.content = RegionContent::Audio { clip, offset: 0, gain_db, fade_in: fade_out, fade_out: fade_in, fade_shape: fade_shape.reversed() };
                 // A reversed take folder is plain audio.
                 reg.takes = None;
             }
@@ -2111,18 +2150,11 @@ impl Session {
                 RegionContent::Midi { notes, cc }
             } else {
                 let ch = picked.iter().map(|r| self.region_channels(r)).max().unwrap_or(1).max(1);
-                let mut mix = vec![vec![0.0f32; (hi - lo) as usize]; ch];
-                for r in picked.iter().filter(|r| !r.muted) {
-                    let audio = self.render_region(r, ch);
-                    let at = (r.start - lo) as usize;
-                    for (dst, src) in mix.iter_mut().zip(&audio) {
-                        dst[at..at + src.len()].copy_from_slice(src);
-                    }
-                }
+                let mix = self.mix_regions(t, &picked, lo, hi, ch);
                 let path = self.unique_audio_path(&format!("{name} Joined"));
                 crate::decode::write_wav(&path, rate, &mix)?;
                 let clip = self.add_clip(&path, Clip::from_channels(path.clone(), rate, mix));
-                RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0 }
+                RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: FadeShape::default() }
             };
             let id = self.project.alloc_id();
             let color = picked[0].color.clone();
@@ -2186,7 +2218,7 @@ impl Session {
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let fade = self.default_fade(frames);
         let t = self.project.track_mut(track).unwrap();
-        t.regions.push(Region { id, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade }, loop_end: None, takes: None });
+        t.regions.push(Region { id, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None });
         self.push_regions(track);
         self.dirty = true;
         Ok(id)
@@ -2230,7 +2262,7 @@ impl Session {
                     let fade = self.default_fade(frames);
                     let t = self.project.track_mut(id).unwrap();
                     t.name = name.clone();
-                    t.regions.push(Region { id: rid, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade }, loop_end: None, takes: None });
+                    t.regions.push(Region { id: rid, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None });
                     self.push_regions(id);
                     self.select_track(Some(id));
                 }

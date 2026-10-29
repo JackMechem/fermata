@@ -7,6 +7,7 @@ pub mod decode;
 pub mod denormals;
 pub mod dsp;
 pub mod eq;
+pub mod fades;
 pub mod fx;
 pub mod midi;
 pub mod midi_io;

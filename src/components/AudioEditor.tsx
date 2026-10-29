@@ -12,7 +12,8 @@ import { formatDb, formatTime, lengthBbt as lengthAt, PEAK_BUCKET, samplesPerBea
 import { forEachGridLine, tempoMap } from "../tempo";
 import { pixelRatio } from "../uiScale";
 import { ensureWave, waveCache, type Wave } from "../waveform";
-import { drawRegion, FADE_ZONE } from "./Arrange";
+import { drawRegion, FADE_ZONE, regionCrossfades, setCrossfadeDrag } from "./Arrange";
+import { draggedFadeOut, fadeHandles } from "../fades";
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { fmt } from "../keymap";
 import { onRevealPlayhead, revealLeft } from "../view";
@@ -577,10 +578,12 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
     const edge = Math.min(8, rw / 4);
     const inBody = h.y - h.g.bodyTop;
     if (r.content.type === "audio" && inBody >= 0 && inBody < FADE_ZONE) {
+      // As in the arrange: a crossfade's handle is at its start, and replaces the fade-in.
+      const hd = fadeHandles(r.start, r.length, r.content.fade_in, r.content.fade_out, regionCrossfades(r.id));
       const fiX = rx + r.content.fade_in * pps;
-      const foX = rx + rw - r.content.fade_out * pps;
+      const foX = rx + hd.fadeOut * pps;
       const near = Math.min(7, rw / 4);
-      if (Math.abs(h.x - fiX) <= near || (r.content.fade_in === 0 && h.x < rx + edge)) return "fadeIn";
+      if (hd.fadeIn !== null && (Math.abs(h.x - fiX) <= near || (r.content.fade_in === 0 && h.x < rx + edge))) return "fadeIn";
       if (Math.abs(h.x - foX) <= near || (r.content.fade_out === 0 && h.x > rx + rw - edge)) return "fadeOut";
     }
     if (h.x > rx + rw - edge) return "right";
@@ -654,6 +657,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
     const minStart = audio ? r.start - audio.offset : 0;
     const maxLength = audio && wave ? wave.frames - audio.offset : Infinity;
     const fadeFrom = audio ? (kind === "fadeIn" ? audio.fade_in : audio.fade_out) : 0;
+    const crossfading = kind === "fadeOut" && !!regionCrossfades(r.id)?.out;
     drag(
       (ev) => {
         if (!moved && Math.abs(ev.clientX - startX) < 3) return;
@@ -663,7 +667,8 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
         if (kind === "move") d.start = snapEd(r.start + dx, ev.altKey);
         else if (kind === "fadeIn" || kind === "fadeOut") {
           const other = audio ? (kind === "fadeIn" ? audio.fade_out : audio.fade_in) : 0;
-          d.fade = Math.round(Math.max(0, Math.min(r.length - other, fadeFrom + (kind === "fadeIn" ? dx : -dx))));
+          d.fade = crossfading ? draggedFadeOut(fadeFrom, dx, true, r.length - other) : Math.round(Math.max(0, Math.min(r.length - other, fadeFrom + (kind === "fadeIn" ? dx : -dx))));
+          if (crossfading) setCrossfadeDrag({ region: r.id, length: d.fade });
         } else if (kind === "right") {
           d.start = r.start;
           d.length = Math.min(maxLength, Math.max(PEAK_BUCKET, snapEd(r.start + r.length + dx, ev.altKey) - r.start));
@@ -677,6 +682,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       () => {
         const d = dragRef.current!;
         dragRef.current = null;
+        setCrossfadeDrag(null);
         requestDraw();
         if (!moved) return;
         if (kind === "move" && d.start !== undefined && d.start !== r.start) act("move_region", { id: r.id, start: d.start, track: null });

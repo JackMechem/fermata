@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 
 use daw_engine::audio_io::{list_devices, AudioConfig, AudioStatus, DeviceList};
+use daw_engine::fades::{Crossfade, DragMode, FadeInType, FadeOutType};
 use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, InputSel, Project, Region, TrackKind, TrackSend};
 use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
 use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, RangeEdit, RenderOptions, TrackPatch};
@@ -34,6 +35,8 @@ pub struct Snapshot {
     pdc: PdcReport,
     /// Why the edit was refused and undone (it touched a frozen track).
     refused: Option<String>,
+    /// Where regions crossfade, for drawing.
+    crossfades: Vec<Crossfade>,
 }
 
 pub fn snapshot(s: &Session) -> Snapshot {
@@ -51,6 +54,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         redo: s.redo_label(),
         pdc: s.pdc_report(),
         refused: None,
+        crossfades: s.crossfades(),
     }
 }
 
@@ -1345,4 +1349,25 @@ pub fn rename_preset(effect: String, old: String, new: String) -> R<String> {
 pub fn move_plugin(state: State<AppState>, from: Id, from_slot: i64, to: Id, to_slot: i64, copy: bool) -> R<Snapshot> {
     let label = if copy { "Copy Plug-in" } else { "Move Plug-in" };
     try_edit(&state, label, None, true, |s| s.move_plugin(from, slot_index(from_slot), to, slot_index(to_slot), copy))
+}
+
+/// Sets fade curves (-1..1) and types for the Region inspector; omitted settings stay. Curve
+/// drags of the same regions share an undo step.
+#[tauri::command]
+pub fn set_region_fade_shape(state: State<AppState>, ids: Vec<Id>, in_curve: Option<f32>, out_curve: Option<f32>, in_type: Option<FadeInType>, out_type: Option<FadeOutType>) -> Snapshot {
+    let curve = in_curve.is_some() || out_curve.is_some();
+    let key = curve.then(|| format!("fade-curve:{ids:?}"));
+    edit(&state, if curve { "Fade Curve" } else { "Fade Type" }, key, false, |s| s.set_region_fade_shape(&ids, in_curve, out_curve, in_type, out_type))
+}
+
+/// Crossfades each region with the one that follows it over `length` frames (0 removes it).
+#[tauri::command]
+pub fn crossfade_regions(state: State<AppState>, ids: Vec<Id>, length: i64, kind: Option<FadeOutType>) -> Snapshot {
+    edit(&state, if length > 0 { "Crossfade" } else { "Remove Crossfade" }, None, false, |s| s.crossfade_regions(&ids, length, kind))
+}
+
+/// The Tracks area's drag mode (not an undo step).
+#[tauri::command]
+pub fn set_drag_mode(state: State<AppState>, mode: DragMode) -> Snapshot {
+    snap(&state, |s| s.set_drag_mode(mode))
 }

@@ -15,7 +15,9 @@ early and less tested (see [Platform support](#platform-support)).
 - **Take folders and comping**, after Logic's Quick Swipe Comping: swipe across take rows to
   build a comp, with crossfaded boundaries; Flatten, Flatten and Merge, Pack and Unpack.
 - **Tracks area:** move, trim, split, join, loop, fade, gain, reverse, colour, copy, paste,
-  repeat, nudge, Alt-drag copy and rubber-band select regions with Smart snap; track stacks
+  repeat, nudge, Alt-drag copy and rubber-band select regions with Smart snap; fade curves,
+  Speed Up and Slow Down fades, and X, EqP and X S crossfades between adjacent or overlapping
+  regions, made automatically by edits in the X-Fade drag mode; track stacks
   (folder and summing), groups, hidden tracks, Track Freeze, and a Marker track.
 - **Editors:** a Piano Roll with eight tools, Time Quantize with strength and swing, scale
   quantize, humanize, note-length functions and a velocity / controller lane; an Audio Track
@@ -141,7 +143,7 @@ main limitations:
 - The release builds are unsigned (see [Install](#install)).
 - Regions stay at fixed times when the tempo changes (Move MIDI Regions with Tempo keeps MIDI
   on its bars); region drags in the tracks area move in samples.
-- No Marquee tool, crossfades, fade curve shapes or drag modes yet.
+- No Marquee tool, Fade tool, or No Overlap and Shuffle drag modes yet.
 - No Step Input, Event List or Score in the Piano Roll; no MIDI learn.
 
 The User Guide's [Known limitations](docs/USER_GUIDE.md#19-known-limitations) has the full list,

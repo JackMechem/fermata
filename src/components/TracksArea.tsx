@@ -13,8 +13,12 @@ import { isLooped } from "../loops";
 import { exportSelectionMidi, importMidiDialog } from "../midiFiles";
 import { fmt, keyHint } from "../keymap";
 import { GlobalTracks, globalTracksHeight } from "./GlobalTracks";
+import { act } from "../api";
+import type { DragMode } from "../fades";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
+/** Logic's Drag pop-up; only Overlap and X-Fade so far. */
+const DRAG_LABELS: Record<DragMode, string> = { overlap: "Overlap", xfade: "X-Fade" };
 
 export function editMenu(): MenuItem[] {
   const sel = getState().selectedRegions;
@@ -49,6 +53,7 @@ export function TracksArea() {
   const headerW = useStore((s) => s.paneSizes.headers);
   const showHidden = useStore((s) => s.showHidden);
   const globalH = useStore(globalTracksHeight);
+  const dragMode = useStore((s) => s.snap?.project.drag_mode) ?? "overlap";
   // Menus read the rest of the state when they open.
   const s = { ...getState(), pxPerBeat, catchPlayhead, snapMode, trackHeight };
   const zoom = Math.log(s.pxPerBeat / 2) / Math.log(200);
@@ -140,6 +145,19 @@ export function TracksArea() {
             }
           >
             {SNAP_LABELS[s.snapMode]} <Icon.chevron />
+          </button>
+          <span className="lb-label">Drag:</span>
+          <button
+            className="popup"
+            title="X-Fade crossfades audio regions that a move, trim or paste leaves overlapping"
+            onMouseDown={(e) =>
+              openMenuAt(
+                e.currentTarget,
+                (Object.keys(DRAG_LABELS) as DragMode[]).map((k) => ({ label: DRAG_LABELS[k], checked: dragMode === k, onClick: () => act("set_drag_mode", { mode: k }) })),
+              )
+            }
+          >
+            {DRAG_LABELS[dragMode]} <Icon.chevron />
           </button>
           <span className="lb-label" title="Track height">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">

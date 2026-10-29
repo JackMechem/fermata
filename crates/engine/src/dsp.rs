@@ -12,6 +12,7 @@ use vst3_host::{MidiEvent, PluginProcessor, TransportInfo};
 use crate::automation::{value_at, AutoTarget, LaneDsp};
 use crate::clip::Clip;
 use crate::eq::{EqCoeffs, EqState};
+use crate::fades::FadeLaw;
 use crate::model::{AutoMode, CcEvent, CcKind, Id, InputSel, Note, TrackKind, CC_KINDS, INSERT_SLOTS, MASTER_ID, SEND_SLOTS};
 use crate::prefs::{ClickSettings, ClickSound};
 use crate::synth::BasicSynth;
@@ -188,6 +189,8 @@ pub enum RegionDsp {
         /// Timeline (start, length) of the region's fade-in and fade-out; length 0 = none.
         fade_in: (i64, i64),
         fade_out: (i64, i64),
+        /// The gain laws of the fade-in and fade-out (see `fades.rs`).
+        laws: [FadeLaw; 2],
     },
     Midi { start: i64, length: i64, notes: Arc<Vec<Note>>, cc: Arc<Vec<CcEvent>> },
 }
@@ -640,12 +643,6 @@ pub fn volume_gain(db: f32) -> f32 {
     db_to_gain(db)
 }
 
-/// Fade gain for `x` from 0 (silent) to 1 (full): a quarter sine, smooth at both ends of the
-/// level change that matters most to the ear.
-fn fade_curve(x: f32) -> f32 {
-    (x.clamp(0.0, 1.0) * std::f32::consts::FRAC_PI_2).sin()
-}
-
 /// `t` moved to timeline position `pos` (also for plug-ins on a strip whose audio lags the
 /// playhead): the tempo, signature and musical position there.
 fn transport_at(map: &TempoMap, t: &TransportInfo, pos: i64) -> TransportInfo {
@@ -668,7 +665,7 @@ fn transport_at(map: &TempoMap, t: &TransportInfo, pos: i64) -> TransportInfo {
 fn play_audio(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32], quiet: (i64, i64)) {
     let block_end = pos + l.len() as i64;
     for reg in regions {
-        let RegionDsp::Audio { start, length, offset, gain, clip, fade_in, fade_out } = reg else { continue };
+        let RegionDsp::Audio { start, length, offset, gain, clip, fade_in, fade_out, laws } = reg else { continue };
         let (rs, re) = (*start, *start + *length);
         if re <= pos || rs >= block_end {
             continue;
@@ -678,24 +675,54 @@ fn play_audio(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32], qui
         let ch = &clip.channels;
         let frames = clip.frames() as i64;
         for tl in from..to {
-            let src = tl - rs + offset;
-            if src < 0 || src >= frames || (tl >= quiet.0 && tl < quiet.1) {
+            if tl >= quiet.0 && tl < quiet.1 {
                 continue;
             }
-            let i = (tl - pos) as usize;
+            let src = tl - rs + offset;
+            // Fades: `x` runs from 0 (silent) to 1 (full level). A speed fade also moves where
+            // the audio is read from, by `lag` frames.
             let mut g = *gain;
+            let mut lag = 0.0f64;
             if tl < fade_in.0 + fade_in.1 && fade_in.1 > 0 {
-                g *= fade_curve((tl - fade_in.0) as f32 / fade_in.1 as f32);
+                let x = (tl - fade_in.0) as f32 / fade_in.1 as f32;
+                g *= laws[0].gain(x);
+                lag += laws[0].lag(x) as f64 * fade_in.1 as f64;
             }
             if tl >= fade_out.0 && fade_out.1 > 0 {
-                g *= fade_curve((fade_out.0 + fade_out.1 - tl) as f32 / fade_out.1 as f32);
+                let x = (fade_out.0 + fade_out.1 - tl) as f32 / fade_out.1 as f32;
+                g *= laws[1].gain(x);
+                lag -= laws[1].lag(x) as f64 * fade_out.1 as f64;
             }
-            let a = ch[0][src as usize] * g;
-            let b = if ch.len() > 1 { ch[1][src as usize] * g } else { a };
-            l[i] += a;
-            r[i] += b;
+            let i = (tl - pos) as usize;
+            if lag == 0.0 {
+                if src < 0 || src >= frames {
+                    continue;
+                }
+                let a = ch[0][src as usize] * g;
+                let b = if ch.len() > 1 { ch[1][src as usize] * g } else { a };
+                l[i] += a;
+                r[i] += b;
+            } else {
+                // Between two frames: interpolate.
+                let at = src as f64 + lag;
+                let k = at.floor();
+                let f = (at - k) as f32;
+                let k = k as i64;
+                let read = |c: &[f32], j: i64| if j >= 0 && j < frames { c[j as usize] } else { 0.0 };
+                let tap = |c: &[f32]| read(c, k) + (read(c, k + 1) - read(c, k)) * f;
+                let a = tap(&ch[0]) * g;
+                let b = if ch.len() > 1 { tap(&ch[1]) * g } else { a };
+                l[i] += a;
+                r[i] += b;
+            }
         }
     }
+}
+
+/// Mixes audio regions into `l`/`r` for the block starting at `pos`, exactly as playback does
+/// (for renders that mix regions outside the engine, such as Join).
+pub fn mix_regions(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32]) {
+    play_audio(regions, pos, l, r, (0, 0));
 }
 
 /// The side-chain signal for a built-in effect keyed by the track at `idx` (played earlier in
