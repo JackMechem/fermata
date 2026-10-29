@@ -46,7 +46,7 @@ impl Session {
         } else if builtin_fx {
             false
         } else {
-            self.plugins.iter().find(|d| d.id == copy.plugin_id).map(|d| d.is_instrument).ok_or_else(|| anyhow!("{} isn't installed", copy.name))?
+            self.find_plugin(&copy.plugin_id).map(|d| d.is_instrument).ok_or_else(|| anyhow!("{} isn't installed", copy.name))?
         };
         if instrument != (slot == usize::MAX) {
             return Err(anyhow!(if instrument { "An instrument goes in the instrument slot" } else { "An audio effect goes in an Audio FX slot" }));

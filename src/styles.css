@@ -1107,6 +1107,12 @@ select {
   color: var(--faint);
 }
 
+.slot.filled.missing .slot-name {
+  color: var(--faint);
+  font-style: italic;
+  text-decoration: line-through;
+}
+
 .slot-name {
   flex: 1;
   min-width: 0;

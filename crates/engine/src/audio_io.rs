@@ -397,7 +397,51 @@ macro_rules! by_format {
     };
 }
 
+/// ALSA's `null` PCM, which the headless checks play to: silent, and as fast as the engine runs.
+pub const NULL_OUTPUT: &str = "alsa:null";
+
+/// Stands in for ALSA's `null` PCM where there is no ALSA (macOS, Windows), so the headless
+/// checks never fall back to the speakers: a thread runs the engine block after block, with no
+/// input and nothing played, at exactly the configured rate and buffer size.
+fn start_null(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>, AudioStatus) {
+    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
+    let frames = (cfg.buffer_size as usize).max(1);
+    let st = engine.lock().status.clone();
+    st.input_latency_us.store(0, Ordering::Relaxed);
+    st.output_latency_us.store(0, Ordering::Relaxed);
+    st.ring_frames.store(0, Ordering::Relaxed);
+    let thread = std::thread::Builder::new()
+        .name("audio-null".into())
+        .spawn(move || {
+            let mut out = vec![0.0f32; frames * 2];
+            while let Err(std::sync::mpsc::TryRecvError::Empty) = stop_rx.try_recv() {
+                match engine.try_lock() {
+                    Some(mut e) => {
+                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.process(&[], 0, &mut out, 2))).is_err() {
+                            e.status.engine_errors.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                    None => std::thread::yield_now(),
+                }
+            }
+        })
+        .expect("spawn audio thread");
+    let status = AudioStatus {
+        running: true,
+        host: "Null".into(),
+        output_name: Some("Null Output".into()),
+        output_channels: 2,
+        sample_rate: cfg.sample_rate,
+        buffer_size: frames as u32,
+        ..Default::default()
+    };
+    (Some(AudioIo { stop: Some(stop_tx), thread: Some(thread) }), status)
+}
+
 pub fn start(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>, AudioStatus) {
+    if cfg.output.as_deref() == Some(NULL_OUTPUT) && host_by_name("ALSA").is_none() {
+        return start_null(engine, cfg);
+    }
     let (res_tx, res_rx) = std::sync::mpsc::channel::<AudioStatus>();
     let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
     let cfg = cfg.clone();

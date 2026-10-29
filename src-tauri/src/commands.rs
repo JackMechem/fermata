@@ -37,6 +37,8 @@ pub struct Snapshot {
     refused: Option<String>,
     /// Where regions crossfade, for drawing.
     crossfades: Vec<Crossfade>,
+    /// Instance ids of VST3 slots whose plug-in isn't installed (or didn't load).
+    missing: Vec<Id>,
 }
 
 pub fn snapshot(s: &Session) -> Snapshot {
@@ -55,6 +57,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         pdc: s.pdc_report(),
         refused: None,
         crossfades: s.crossfades(),
+        missing: s.missing_plugins().iter().map(|p| p.uid).collect(),
     }
 }
 

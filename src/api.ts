@@ -294,6 +294,8 @@ export interface Snapshot {
   refused?: string | null;
   /** Where regions crossfade, as playback hears them. */
   crossfades?: Crossfade[];
+  /** Instance ids of VST3 slots whose plug-in isn't installed (their settings are kept). */
+  missing?: Id[];
 }
 
 /** session::StripLatency: frames. */

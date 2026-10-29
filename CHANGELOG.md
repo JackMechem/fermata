@@ -39,6 +39,13 @@ All notable changes to Fermata are recorded here. The format follows
   grow with them, and each effect type remembers its last size.
 - **VST3 editor windows on macOS:** a plug-in's own interface opens in a window that floats
   above Fermata's, resizes within the plug-in's limits and hides while another app is in front.
+- **Missing plug-ins:** a project opened where a plug-in isn't installed opens and plays
+  without it, says which are missing, shows their slots struck through and keeps their
+  settings. A plug-in installed in another folder than on the computer that saved the project
+  (another OS, say) is found by itself.
+- macOS: recording asks for microphone access, and builds carry the entitlements a signed app
+  needs to load third-party plug-ins.
+- The headless checks run on macOS too.
 - A LICENSE file (MIT), shipped in every bundle.
 - CI runs the headless checks that need no third-party plug-ins on Linux
   (`scripts/headless-checks.sh`).
@@ -56,6 +63,8 @@ All notable changes to Fermata are recorded here. The format follows
 
 - The Mixer cut off the bottom of its channel strips when it was too short, with no way to
   scroll to them; it now scrolls, and every strip ends on the same line.
+- A plug-in that failed to load reported only "dlopen failed"; the report now gives the reason,
+  including a plug-in built only for Intel on Apple Silicon.
 - The Loudness Meter drew "LUFS" and "LU" over its values.
 - The Compressor's circuit tabs and other segmented buttons didn't show the current choice.
 - Opening Group Settings (including from New Group from Track) blanked the window.

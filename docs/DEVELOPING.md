@@ -141,7 +141,8 @@ cargo run -q -p daw-engine --example stack_check -- /path/to/tone.wav /tmp/ferma
 `scripts/headless-checks.sh` builds the examples once and runs every check that needs no
 third-party plug-ins, each in its own folder under a scratch directory, with a test tone from
 the `test_tone` example. It's what CI runs, so run it the same way before sending an engine
-change:
+change. It also runs on macOS: where there is no ALSA, the engine runs on a silent stand-in
+device at the configured rate and buffer size instead of ALSA's `null` output:
 
 ```sh
 scripts/headless-checks.sh                       # all of them, in a temporary folder

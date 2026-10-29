@@ -611,10 +611,20 @@ settings have loaded.
   `Contents/x86_64-win/<name>.vst3` (or `arm64-win`), or `Contents/MacOS/<name>`.
 - **Loading:** `dlopen` plus `ModuleEntry` on Linux, `InitDll` on Windows, `bundleEntry` with a
   `CFBundleRef` on macOS, then `GetPluginFactory` (and `setHostContext` for
-  `IPluginFactory3`). Modules are cached and never unloaded, on purpose.
+  `IPluginFactory3`). Modules are cached and never unloaded, on purpose. On macOS the binary is
+  the one Info.plist's `CFBundleExecutable` names, falling back to the bundle's name. Load
+  errors carry the loader's reason (`module.rs`); on macOS `macos.rs` shortens dyld's message
+  and explains a binary built only for the other architecture, or a signed build refusing it
+  under library validation.
 - **Descriptors:** only "Audio Module Class" entries. A plug-in's id is
-  `"<bundle path>|<class id hex>"`, and projects find plug-ins by this exact id, so moving a
-  bundle orphans the slots that use it.
+  `"<bundle path>|<class id hex>"`. `Session::find_plugin` looks a slot's id up exactly, then
+  falls back to the same class id installed at another path (a project from another computer
+  or OS, or a moved bundle); the slot keeps its id. Slots with no plug-in behind them
+  (`missing_plugins`, the snapshot's `missing`) keep their saved state untouched, load shows a
+  "Not installed" warning, and the Mixer draws them struck through.
+- **macOS bundles:** `src-tauri/Entitlements.plist` (library validation off, JIT and unsigned
+  executable memory for plug-ins, audio input) applies once the app is signed with the hardened
+  runtime; `src-tauri/Info.plist` adds `NSMicrophoneUsageDescription`.
 
 ### Scanning out of process
 

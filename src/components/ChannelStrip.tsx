@@ -38,6 +38,8 @@ export function PluginSlotView({
   // A frozen track's plug-ins are unloaded and can't change until it is unfrozen.
   const frozen = useStore((s) => !!s.snap?.project.tracks.find((t) => t.id === trackId)?.frozen);
   const latency = useSlotLatency(plugin?.uid);
+  // A VST3 that isn't installed here: the slot keeps its settings for where it is.
+  const missing = useStore((s) => !!plugin && !!s.snap?.missing?.includes(plugin.uid));
   const rate = useStore((s) => s.snap?.project.sample_rate ?? 48000);
   const menu = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -69,7 +71,7 @@ export function PluginSlotView({
   }
   const open = openEditors.includes(plugin.uid) || fxOpen;
   return (
-    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "")} {...target} onContextMenu={context}>
+    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "") + (missing ? " missing" : "")} {...target} onContextMenu={context}>
       <button
         className="slot-power"
         title={plugin.bypass ? "Turn on" : "Bypass"}
@@ -83,7 +85,7 @@ export function PluginSlotView({
       </button>
       <span
         className="slot-name"
-        title={`${plugin.name}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : instrument ? " — click to open" : " — click to open, drag to move (Alt to copy)"}`}
+        title={missing ? `${plugin.name} — not installed on this computer; its settings are kept with the project` : `${plugin.name}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : instrument ? " — click to open" : " — click to open, drag to move (Alt to copy)"}`}
         onMouseDown={(e) => {
           e.stopPropagation();
           if (e.button !== 0) return;
@@ -93,7 +95,7 @@ export function PluginSlotView({
               if (!refuseFrozen([trackId])) toggleFxPanel(plugin.uid);
               return;
             }
-            if (plugin.plugin_id.startsWith("builtin:") || refuseFrozen([trackId])) return;
+            if (missing || plugin.plugin_id.startsWith("builtin:") || refuseFrozen([trackId])) return;
             api.openEditor(plugin.uid, `${title} — ${plugin.name}`);
           };
           if (instrument || frozen) open();

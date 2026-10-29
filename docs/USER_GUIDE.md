@@ -1908,6 +1908,13 @@ Check Settings › Plug-ins: the plug-in may be switched off, its folder may not
 it under VST3 Folders), or it may have failed in the last scan (expand the report). Rescan
 after installing plug-ins.
 
+- On a Mac with Apple Silicon, a plug-in built only for Intel can't load; the report says so.
+  Install its Universal or Apple Silicon version.
+- A project from another computer finds a plug-in installed in a different folder there by
+  itself. A plug-in that isn't installed at all shows struck through in the Mixer, and opening
+  the project says which ones are missing. Its settings stay in the project, so it sounds as
+  before on a computer that has it, even if you save the project here.
+
 ### A blank window on Linux
 
 Some GPU drivers need `WEBKIT_DISABLE_DMABUF_RENDERER=1`. Set it only if the window stays

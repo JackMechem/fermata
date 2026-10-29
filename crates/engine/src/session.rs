@@ -639,12 +639,7 @@ impl Session {
         } else if slot.plugin_id == BUILTIN_SYNTH {
             Plugin::Synth(Box::new(BasicSynth::new(sr as f32)))
         } else {
-            let desc = self
-                .plugins
-                .iter()
-                .find(|d| d.id == slot.plugin_id)
-                .ok_or_else(|| anyhow!("plug-in not found: {}", slot.name))?
-                .clone();
+            let desc = self.find_plugin(&slot.plugin_id).ok_or_else(|| anyhow!("plug-in not found: {}", slot.name))?.clone();
             let (proc, ctrl) = vst3_host::instantiate(&desc, sr, MAX_BLOCK).map_err(|e| anyhow!(e))?;
             if let Some(st) = &slot.state {
                 ctrl.load_state(&decode_state(st));
@@ -1269,7 +1264,7 @@ impl Session {
             let name = if pid == BUILTIN_SYNTH {
                 "Fermata Synth".to_string()
             } else {
-                self.plugins.iter().find(|d| d.id == pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into())
+                self.find_plugin(&pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into())
             };
             track.name = if pid == BUILTIN_SYNTH { format!("Inst {count}") } else { name.clone() };
             track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params: Vec::new(), sidechain: None });
@@ -2352,7 +2347,7 @@ impl Session {
             }
             info.name.to_string()
         } else {
-            self.plugins.iter().find(|d| d.id == plugin_id).map(|d| d.name.clone()).ok_or_else(|| anyhow!("unknown plug-in"))?
+            self.find_plugin(plugin_id).map(|d| d.name.clone()).ok_or_else(|| anyhow!("unknown plug-in"))?
         };
         // A built-in effect's values are all written out, so the project file reads clearly.
         let params = builtin.map(|i| i.params.iter().map(|p| (p.id, p.default)).collect()).unwrap_or_default();
@@ -2414,6 +2409,28 @@ impl Session {
 
     pub fn set_plugins(&mut self, list: Vec<PluginDescriptor>) {
         self.plugins = list;
+    }
+
+    /// The installed plug-in a slot's id names. Ids start with the bundle's path, so when that
+    /// path isn't installed (a project from another computer or operating system, or a moved
+    /// bundle), the same class (`cid`) installed elsewhere stands in.
+    pub fn find_plugin(&self, id: &str) -> Option<&PluginDescriptor> {
+        self.plugins.iter().find(|d| d.id == id).or_else(|| {
+            let (_, cid) = id.rsplit_once('|')?;
+            self.plugins.iter().find(|d| d.cid.eq_ignore_ascii_case(cid))
+        })
+    }
+
+    /// VST3 slots that aren't running: the plug-in isn't installed here (or failed to load).
+    /// They stay in the project with their saved state, so a project opened where a plug-in is
+    /// missing keeps its settings when saved, for the computer that has it.
+    pub fn missing_plugins(&self) -> Vec<&PluginSlot> {
+        let p = &self.project;
+        let tracks = p.tracks.iter().filter(|t| t.frozen.is_none()).flat_map(|t| t.instrument.iter().chain(t.inserts.iter().flatten()));
+        tracks
+            .chain(p.master.inserts.iter().flatten())
+            .filter(|s| s.plugin_id != BUILTIN_SYNTH && crate::fx::find(&s.plugin_id).is_none() && !self.controllers.contains_key(&s.uid))
+            .collect()
     }
 
     // ---- periodic work ----------------------------------------------------------------------
@@ -2679,6 +2696,12 @@ impl Session {
         self.project.sample_rate = self.sample_rate() as u32;
         self.project.prune_routes();
         self.rebuild_graph();
+        let mut missing: Vec<&str> = self.missing_plugins().iter().map(|s| s.name.as_str()).collect();
+        missing.sort_unstable();
+        missing.dedup();
+        if !missing.is_empty() {
+            self.warning = Some(format!("Not installed: {}. Their settings are kept with the project.", missing.join(", ")));
+        }
         Ok(())
     }
 }

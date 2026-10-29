@@ -62,6 +62,11 @@ fn binary_path(bundle: &Path) -> Option<PathBuf> {
     if bundle.is_file() {
         return Some(bundle.to_path_buf());
     }
+    // The Info.plist names the binary, which needn't match the bundle's folder name.
+    #[cfg(target_os = "macos")]
+    if let Some(exe) = crate::macos::bundle_executable(bundle) {
+        return Some(exe);
+    }
     let stem = bundle.file_stem()?.to_string_lossy().to_string();
     let contents = bundle.join("Contents");
 
@@ -85,6 +90,38 @@ fn binary_path(bundle: &Path) -> Option<PathBuf> {
     })
 }
 
+/// A loader error with its cause: libloading's own message is just "dlopen failed", and the
+/// reason (missing file, wrong architecture, refused signature, missing symbol) is its source.
+fn load_error(e: libloading::Error) -> String {
+    match std::error::Error::source(&e) {
+        Some(cause) => format!("{e}: {cause}"),
+        None => e.to_string(),
+    }
+}
+
+/// Explains a failed `dlopen` of `bin` where the dynamic loader's message is cryptic.
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
+fn open_error(bin: &Path, e: libloading::Error) -> String {
+    #[cfg(target_os = "macos")]
+    if let Some(why) = crate::macos::wrong_arch(bin) {
+        return why;
+    }
+    let msg = load_error(e);
+    #[cfg(target_os = "macos")]
+    {
+        let reason = crate::macos::dyld_reason(&msg).unwrap_or_else(|| msg.clone());
+        // A hardened-runtime host refuses plug-ins signed by another team (or not at all)
+        // unless it has the disable-library-validation entitlement.
+        if reason.contains("not valid for use in process") || reason.contains("library validation") {
+            format!("macOS refused to load it: this build of Fermata enforces library validation ({reason})")
+        } else {
+            format!("dlopen failed: {reason}")
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    msg
+}
+
 impl Module {
     unsafe fn open(bundle: &Path) -> Result<Module, String> {
         let bin = binary_path(bundle).ok_or_else(|| format!("no binary found in {}", bundle.display()))?;
@@ -92,7 +129,7 @@ impl Module {
         #[cfg(target_os = "linux")]
         let lib: libloading::Library = {
             use libloading::os::unix::{Library, RTLD_LAZY, RTLD_LOCAL};
-            let lib = Library::open(Some(&bin), RTLD_LAZY | RTLD_LOCAL).map_err(|e| e.to_string())?;
+            let lib = Library::open(Some(&bin), RTLD_LAZY | RTLD_LOCAL).map_err(|e| open_error(&bin, e))?;
             let handle = lib.into_raw();
             let lib = Library::from_raw(handle);
             if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut std::ffi::c_void) -> bool>(b"ModuleEntry\0") {
@@ -105,7 +142,7 @@ impl Module {
 
         #[cfg(target_os = "windows")]
         let lib: libloading::Library = {
-            let lib = libloading::Library::new(&bin).map_err(|e| e.to_string())?;
+            let lib = libloading::Library::new(&bin).map_err(|e| open_error(&bin, e))?;
             if let Ok(init) = lib.get::<unsafe extern "system" fn() -> bool>(b"InitDll\0") {
                 init();
             }
@@ -114,7 +151,7 @@ impl Module {
 
         #[cfg(target_os = "macos")]
         let lib: libloading::Library = {
-            let lib = libloading::Library::new(&bin).map_err(|e| e.to_string())?;
+            let lib = libloading::Library::new(&bin).map_err(|e| open_error(&bin, e))?;
             if let Ok(entry) = lib.get::<unsafe extern "C" fn(*mut std::ffi::c_void) -> bool>(b"bundleEntry\0") {
                 let bundle_ref = crate::macos::create_bundle_ref(bundle);
                 if !entry(bundle_ref) {
@@ -126,7 +163,7 @@ impl Module {
 
         let get_factory = lib
             .get::<unsafe extern "system" fn() -> *mut IPluginFactory>(b"GetPluginFactory\0")
-            .map_err(|e| e.to_string())?;
+            .map_err(|e| format!("not a VST3 plug-in ({})", load_error(e)))?;
         let factory = ComPtr::from_raw(get_factory()).ok_or("GetPluginFactory returned null")?;
 
         if let Some(f3) = factory.cast::<IPluginFactory3>() {

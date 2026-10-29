@@ -11,7 +11,8 @@
 #   --scratch DIR  where the projects, renders and logs go (default: a new temporary folder,
 #                  removed afterwards when every check passed)
 #   check ...      run only these checks (default: all of them)
-# Needs Linux, the ALSA library and its `null` PCM (part of alsa-lib's standard config).
+# On Linux it needs the ALSA library and its `null` PCM (part of alsa-lib's standard config).
+# Elsewhere (macOS) the engine stands in for that device with a silent thread of its own.
 set -euo pipefail
 
 # Each check and its arguments: "tone" is the test tone, "dir" its scratch folder.
@@ -46,7 +47,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-for name in "${only[@]}"; do
+# (`${only[@]+...}`: macOS still ships bash 3.2, where an empty array is "unbound" under set -u.)
+for name in ${only[@]+"${only[@]}"}; do
   case " ${CHECKS[*]%% *} " in
     *" $name "*) ;;
     *) echo "unknown check: $name" >&2; exit 2 ;;
