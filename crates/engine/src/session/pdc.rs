@@ -129,9 +129,10 @@ struct StripPlugins {
 
 impl Session {
     /// The latency of a loaded plug-in instance (0 for the built-in synth and for plug-ins a
-    /// frozen track has unloaded).
+    /// frozen track has unloaded). Built-in effects report theirs from the audio thread.
     fn slot_latency(&self, slot: &PluginSlot) -> u32 {
-        self.controllers.get(&slot.uid).map(|c| c.latency().min(MAX_PLUGIN_LATENCY)).unwrap_or(0)
+        let builtin = || self.builtin_latency(slot.uid);
+        self.controllers.get(&slot.uid).map(|c| c.latency()).or_else(builtin).map(|l| l.min(MAX_PLUGIN_LATENCY)).unwrap_or(0)
     }
 
     fn strip_plugins(&self, instrument: Option<&PluginSlot>, inserts: &[Option<PluginSlot>], limit: u32) -> StripPlugins {

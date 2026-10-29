@@ -36,6 +36,9 @@ export function openMenuAt(el: HTMLElement, items: MenuItem[]) {
   openMenu(r.left, r.bottom + 2, items, r.width);
 }
 
+/** Whether a menu is open (key handlers leave Esc and arrows to it). */
+export const menuOpen = () => current !== null;
+
 export function closeMenu() {
   current = null;
   emit();
@@ -130,13 +133,20 @@ export function MenuHost() {
     const down = (e: Event) => {
       if (!(e.target instanceof Element && e.target.closest(".menu"))) closeMenu();
     };
-    const key = (e: KeyboardEvent) => e.key === "Escape" && closeMenu();
+    // Esc closes just the menu: taken in the capture phase, before the sheet or editor under
+    // the menu sees it.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeMenu();
+    };
     window.addEventListener("mousedown", down, true);
-    window.addEventListener("keydown", key);
+    window.addEventListener("keydown", key, true);
     window.addEventListener("blur", down);
     return () => {
       window.removeEventListener("mousedown", down, true);
-      window.removeEventListener("keydown", key);
+      window.removeEventListener("keydown", key, true);
       window.removeEventListener("blur", down);
     };
   }, [open]);

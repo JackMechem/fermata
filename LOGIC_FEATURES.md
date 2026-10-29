@@ -30,13 +30,13 @@ category, one line each, so its count understates how much content that is.
 
 | Stage | Done | Partial | In progress | Not started | Total |
 |---|---:|---:|---:|---:|---:|
-| 1. Core | 178 | 34 | 0 | 51 | 263 |
-| 2. Professional editing and mixing | 3 | 6 | 14 | 206 | 229 |
+| 1. Core | 180 | 33 | 0 | 50 | 263 |
+| 2. Professional editing and mixing | 21 | 18 | 0 | 190 | 229 |
 | 3. Advanced production | 0 | 0 | 0 | 111 | 111 |
 | 4. Studio integration | 0 | 0 | 0 | 61 | 61 |
-| 5. Content and AI | 0 | 2 | 0 | 38 | 40 |
-| 6. Platform | 3 | 3 | 2 | 18 | 26 |
-| **All** | **184** | **45** | **16** | **485** | **730** |
+| 5. Content and AI | 0 | 6 | 0 | 34 | 40 |
+| 6. Platform | 5 | 3 | 0 | 18 | 26 |
+| **All** | **206** | **60** | **0** | **464** | **730** |
 
 ---
 
@@ -83,7 +83,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] A run of drags on one control is one undo step
 - [x] Mute, solo, arm and monitoring are excluded from undo, as in Logic
 - [x] Number of undo steps is configurable (p. 61)
-- [~] Mixer and plug-in edits in the undo history (p. 61, 619). *Plug-in parameter changes aren't undoable.*
+- [~] Mixer and plug-in edits in the undo history (p. 61, 619). *Built-in effect and Channel EQ changes are undoable; parameter changes made in a VST3's own editor aren't.*
 
 ### Connect external devices (p. 68–77)
 
@@ -176,7 +176,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Takes written as 24-bit or 32-bit float WAV in the project's Audio Files folder (p. 1054, 1082)
 - [x] Regions draw live while recording
 - [x] Take naming options
-- [~] Overlapping recordings (p. 1057). *On top, new track or replace; no take-folder option yet (🚧, Stage 2).*
+- [~] Overlapping recordings (p. 1057). *On top, new track or replace; take folders come only from cycle recording, not as an overlap option.*
 - [x] A newer region hides the older audio it overlaps during playback
 
 ### Record software instruments (p. 200–215)
@@ -204,7 +204,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Grid lines (p. 291)
 - [~] Snap to grid (p. 290). *Smart, Bar, Beat and Off; no Division, Ticks, Frames or Samples, and no relative snap.*
 - [x] Horizontal and vertical scrolling and zoom (p. 297)
-- [~] Select regions (p. 299). *Click and Shift-click; no rubber-band selection in the Tracks area.*
+- [x] Select regions (p. 299). *Click, Shift-click and rubber-band selection.*
 - [x] Select all regions on a track, and all following (p. 300)
 - [x] Cut, copy and paste; paste at the playhead keeps the spacing of several regions (p. 303)
 - [x] Duplicate (⌘D) and Repeat Regions 2–16 times (p. 304, 313)
@@ -302,7 +302,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Instrument slot (p. 561)
 - [~] Search for plug-ins (p. 563). *The Library has search; slot menus are grouped by vendor and category, without search.*
 - [x] Channel EQ on every strip: 8 bands, 12/24/48 dB/oct cuts, analyzer, output gain, thumbnail on the strip (p. 566)
-- [~] Plug-in windows (p. 567). *Open the plug-in's own editor; Linux/X11 only so far.*
+- [~] Plug-in windows (p. 567). *Built-in effect panels everywhere; a VST3's own editor on Linux/X11 only so far.*
 - [x] Sends: eight per strip, pre or post fader, mute, level knob (p. 583–589)
 - [x] Aux channel strips fed by buses; new aux from any send or output menu (p. 590)
 - [x] Subgroups through auxes (p. 591)
@@ -312,7 +312,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Rename strips (p. 616)
 - [ ] Mixer modes: Single, Tracks, All (p. 613)
 - [ ] Select several strips, or strips by type (p. 543)
-- [ ] Move or copy plug-ins by dragging between slots (p. 562)
+- [x] Move or copy plug-ins by dragging between slots (p. 562)
 
 ### Plug-in hosting (p. 559–580)
 
@@ -402,7 +402,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 - [ ] Marquee selection; marquee ruler (p. 301–302)
 - [ ] Split at the marquee or locators (p. 320)
-- [ ] Rubber-band region selection in the Tracks area (p. 299)
+- [x] Rubber-band region selection in the Tracks area (p. 299)
 - [ ] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300)
 - [~] Drag modes (p. 295). *Overlap only; no No Overlap, X-Fade, Shuffle R or Shuffle L.*
 - [ ] Alignment guides (p. 290)
@@ -457,10 +457,10 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Record: advanced (p. 191–247)
 
-- [ ] 🚧 Autopunch mode with punch-in and punch-out locators (p. 196–198)
+- [x] Autopunch mode with punch-in and punch-out locators (p. 196–198)
 - [ ] Set punch locators from the playhead (key commands)
 - [~] Replace mode (p. 199). *Audio "replace" is a setting; there's no Replace button, and MIDI can't replace.*
-- [ ] 🚧 Cycle recording into take folders (p. 193)
+- [x] Cycle recording into take folders (p. 193)
 - [ ] Record several audio takes to new tracks (p. 195)
 - [ ] Record to several software instrument tracks at once (p. 207)
 - [ ] Several MIDI devices to several instrument tracks (p. 208)
@@ -472,21 +472,21 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Discard recording and return to the last play position (⌘.)
 - [ ] Colour takes automatically; mark a take while recording (p. 218–220)
 - [ ] Flashback Capture for MIDI and audio (p. 220–222)
-- [ ] Low Latency Monitoring mode (p. 575)
+- [x] Low Latency Monitoring mode (p. 575)
 - [ ] Delete a recording together with its audio file (p. 199)
 
 ### Take folders and comping (p. 222–247)
 
-- [ ] 🚧 Take folders from cycle recording (p. 222)
-- [ ] 🚧 Quick Swipe Comping (p. 222)
-- [ ] 🚧 Open a take folder and preview or choose takes (p. 223–224)
-- [ ] Create, save, rename and delete comps (p. 224–233)
+- [x] Take folders from cycle recording (p. 222)
+- [x] Quick Swipe Comping (p. 222)
+- [x] Open a take folder and preview or choose takes (p. 223–224)
+- [~] Create, save, rename and delete comps (p. 224–233). *One comp per folder; takes can be renamed and deleted.*
 - [ ] Edit comp sections: move, alternate between lanes, remove a take (p. 227–229)
 - [ ] Edit take regions: trim, cut, slice at comp borders, move between lanes (p. 234–237)
 - [ ] Export the active take to a new track (p. 238)
-- [ ] Flatten, and Flatten and Merge (p. 241)
-- [ ] Unpack to existing tracks, new tracks or track alternatives (p. 243–246)
-- [ ] Pack regions into a take folder (p. 247)
+- [x] Flatten, and Flatten and Merge (p. 241)
+- [~] Unpack to existing tracks, new tracks or track alternatives (p. 243–246). *Unpack to New Tracks only.*
+- [x] Pack regions into a take folder (p. 247)
 
 ### Tracks: professional (p. 141–148, 161–167)
 
@@ -497,29 +497,29 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Track alternatives: add, duplicate, switch, rename, delete inactive, hear an inactive one (p. 141–143)
 - [ ] Turn a track off, making its plug-ins inactive (p. 144)
 - [ ] Protect tracks (p. 144)
-- [ ] 🚧 Freeze tracks (p. 145)
+- [x] Freeze tracks (p. 145)
 
 ### Global tracks, markers, tempo and signatures (p. 732–801)
 
-- [ ] 🚧 Global Tracks area; show or hide it and its tracks (p. 733–735)
-- [ ] Configure, resize and reorder global tracks (p. 734–735)
-- [ ] 🚧 Marker track (p. 737)
-- [ ] 🚧 Marker List (p. 737)
-- [ ] 🚧 Create markers at the playhead (p. 737–738)
-- [ ] 🚧 Go to the next or previous marker (p. 745)
+- [x] Global Tracks area; show or hide it and its tracks (p. 733–735). *Signature and Tempo tracks (G).*
+- [~] Configure, resize and reorder global tracks (p. 734–735). *The Tempo track resizes; no configuring or reordering.*
+- [x] Marker track (p. 737)
+- [x] Marker List (p. 737)
+- [x] Create markers at the playhead (p. 737–738)
+- [x] Go to the next or previous marker (p. 745)
 - [ ] Markers from the cycle area or the selected regions (p. 738–739)
-- [ ] Move, resize, colour and protect markers (p. 740–742)
-- [ ] Rename markers in the track, list or ruler; Marker Text window (p. 743–744)
-- [ ] Go to marker by number; set the cycle to a marker (p. 745)
+- [~] Move, resize, colour and protect markers (p. 740–742). *Move and colour; a marker always reaches the next one, and none can be protected.*
+- [~] Rename markers in the track, list or ruler; Marker Text window (p. 743–744). *In the marker lane and the Marker List; no Marker Text window.*
+- [~] Go to marker by number; set the cycle to a marker (p. 745). *Set Locators to Marker; no go to marker by number.*
 - [ ] Marker sets (p. 746)
 - [ ] Import and export marker information in audio files (p. 747)
-- [ ] 🚧 Tempo track with tempo changes (a tempo map) (p. 759–762)
-- [ ] Tempo curves between tempo points (p. 763)
+- [x] Tempo track with tempo changes (a tempo map) (p. 759–762)
+- [~] Tempo curves between tempo points (p. 763). *Linear ramps only.*
 - [ ] Tempo point operations: constant, smoothing, average, snap (p. 761)
 - [ ] Tempo List (p. 764)
 - [ ] Tempo sets (p. 765)
 - [ ] Record tempo changes (p. 790)
-- [ ] 🚧 Signature track with time signature changes (p. 751–752)
+- [x] Signature track with time signature changes (p. 751–752)
 - [ ] Key signature changes (p. 753)
 - [ ] Edit, move, split and merge signatures; Signature List (p. 751–755)
 - [ ] Signature sets (p. 756)
@@ -572,8 +572,8 @@ Audio File Editor (p. 499–523)
 
 ### Mixing: professional (p. 539–620)
 
-- [ ] 🚧 Plug-in delay compensation (p. 573–575)
-- [ ] Side-chain inputs for plug-ins (p. 570)
+- [x] Plug-in delay compensation (p. 573–575)
+- [~] Side-chain inputs for plug-ins (p. 570). *For the built-in Compressor, Noise Gate and De-Esser, keyed post-fader from any track; VST3 side-chain buses aren't connected.*
 - [ ] Multi-output instruments (p. 592)
 - [ ] VCA faders and VCA groups (p. 603–604)
 - [~] Groups (p. 598–603). *Volume, pan, mute, solo, record, selection and editing links, plus an on/off clutch; missing are several groups per strip, a Groups window, automation, send and colour links, and copy/paste of group settings.*
@@ -597,10 +597,10 @@ Audio File Editor (p. 499–523)
 
 ### Plug-in windows and settings (p. 567–582)
 
-- [ ] Plug-in window header (p. 568)
-- [ ] Load, save, step through and delete plug-in settings (presets) (p. 571–572)
-- [ ] Compare edits with the saved setting (p. 571)
-- [ ] Copy and paste plug-in settings; reset; default setting (p. 572)
+- [~] Plug-in window header (p. 568). *Built-in effect panels have bypass, presets and the side-chain pop-up; VST3 editor windows have no header.*
+- [~] Load, save, step through and delete plug-in settings (presets) (p. 571–572). *Factory and user presets for the built-in effects and the Channel EQ, shared by every project; none for VST3s.*
+- [~] Compare edits with the saved setting (p. 571). *The preset pop-up shows "(edited)" and offers Revert; no Compare switch.*
+- [~] Copy and paste plug-in settings; reset; default setting (p. 572). *Copy and paste for every plug-in (VST3 state included) and the Channel EQ; Default resets built-in effects only.*
 - [ ] Link or unlink plug-in windows (p. 569)
 - [ ] Plug-in undo and redo (p. 568)
 - [ ] Controls view: a generic parameter view (p. 1039)
@@ -959,19 +959,19 @@ sustain, modulation and expression.
 
 ### Bundled audio effects (Logic Pro Effects guide)
 
-Fermata has a built-in eight-band **Channel EQ** with analyzer; everything else comes from VST3.
+Fermata has a built-in eight-band **Channel EQ** with analyzer, and eight built-in effects (Compressor, Limiter, Noise Gate, De-Esser, Reverb, Delay, Tuner, Loudness Meter); everything else comes from VST3.
 
 - [~] EQ: Channel EQ, Linear Phase EQ, Match EQ, Single Band EQ, Vintage Console, Graphic and Tube EQs. *Channel EQ only.*
-- [ ] Dynamics: Compressor (with circuit models), Limiter, Adaptive Limiter, Multipressor, Noise Gate, Expander, Enveloper, DeEsser 2
-- [ ] Reverb: ChromaVerb, Space Designer (convolution), Quantec Room Simulator, SilverVerb
-- [ ] Delay: Delay Designer, Echo, Stereo Delay, Tape Delay, Sample Delay
+- [~] Dynamics: Compressor (with circuit models), Limiter, Adaptive Limiter, Multipressor, Noise Gate, Expander, Enveloper, DeEsser 2. *Compressor with five circuits, Limiter (with an Adaptive mode), Noise Gate and De-Esser; no Multipressor, Expander or Enveloper.*
+- [~] Reverb: ChromaVerb, Space Designer (convolution), Quantec Room Simulator, SilverVerb. *One algorithmic Reverb (plate and five room types); no convolution.*
+- [~] Delay: Delay Designer, Echo, Stereo Delay, Tape Delay, Sample Delay. *One Delay with Stereo, Ping-Pong, Tape and Digital modes; no Delay Designer or Sample Delay.*
 - [ ] Modulation: Chorus, Ensemble, Flanger, Phaser, Microphaser, Modulation Delay, Ringshifter, Rotor Cabinet, Scanner Vibrato, Spreader, Tremolo
 - [ ] Distortion and saturation: ChromaGlow, Bitcrusher, Clip Distortion, Distortion, Distortion II, Overdrive, Phase Distortion
 - [ ] Amps and pedals: Amp Designer, Bass Amp Designer, Pedalboard
 - [ ] Filters: AutoFilter, EVOC 20 Filterbank and TrackOscillator, Fuzz-Wah, Spectral Gate, Step FX
 - [ ] Pitch: Pitch Correction, Pitch Shifter, Vocal Transformer
 - [ ] Imaging: Stereo Spread, Direction Mixer, Binaural Post-Processing
-- [ ] Metering: Level Meter, Loudness Meter, MultiMeter, Correlation Meter, BPM Counter, Tuner
+- [~] Metering: Level Meter, Loudness Meter, MultiMeter, Correlation Meter, BPM Counter, Tuner. *Loudness Meter and Tuner; no Level Meter, MultiMeter, Correlation Meter or BPM Counter.*
 - [ ] Specialised: Exciter, SubBass, Denoiser, Grooveshifter, Phat FX
 - [ ] Performance effects: Remix FX, Beat Breaker (with Cutoff, Resonance and Pan modes and randomise, p. 10)
 - [ ] Utility: Gain, Multichannel Gain, Test Oscillator, I/O
@@ -1023,14 +1023,14 @@ this stage is about doing the equivalent on Linux, Windows and macOS.
 
 - [ ] Quick Help: describes the element under the pointer (p. 66)
 - [~] Help tags (p. 1068). *Some controls have tooltips; no Help Tags setting.*
-- [ ] 🚧 User guide (USER_GUIDE.md)
-- [ ] 🚧 Developer documentation (ARCHITECTURE.md, DEVELOPING.md)
+- [x] User guide (USER_GUIDE.md)
+- [x] Developer documentation (ARCHITECTURE.md, DEVELOPING.md)
 - [x] README with feature sections and key command tables
 
 ### Operating systems and plug-in formats
 
 - [x] Linux build with desktop entry and icons (Nix flake and other distributions)
-- [~] Windows and macOS builds. *Engine and UI are cross-platform; plug-in editor windows are Linux/X11 only.*
+- [~] Windows and macOS builds. *Released as an NSIS installer and .dmg bundles, but early and less tested; plug-in editor windows are Linux/X11 only.*
 - [ ] Plug-in editor windows on Windows (HWND) and macOS (NSView)
 - [ ] Plug-in editors under native Wayland (they currently run through XWayland)
 - [ ] CLAP plug-in hosting
@@ -1080,8 +1080,10 @@ Not applicable to Fermata (listed for completeness, not counted):
 
 ## Recommended next items
 
-The ten gaps that would add the most value, after the work already in progress (PDC, freeze,
-markers, autopunch, take folders and comping, the tempo map and signatures):
+The ten gaps that would add the most value. PDC, freeze, markers, Autopunch, take folders and
+comping, the tempo map and signatures, plug-in presets (built-in effects and Channel EQ),
+side-chains for the built-in dynamics and the bundled effects core are done; items 4 to 6 are
+partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 
 1. **Plug-in editor windows on Windows and macOS.** Without them, Fermata is effectively a
    Linux-only DAW for anyone using plug-ins.
@@ -1090,11 +1092,15 @@ markers, autopunch, take folders and comping, the tempo map and signatures):
 3. **Marquee tool and Tracks-area Tool menu** (Scissors, Glue, Fade, Pencil, Eraser): the
    everyday editing workflow.
 4. **Plug-in presets and channel strip settings**, with compare and copy/paste. Without them,
-   any sound worth keeping has to be rebuilt by hand.
+   any sound worth keeping has to be rebuilt by hand. *Presets for the built-in effects and the
+   Channel EQ, and copy and paste of any plug-in, are done; channel strip settings, Compare and
+   VST3 presets are not.*
 5. **Side-chain inputs and multi-output instruments.** Ducking, gating and multi-out drum
-   instruments are standard in modern mixing.
+   instruments are standard in modern mixing. *Side-chains work for the built-in Compressor,
+   Noise Gate and De-Esser; VST3 side-chains and multi-output instruments are missing.*
 6. **A bundled effects core:** Compressor, Limiter, Noise Gate, reverb, delay and a tuner. A new
-   project should be mixable without third-party plug-ins.
+   project should be mixable without third-party plug-ins. *Done, with a De-Esser and Loudness
+   Meter; modulation and distortion effects are next.*
 7. **Event List and Step Input**, for precise MIDI editing and for entering notes without
    playing them.
 8. **Track alternatives and project alternatives/backups**, so engineers can try ideas safely.

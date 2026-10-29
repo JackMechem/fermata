@@ -13,6 +13,7 @@ import { coalesced, framePos, onFrame } from "../frame";
 import { Icon } from "../icons";
 import * as me from "../midiEdit";
 import { exportMidi } from "../midiFiles";
+import { fmt } from "../keymap";
 import {
   BLACK,
   CYCLE_H,
@@ -37,8 +38,9 @@ import {
   type PrView,
 } from "../pianoRollDraw";
 import { currentTick, getState, setState, useStore } from "../store";
-import { samplesPerBeat, toBbt } from "../time";
-import { closeMenu, openMenu, openMenuAt, type MenuItem } from "./Menu";
+import { lengthBbt, samplesPerBeat, toBbt } from "../time";
+import { barLines, musicalWarp, tempoMap, type Warp } from "../tempo";
+import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu";
 
 type PNote = me.PNote;
 type PCc = me.PCc;
@@ -224,6 +226,9 @@ export function pianoRollMenu(id: string): boolean {
 
 /** Notes copied in the Piano Roll (separate from the region clipboard). */
 let noteClipboard: me.ClipNote[] = [];
+/** Controller events copied from the lane. One clipboard at a time: copying either clears the
+ *  other, so Paste puts back what was copied last. */
+let ccClipboard: me.ClipCc[] = [];
 
 const timeBase = (p: Project): me.TimeBase => ({ sampleRate: p.sample_rate, tempo: p.tempo, sigNum: p.sig_num, sigDen: p.sig_den });
 const isField = (t: EventTarget | null) => {
@@ -324,19 +329,53 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   const grid = (): Grid => {
     const { project, pr } = live.current;
     const tb = timeBase(project);
-    return { bar: me.barLength(tb), beat: samplesPerBeat(project), grid: me.gridLength(tb, pr.grid) };
+    const len = me.gridLength(tb, pr.grid);
+    return { bar: me.barLength(tb), beat: samplesPerBeat(project), grid: len, map: tempoMap(project), gridQ: len / me.quarterLength(tb) };
+  };
+  /** With tempo or signature changes, grid maths runs in musical time (see `musicalWarp`):
+   *  grid lengths above are at the project's starting tempo, and warped positions keep
+   *  their bar and beat. Null when one tempo and signature hold throughout. */
+  const warp = (): Warp | null => {
+    const p = live.current.project;
+    const m = tempoMap(p);
+    return m.isConstant ? null : musicalWarp(m, me.quarterLength(timeBase(p)));
+  };
+  /** Bar lines for grid maths on warped positions (a plain bar length without changes). */
+  const warpedBars = (w: Warp | null) => w?.bars ?? grid().bar;
+  /** Runs `f` on the notes in musical time, so grid-based edits follow the tempo map. */
+  const musical = (notes: PNote[], f: (n: PNote[]) => PNote[]): PNote[] => {
+    const w = warp();
+    if (!w) return f(notes);
+    const v = notes.map((n) => {
+      const s = w.toV(n.start);
+      return { ...n, start: s, length: w.toV(n.start + n.length) - s };
+    });
+    return f(v).map((n) => {
+      const s = Math.round(w.fromV(n.start));
+      return { ...n, start: s, length: Math.max(1, Math.round(w.fromV(n.start + n.length)) - s) };
+    });
+  };
+  /** A grid-length span starting at `t`, in samples there. */
+  const gridSpan = (t: number, len = grid().grid) => {
+    const w = warp();
+    return w ? Math.round(w.fromV(w.toV(t) + len) - t) : Math.round(len);
   };
   /** Snaps to the grid unless snapping is off or `free` (a modifier) is held. */
   const snapT = (t: number, free = false) => {
     const g = grid();
-    return !live.current.pr.snap || free ? Math.round(t) : me.snapTime(t, g.grid, g.bar);
+    if (!live.current.pr.snap || free) return Math.round(t);
+    const w = warp();
+    return w ? Math.round(w.fromV(me.snapTime(w.toV(t), g.grid, w.bars))) : me.snapTime(t, g.grid, g.bar);
   };
   /** The grid line at or before `t`, where the pencil puts a note. */
   const floorT = (t: number, free = false) => {
     const g = grid();
     if (!live.current.pr.snap || free) return Math.round(t);
-    const b = Math.floor(t / g.bar) * g.bar;
-    return b + Math.floor((t - b) / g.grid + 1e-6) * g.grid;
+    const w = warp();
+    const v = w ? w.toV(t) : t;
+    const b = me.barFloor(v, warpedBars(w));
+    const at = b + Math.floor((v - b) / g.grid + 1e-6) * g.grid;
+    return w ? Math.round(w.fromV(at)) : at;
   };
 
   const shown = () => preview.current ?? work.current;
@@ -471,7 +510,8 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   /** Sends an edited list to the engine as one undo step. */
   const commit = (notes: PNote[], cc: PCc[], label: string, key?: string) => {
     preview.current = null;
-    const { edits, selNotes, selCc } = me.toEdits(notes, cc, work.current.regions, grid().bar);
+    const m = tempoMap(live.current.project);
+    const { edits, selNotes, selCc } = me.toEdits(notes, cc, work.current.regions, m.isConstant ? grid().bar : barLines(m));
     if (!edits.length) {
       setSelection(notes, cc);
       return;
@@ -521,18 +561,27 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   };
 
   /** Commits notes that may sit in a region that doesn't exist yet (id -1): makes a one-bar
-   *  region at `t` first. */
+   *  region at `t` first. Both go in one undo step (a shared checkpoint key). */
   const commitWithRegion = async (notes: PNote[], t: number, label: string) => {
     if (!notes.some((n) => n.region === -1)) return commit(notes, work.current.cc, label);
-    const bar = grid().bar;
-    const ids = await actMade("create_midi_region", { track: live.current.track.id, start: Math.max(0, Math.floor(t / bar) * bar), length: Math.round(bar) });
-    if (!ids?.length) return;
+    const m = tempoMap(live.current.project);
+    const bar = m.barAt(Math.max(0, t));
+    const start = Math.round(m.barStart(bar));
+    const key = `new-region:${Date.now()}`;
+    const ids = await actMade("create_midi_region", { track: live.current.track.id, start, length: Math.round(m.barStart(bar + 1)) - start, key });
+    if (!ids?.length) {
+      // Nothing was made (a frozen track, say): drop the note drawn in advance.
+      preview.current = null;
+      setSelection(work.current.notes);
+      return;
+    }
     setState({ selectedRegions: ids, focus: "regions" });
     resync();
     commit(
       notes.map((n) => (n.region === -1 ? { ...n, region: ids[0] } : n)),
       work.current.cc,
       label,
+      key,
     );
   };
 
@@ -540,6 +589,8 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
 
   const sounding = useRef<number | null>(null);
   const play = (pitch: number | null, velocity = 100) => {
+    // MIDI Out off silences edits, but not the keyboard column (a pressed key), which is
+    // played on purpose. Note-offs always go out, so nothing hangs.
     if (!live.current.pr.midiOut && pitch !== null && pressedKey.current === null) return;
     if (sounding.current !== null) invoke("midi_event", { data: [0x80, sounding.current, 0] }).catch(() => {});
     sounding.current = pitch;
@@ -567,15 +618,10 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     const b = toBbt(live.current.project, t);
     return `${b.bar} ${b.beat} ${b.div} ${b.tick}`;
   };
-  const lenLabel = (len: number) => {
-    const p = live.current.project;
-    const beats = len / samplesPerBeat(p);
-    const bars = Math.floor(beats / p.sig_num);
-    const rest = beats - bars * p.sig_num;
-    const beat = Math.floor(rest);
-    const div = Math.floor((rest - beat) * 4);
-    const tick = Math.round(((rest - beat) * 4 - div) * 240);
-    return `${bars} ${beat} ${div} ${tick}`;
+  /** A length from `start`, counted through the tempo map. */
+  const lenLabel = (len: number, start = 0) => {
+    const b = lengthBbt(live.current.project, start, len);
+    return `${b.bar} ${b.beat} ${b.div} ${b.tick}`;
   };
 
   // ---- note area --------------------------------------------------------------------------
@@ -636,7 +682,8 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (tool === "eraser") return sweep(() => null, "Delete Notes", hit?.n);
     if (tool === "mute") {
       const muted = hit ? !hit.n.muted : true;
-      if (hit?.n.sel) return commit(me.toggleMute(notes), work.current.cc, muted ? "Mute Notes" : "Unmute Notes");
+      // On a selected note the whole selection toggles: muted unless all of it already is.
+      if (hit?.n.sel) return commit(me.toggleMute(notes), work.current.cc, notes.every((n) => !n.sel || n.muted) ? "Unmute Notes" : "Mute Notes");
       return sweep((n) => ({ ...n, muted }), muted ? "Mute Notes" : "Unmute Notes", hit?.n);
     }
     if (hit && tool === "scissors") {
@@ -661,7 +708,6 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       if (!grabbed.sel) return;
       lastVelocity.current = grabbed.velocity;
       if (tool === "velocity") return velocityDrag(e, base, grabbed);
-      if (tool === "scissors" || tool === "glue") return;
       play(grabbed.pitch, grabbed.velocity);
       return noteDrag(e, hit.zone === "body" ? "move" : hit.zone, base, grabbed, wasSelected && !e.shiftKey);
     }
@@ -690,9 +736,11 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         let notes: PNote[];
         if (kind === "move") {
           const free = ev.ctrlKey || ev.metaKey;
-          const dt = Math.round(snapT(grabbed.start + dxT, free) - grabbed.start);
+          const target = snapT(grabbed.start + dxT, free);
           const dp = -Math.round((ev.clientY - sy) / v.noteH);
-          const shifted = me.nudge(base, dt, dp);
+          // Across tempo changes the selection moves in musical time, keeping its rhythm.
+          const w = warp();
+          const shifted = w ? musical(base, (n) => me.nudge(n, w.toV(target) - w.toV(grabbed.start), dp)) : me.nudge(base, Math.round(target - grabbed.start), dp);
           copying = ev.altKey;
           notes = copying ? [...base.map((n) => (n.sel ? { ...n, sel: false } : n)), ...shifted.filter((n) => n.sel)] : shifted;
           const g2 = shifted[base.indexOf(grabbed)];
@@ -718,7 +766,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
             });
           }
           const g2 = notes[base.indexOf(grabbed)];
-          showTag(`${kind === "right" ? "Length" : "Start"}   ${kind === "right" ? lenLabel(g2.length) : posLabel(g2.start)}`, x, y);
+          showTag(`${kind === "right" ? "Length" : "Start"}   ${kind === "right" ? lenLabel(g2.length, g2.start) : posLabel(g2.start)}`, x, y);
         }
         preview.current = { notes, cc: work.current.cc };
         requestDraw();
@@ -809,11 +857,10 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   /** Creates a note of the grid length at the press; dragging right sets its length. */
   const pencil = (e0: React.MouseEvent, x: number, y: number, drag: boolean) => {
     const v = view();
-    const g = grid();
     const start = Math.max(0, floorT(timeAt(v, x), e0.altKey));
     const pitch = pitchAt(v, y);
     const rid = regionFor(start) ?? -1;
-    const note: PNote = { region: rid, start, length: Math.round(g.grid), pitch, velocity: lastVelocity.current, muted: false, sel: true };
+    const note: PNote = { region: rid, start, length: gridSpan(start), pitch, velocity: lastVelocity.current, muted: false, sel: true };
     const base = me.selectNone(work.current.notes);
     preview.current = { notes: [...base, note], cc: work.current.cc };
     requestDraw();
@@ -824,11 +871,11 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       (ev) => {
         if (!drag) return;
         const free = ev.altKey || ev.ctrlKey || ev.metaKey;
-        const end = snapT(start + g.grid + (ev.clientX - sx) / v.pps, free);
-        note.length = Math.round(Math.max(free ? 1 : g.grid, end - start));
+        const end = snapT(start + gridSpan(start) + (ev.clientX - sx) / v.pps, free);
+        note.length = Math.round(Math.max(free ? 1 : gridSpan(start), end - start));
         preview.current = { notes: [...base, { ...note }], cc: work.current.cc };
         const { x: lx, y: ly } = local(ev, el);
-        showTag(`Length   ${lenLabel(note.length)}`, lx, ly);
+        showTag(`Length   ${lenLabel(note.length, start)}`, lx, ly);
         requestDraw();
       },
       () => {
@@ -897,11 +944,11 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (hit && !hit.n.sel) setSelection(work.current.notes.map((n) => (n === hit.n ? { ...n, sel: true } : n.sel ? { ...n, sel: false } : n)));
     const any = work.current.notes.some((n) => n.sel);
     openMenu(e.clientX, e.clientY, [
-      { label: "Cut", hint: "⌘X", disabled: !any, onClick: () => cut() },
-      { label: "Copy", hint: "⌘C", disabled: !any, onClick: () => copy() },
-      { label: "Paste", hint: "⌘V", disabled: !noteClipboard.length, onClick: () => paste() },
-      { label: "Duplicate", hint: "⌘D", disabled: !any, onClick: () => duplicate() },
-      { label: "Delete", hint: "⌫", disabled: !any, onClick: () => deleteSelected() },
+      { label: "Cut", hint: fmt("Mod+X"), disabled: !any, onClick: () => cut() },
+      { label: "Copy", hint: fmt("Mod+C"), disabled: !any, onClick: () => copy() },
+      { label: "Paste", hint: fmt("Mod+V"), disabled: !noteClipboard.length && !ccClipboard.length, onClick: () => paste() },
+      { label: "Duplicate", hint: fmt("Mod+D"), disabled: !any, onClick: () => duplicate() },
+      { label: "Delete", hint: fmt("Backspace"), disabled: !any, onClick: () => deleteSelected() },
       { separator: true },
       ...functionItems(),
     ]);
@@ -1023,6 +1070,9 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     const v = view();
     const kind = laneKind(live.current.pr.lane);
     let tool = live.current.pr.tool;
+    // As in the note area, Mod-click is the Pencil, but here the Line tool is kept (it draws
+    // controller ramps, while over notes it acts as the Pointer) and Shift turns the Pencil
+    // into a line.
     if ((e.ctrlKey || e.metaKey) && tool === "pointer") tool = "pencil";
     if (tool === "pencil" && e.shiftKey) tool = "line";
     if (!kind) return velocityLaneDown(x, y, H, v, tool);
@@ -1122,6 +1172,9 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     showTag(text, x, el.clientHeight - 30);
   };
 
+  /** Controller events live in regions; say so when one is drawn where there's none. */
+  const noRegionHere = () => setState({ toast: { text: "Controller events go in a MIDI region: draw over a region, or a note first to make one", at: Date.now(), ms: 4000 } });
+
   const ccLaneDown = (e0: React.MouseEvent, x: number, y: number, H: number, v: PrView, tool: Tool, kind: CcKind) => {
     const cv = laneCv.current!;
     const max = me.ccMax(kind);
@@ -1139,8 +1192,10 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (tool === "eraser" || (hit && e0.altKey && tool === "pointer")) {
       // Everything of this kind between the press and the pointer goes.
       const pad = 4 / v.pps;
+      // Only in the region the press is in, as the Pencil draws into one region.
+      const inRegion = regionFor(t0) ?? undefined;
       const erase = (b: number) => {
-        const next = me.eraseCc(all, kind, Math.min(t0, b) - pad, Math.max(t0, b) + pad);
+        const next = me.eraseCc(all, kind, Math.min(t0, b) - pad, Math.max(t0, b) + pad, inRegion);
         preview.current = { notes: work.current.notes, cc: next };
         requestDraw();
       };
@@ -1161,7 +1216,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
 
     if (tool === "pencil") {
       const rid = regionFor(t0);
-      if (rid === null) return;
+      if (rid === null) return noRegionHere();
       let last = { t: t0, v: laneValue(H, y, max) };
       let cur = me.drawCcLine(all, rid, kind, last.t, last.v, last.t, last.v, 1);
       preview.current = { notes: work.current.notes, cc: cur };
@@ -1193,7 +1248,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         const ta = timeAt(vv, l.x0);
         const tb = timeAt(vv, l.x1);
         const rid = regionFor(Math.min(ta, tb));
-        if (rid === null) return;
+        if (rid === null) return noRegionHere();
         const step = me.quarterLength(timeBase(live.current.project)) / 8;
         commit(work.current.notes, me.drawCcLine(work.current.cc, rid, kind, ta, laneValue(H, l.y0, max), tb, laneValue(H, l.y1, max), step), "Controller Line");
       });
@@ -1219,6 +1274,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           moved = true;
           const free = ev.ctrlKey || ev.metaKey;
           const dt = Math.round(snapT(grabbed.start + (ev.clientX - sx) / v.pps, free) - grabbed.start);
+          // The lane's value range spans its height less 6 px margins top and bottom (laneY).
           const dv = Math.round(((sy - ev.clientY) / (H - 12)) * max);
           const next = base.map((c) => (c.sel ? { ...c, start: Math.max(0, c.start + dt), value: me.clamp(c.value + dv, 0, max) } : c));
           const g2 = next[base.indexOf(grabbed)];
@@ -1237,7 +1293,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (e0.detail === 2) {
       const t = Math.max(0, snapT(t0, e0.altKey));
       const rid = regionFor(t);
-      if (rid === null) return;
+      if (rid === null) return noRegionHere();
       const next = [...all.map((c) => (c.sel ? { ...c, sel: false } : c)), { region: rid, start: t, kind, value: laneValue(H, y, max), sel: true }];
       commit(work.current.notes, next.sort((a, b) => a.start - b.start), "Create Controller Event");
       return;
@@ -1325,7 +1381,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     };
     const onKeys = (e: WheelEvent) => {
       e.preventDefault();
-      if (e.altKey || e.ctrlKey) zoomY(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientY - el.getBoundingClientRect().top);
+      if (e.altKey || e.ctrlKey || e.metaKey) zoomY(e.deltaY < 0 ? 1.1 : 1 / 1.1, e.clientY - el.getBoundingClientRect().top);
       else el.scrollTop += e.deltaY;
     };
     el.addEventListener("wheel", onNotes, { passive: false });
@@ -1346,13 +1402,22 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   const anySelected = () => work.current.notes.some((n) => n.sel);
   const playhead = () => currentTick()?.pos ?? 0;
 
+  /** Whether Copy, Cut and Delete act on controller events: some are selected in the lane
+   *  shown, and the lane was clicked last or no notes are selected. */
+  const ccTarget = () => !!laneKind(live.current.pr.lane) && work.current.cc.some((c) => c.sel) && (lastArea.current === "lane" || !anySelected());
+  const canEdit = () => anySelected() || ccTarget();
   const copy = () => {
+    if (ccTarget()) {
+      ccClipboard = me.copyCc(work.current.cc);
+      noteClipboard = [];
+      return ccClipboard.length;
+    }
     const c = me.copyNotes(notesNow());
-    if (c.length) noteClipboard = c;
+    if (c.length) [noteClipboard, ccClipboard] = [c, []];
     return c.length;
   };
   const deleteSelected = () => {
-    if (lastArea.current === "lane" && laneKind(live.current.pr.lane) && work.current.cc.some((c) => c.sel)) {
+    if (ccTarget()) {
       commit(notesNow(), work.current.cc.filter((c) => !c.sel), "Delete Controller Events");
       return;
     }
@@ -1364,7 +1429,9 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     );
   };
   const cut = () => {
+    const cc = ccTarget();
     if (!copy()) return;
+    if (cc) return commit(notesNow(), work.current.cc.filter((c) => !c.sel), "Cut Controller Events");
     commit(
       notesNow().filter((n) => !n.sel),
       work.current.cc,
@@ -1372,20 +1439,27 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     );
   };
   const paste = () => {
-    if (!noteClipboard.length) return;
     const at = Math.round(playhead());
+    if (ccClipboard.length) {
+      const rid = regionFor(at);
+      if (rid === null) return noRegionHere();
+      commit(notesNow(), me.pasteCc(work.current.cc, ccClipboard, at, rid), "Paste Controller Events");
+      return;
+    }
+    if (!noteClipboard.length) return;
     const rid = regionFor(at) ?? -1;
     commitWithRegion(me.pasteNotes(notesNow(), noteClipboard, at, rid), at, "Paste Notes");
   };
   const duplicate = () => {
-    if (anySelected()) commit(me.duplicate(notesNow(), grid().grid), work.current.cc, "Duplicate Notes");
+    if (anySelected()) commit(musical(notesNow(), (n) => me.duplicate(n, grid().grid)), work.current.cc, "Duplicate Notes");
   };
   const selectAll = () => setSelection(me.selectAll(notesNow()));
   const apply = (f: (n: PNote[]) => PNote[], label: string, key?: string) => commit(f(notesNow()), work.current.cc, label, key);
   const quantizeNow = () => {
     const { project, pr } = live.current;
     const tb = timeBase(project);
-    apply((n) => me.quantize(n, { grid: me.gridLength(tb, pr.qValue), bar: me.barLength(tb), strength: pr.qStrength / 100, swing: pr.qSwing / 100, ends: pr.qEnds }), "Quantize");
+    const bar = warpedBars(warp());
+    apply((n) => musical(n, (v) => me.quantize(v, { grid: me.gridLength(tb, pr.qValue), bar, strength: pr.qStrength / 100, swing: pr.qSwing / 100, ends: pr.qEnds })), "Quantize");
   };
   const msToSamples = (ms: number) => (ms / 1000) * live.current.project.sample_rate;
   const humanize = (ms: number, vel: number) => apply((n) => me.humanize(n, { time: msToSamples(ms), velocity: vel, length: 0 }), "Humanize");
@@ -1462,12 +1536,12 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         children: [
           { label: "Legato", onClick: () => apply(me.legato, "Legato") },
           { label: "Remove Overlaps", onClick: () => apply(me.removeOverlaps, "Remove Overlaps") },
-          { label: `Set to Grid (${pr.grid})`, onClick: () => apply((n) => me.setLength(n, grid().grid), "Set Note Length") },
+          { label: `Set to Grid (${pr.grid})`, onClick: () => apply((n) => musical(n, (v) => me.setLength(v, grid().grid)), "Set Note Length") },
           { separator: true },
-          ...(["1/1", "1/2", "1/4", "1/8", "1/16", "1/32"] as const).map((g) => ({ label: `Set to ${g}`, onClick: () => apply((n) => me.setLength(n, me.gridLength(timeBase(project), g)), "Set Note Length") })),
+          ...(["1/1", "1/2", "1/4", "1/8", "1/16", "1/32"] as const).map((g) => ({ label: `Set to ${g}`, onClick: () => apply((n) => musical(n, (v) => me.setLength(v, me.gridLength(timeBase(project), g))), "Set Note Length") })),
         ],
       },
-      { label: "Mute / Unmute Notes", hint: "⌃M", onClick: () => apply(me.toggleMute, "Mute Notes") },
+      { label: "Mute / Unmute Notes", hint: fmt("Ctrl+M"), onClick: () => apply(me.toggleMute, "Mute Notes") },
       { label: "Delete Duplicates", onClick: () => apply(me.deleteDuplicates, "Delete Duplicates") },
       { label: "Reverse", onClick: () => apply(me.reverse, "Reverse Notes") },
       { label: "Split at Playhead", onClick: () => apply((n) => me.splitAt(n, playhead(), new Set(me.targets(n))), "Split Notes") },
@@ -1479,16 +1553,16 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     const snap = getState().snap;
     const any = anySelected();
     return [
-      { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: "⌘Z", disabled: !snap?.undo, onClick: () => undoRedo("undo") },
-      { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: "⇧⌘Z", disabled: !snap?.redo, onClick: () => undoRedo("redo") },
+      { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: fmt("Mod+Z"), disabled: !snap?.undo, onClick: () => undoRedo("undo") },
+      { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: fmt("Mod+Shift+Z"), disabled: !snap?.redo, onClick: () => undoRedo("redo") },
       { separator: true },
-      { label: "Cut", hint: "⌘X", disabled: !any, onClick: cut },
-      { label: "Copy", hint: "⌘C", disabled: !any, onClick: copy },
-      { label: "Paste at Playhead", hint: "⌘V", disabled: !noteClipboard.length, onClick: paste },
-      { label: "Duplicate", hint: "⌘D", disabled: !any, onClick: duplicate },
-      { label: "Delete", hint: "⌫", disabled: !any, onClick: deleteSelected },
+      { label: "Cut", hint: fmt("Mod+X"), disabled: !canEdit(), onClick: cut },
+      { label: "Copy", hint: fmt("Mod+C"), disabled: !canEdit(), onClick: copy },
+      { label: "Paste at Playhead", hint: fmt("Mod+V"), disabled: !noteClipboard.length && !ccClipboard.length, onClick: paste },
+      { label: "Duplicate", hint: fmt("Mod+D"), disabled: !any, onClick: duplicate },
+      { label: "Delete", hint: fmt("Backspace"), disabled: !canEdit(), onClick: deleteSelected },
       { separator: true },
-      { label: "Select All", hint: "⌘A", onClick: selectAll },
+      { label: "Select All", hint: fmt("Mod+A"), onClick: selectAll },
       { label: "Deselect All", hint: "Esc", onClick: () => setSelection(me.selectNone(notesNow())) },
       { label: "Invert Selection", onClick: () => setSelection(me.invertSelection(notesNow())) },
       { label: "Select Same Pitch", disabled: !any, onClick: () => setSelection(me.selectSamePitch(notesNow())) },
@@ -1549,10 +1623,10 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       { label: "Catch Playhead", checked: p.catchPlayhead, onClick: () => setPrefs({ catchPlayhead: !p.catchPlayhead }) },
       { label: "MIDI Out (Hear Edited Notes)", checked: p.midiOut, onClick: () => setPrefs({ midiOut: !p.midiOut }) },
       { separator: true },
-      { label: "Zoom In", hint: "⌘→", onClick: () => zoomX(1.4) },
-      { label: "Zoom Out", hint: "⌘←", onClick: () => zoomX(1 / 1.4) },
-      { label: "Taller Rows", hint: "⌘↓", onClick: () => zoomY(1.2) },
-      { label: "Shorter Rows", hint: "⌘↑", onClick: () => zoomY(1 / 1.2) },
+      { label: "Zoom In", hint: fmt("Mod+ArrowRight"), onClick: () => zoomX(1.4) },
+      { label: "Zoom Out", hint: fmt("Mod+ArrowLeft"), onClick: () => zoomX(1 / 1.4) },
+      { label: "Taller Rows", hint: fmt("Mod+ArrowDown"), onClick: () => zoomY(1.2) },
+      { label: "Shorter Rows", hint: fmt("Mod+ArrowUp"), onClick: () => zoomY(1 / 1.2) },
       { label: "Zoom to Fit Region", hint: "Z", onClick: zoomToFit },
     ];
   };
@@ -1594,7 +1668,8 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   });
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (isField(e.target)) return;
+    // An open menu (the tool menu after T aside) has the keys.
+    if (isField(e.target) || (menuOpen() && toolArmed.current <= performance.now())) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.key;
     const g = grid();
@@ -1664,7 +1739,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           }
           if (!anySelected()) break;
           const step = e.shiftKey ? g.bar : g.grid;
-          apply((n) => me.nudge(n, k === "ArrowRight" ? step : -step, 0), "Nudge Notes", nudgeKey());
+          apply((n) => musical(n, (v) => me.nudge(v, k === "ArrowRight" ? step : -step, 0)), "Nudge Notes", nudgeKey());
           break;
         }
         case "ArrowUp":
@@ -1771,7 +1846,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           >
             {pr.grid} <Icon.chevron />
           </button>
-          <button className={"lb-btn" + (pr.snap ? " on" : "")} title="Snap to grid (hold ⌘/Ctrl while dragging to move freely)" onClick={() => setPrefs({ snap: !pr.snap })}>
+          <button className={"lb-btn" + (pr.snap ? " on" : "")} title={`Snap to grid (hold ${fmt("Mod")} while dragging to move freely)`} onClick={() => setPrefs({ snap: !pr.snap })}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
               <path d="M3 2v5a4 4 0 0 0 8 0V2M3 4.5h2.4M8.6 4.5H11M5.4 2v5a1.6 1.6 0 0 0 3.2 0V2" />
             </svg>
@@ -1808,7 +1883,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
               <path d="M6 1v10M3.5 3.5 6 1l2.5 2.5M3.5 8.5 6 11l2.5-2.5" />
             </svg>
           </span>
-          <input className="zoom vzoom" type="range" min={5} max={32} step={0.5} value={pr.noteH} title="Row height (Alt-scroll, ⌘↑ / ⌘↓)" onChange={(e) => zoomY(parseFloat(e.target.value) / pr.noteH)} />
+          <input className="zoom vzoom" type="range" min={5} max={32} step={0.5} value={pr.noteH} title={`Row height (${fmt("Alt")}-scroll, ${fmt("Mod+ArrowUp")} / ${fmt("Mod+ArrowDown")})`} onChange={(e) => zoomY(parseFloat(e.target.value) / pr.noteH)} />
           <span className="lb-label" title="Horizontal zoom">
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3">
               <path d="M1 6h10M3.5 3.5 1 6l2.5 2.5M8.5 3.5 11 6 8.5 8.5" />
@@ -1821,7 +1896,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
             max={1}
             step={0.001}
             value={hZoom}
-            title="Horizontal zoom (⌘-scroll, ⌘← / ⌘→)"
+            title={`Horizontal zoom (${fmt("Mod")}-scroll, ${fmt("Mod+ArrowLeft")} / ${fmt("Mod+ArrowRight")})`}
             onChange={(e) => zoomX((6 * Math.pow(1600 / 6, parseFloat(e.target.value))) / pr.pxPerBeat)}
           />
         </div>
@@ -1901,12 +1976,18 @@ function QuantizePanel({ anchor, prefs: p, onClose, onQuantize }: { anchor: HTML
       if (ref.current?.contains(e.target as Node) || anchor?.contains(e.target as Node)) return;
       onClose();
     };
-    const key = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // Esc closes just the panel: capture phase, ahead of the editor's Esc (deselect all).
+    const key = (e: KeyboardEvent) => {
+      // A menu over the panel takes the Esc first (it marks it handled).
+      if (e.key !== "Escape" || e.defaultPrevented || menuOpen()) return;
+      e.stopPropagation();
+      onClose();
+    };
     window.addEventListener("mousedown", down);
-    window.addEventListener("keydown", key);
+    window.addEventListener("keydown", key, true);
     return () => {
       window.removeEventListener("mousedown", down);
-      window.removeEventListener("keydown", key);
+      window.removeEventListener("keydown", key, true);
     };
   }, [anchor, onClose]);
   const r = anchor?.getBoundingClientRect();

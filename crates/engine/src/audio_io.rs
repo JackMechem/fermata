@@ -339,7 +339,15 @@ where
             }
             let out = &mut out_buf[..frames * out_ch];
             match engine.try_lock() {
-                Some(mut e) => e.process(inp, in_ch, out, out_ch),
+                Some(mut e) => {
+                    // A panic must never reach the audio driver: unwinding into its C callback
+                    // aborts the whole app. Silence the block instead; the session reports it.
+                    let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.process(inp, in_ch, out, out_ch))).is_ok();
+                    if !ok {
+                        out.fill(0.0);
+                        e.status.engine_errors.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
                 None => out.fill(0.0),
             }
             for (d, s) in data.iter_mut().zip(out.iter()) {

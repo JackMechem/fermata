@@ -12,6 +12,8 @@ import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { OutputSlot, SendsSection } from "./Sends";
 import { StripLatencyBadge, useSlotLatency } from "./Latency";
 import { refuseFrozen } from "../freeze";
+import { isBuiltinFx, loadPlugin, slotMenu, toggleFxPanel } from "../fxHost";
+import { startSlotDrag } from "../slotDrag";
 
 const PAN = { type: "pan" } as const;
 
@@ -30,32 +32,43 @@ export function PluginSlotView({
 }) {
   const plugins = useStore((s) => s.plugins);
   const openEditors = useStore((s) => s.snap?.open_editors ?? []);
+  const fxOpen = useStore((s) => (plugin ? s.fxPanels.includes(plugin.uid) : false));
+  useStore((s) => s.fxList);
   // A frozen track's plug-ins are unloaded and can't change until it is unfrozen.
   const frozen = useStore((s) => !!s.snap?.project.tracks.find((t) => t.id === trackId)?.frozen);
   const latency = useSlotLatency(plugin?.uid);
   const rate = useStore((s) => s.snap?.project.sample_rate ?? 48000);
   const menu = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (refuseFrozen([trackId])) return;
+    if (e.button !== 0 || refuseFrozen([trackId])) return;
     const items = pluginMenu(plugins, {
       instrument: !!instrument,
       current: plugin?.plugin_id,
-      pick: (id) => api.setPlugin(trackId, slot, id),
+      pick: (id) => loadPlugin(trackId, slot, id),
       remove: () => api.removePlugin(trackId, slot),
     });
     const r = (e.currentTarget as HTMLElement).closest(".slot")!.getBoundingClientRect();
     openMenu(r.right - 4, r.top, items);
   };
+  // Right-click: Copy and Paste Plug-in.
+  const context = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (refuseFrozen([trackId])) return;
+    openMenu(e.clientX, e.clientY, slotMenu(trackId, slot, plugin));
+  };
+  // Audio FX slots are drop targets for dragged plug-ins (see slotDrag.ts).
+  const target = instrument ? {} : { "data-track": trackId, "data-slot": slot };
   if (!plugin) {
     return (
-      <div className={"slot empty" + (instrument ? " instrument" : "")} onMouseDown={menu}>
+      <div className={"slot empty" + (instrument ? " instrument" : "")} {...target} onMouseDown={menu} onContextMenu={context}>
         {instrument && <span className="slot-name dim">Instrument</span>}
       </div>
     );
   }
-  const open = openEditors.includes(plugin.uid);
+  const open = openEditors.includes(plugin.uid) || fxOpen;
   return (
-    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "")}>
+    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "")} {...target} onContextMenu={context}>
       <button
         className="slot-power"
         title={plugin.bypass ? "Turn on" : "Bypass"}
@@ -69,11 +82,21 @@ export function PluginSlotView({
       </button>
       <span
         className="slot-name"
-        title={`${plugin.name}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : " — click to open"}`}
+        title={`${plugin.name}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : instrument ? " — click to open" : " — click to open, drag to move (Alt to copy)"}`}
         onMouseDown={(e) => {
           e.stopPropagation();
-          if (plugin.plugin_id.startsWith("builtin:") || refuseFrozen([trackId])) return;
-          api.openEditor(plugin.uid, `${title} — ${plugin.name}`);
+          if (e.button !== 0) return;
+          const open = () => {
+            // A built-in effect opens its panel (a frozen track's plug-ins are unloaded).
+            if (isBuiltinFx(plugin.plugin_id)) {
+              if (!refuseFrozen([trackId])) toggleFxPanel(plugin.uid);
+              return;
+            }
+            if (plugin.plugin_id.startsWith("builtin:") || refuseFrozen([trackId])) return;
+            api.openEditor(plugin.uid, `${title} — ${plugin.name}`);
+          };
+          if (instrument || frozen) open();
+          else startSlotDrag(e, trackId, slot, plugin.name, open);
         }}
       >
         {plugin.name}

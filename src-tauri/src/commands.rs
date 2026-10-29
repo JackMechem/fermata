@@ -8,6 +8,7 @@ use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, In
 use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
 use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, RangeEdit, RenderOptions, TrackPatch};
 use daw_engine::vst3_host::{ParamInfo, PluginDescriptor};
+use daw_engine::tempo::{SigEvent, TempoEvent};
 use daw_engine::{plugin_db, transients, Session};
 use serde::Serialize;
 use tauri::{Emitter, State};
@@ -77,8 +78,14 @@ fn edit(state: &State<AppState>, label: &str, key: Option<String>, plugins: bool
 
 fn try_edit(state: &State<AppState>, label: &str, key: Option<String>, plugins: bool, f: impl FnOnce(&mut Session) -> anyhow::Result<()>) -> R<Snapshot> {
     try_snap(state, |s| {
-        s.checkpoint(label, key, plugins);
-        f(s)?;
+        let pushed = s.checkpoint(label, key, plugins);
+        // A failed edit leaves no undo step behind.
+        if let Err(e) = f(s) {
+            if pushed {
+                s.abandon_checkpoint();
+            }
+            return Err(e);
+        }
         s.frozen_guard()
     })
 }
@@ -101,7 +108,10 @@ pub struct Made {
 fn edit_made(state: &State<AppState>, label: &str, plugins: bool, f: impl FnOnce(&mut Session) -> anyhow::Result<Vec<Id>>) -> R<Made> {
     with(state, |s| {
         s.checkpoint(label, None, plugins);
-        let ids = f(s).map_err(|e| e.to_string())?;
+        let ids = f(s).map_err(|e| {
+            s.abandon_checkpoint();
+            e.to_string()
+        })?;
         s.frozen_guard().map_err(|e| e.to_string())?;
         Ok(Made { snapshot: snapshot(s), ids })
     })
@@ -388,9 +398,21 @@ pub fn quantize_regions(state: State<AppState>, ids: Vec<Id>, grid: i64) -> Snap
     edit(&state, "Quantize", None, false, |s| s.quantize_regions(&ids, grid))
 }
 
+/// `key` lets the edit that fills the new region (the Piano Roll's first note) join its undo
+/// step, as `set_midi_content` with the same key.
 #[tauri::command]
-pub fn create_midi_region(state: State<AppState>, track: Id, start: i64, length: i64) -> R<Made> {
-    edit_made(&state, "Create MIDI Region", false, |s| Ok(vec![s.create_midi_region(track, start, length)?]))
+pub fn create_midi_region(state: State<AppState>, track: Id, start: i64, length: i64, key: Option<String>) -> R<Made> {
+    with(&state, |s| {
+        let pushed = s.checkpoint("Create MIDI Region", key, false);
+        let ids = vec![s.create_midi_region(track, start, length).map_err(|e| {
+            if pushed {
+                s.abandon_checkpoint();
+            }
+            e.to_string()
+        })?];
+        s.frozen_guard().map_err(|e| e.to_string())?;
+        Ok(Made { snapshot: snapshot(s), ids })
+    })
 }
 
 #[tauri::command]
@@ -478,7 +500,8 @@ fn slot_index(slot: i64) -> usize {
 pub fn set_plugin(state: State<AppState>, track: Id, slot: i64, plugin_id: String, open: bool) -> R<Snapshot> {
     try_edit(&state, "Insert Plug-in", None, true, |s| {
         let uid = s.set_plugin(track, slot_index(slot), &plugin_id)?;
-        if open {
+        // Built-in effects open their panel in the UI instead.
+        if open && !plugin_id.starts_with("builtin:") {
             let title = s.project.track(track).map(|t| t.name.clone()).unwrap_or_else(|| "Stereo Out".into());
             if let Err(e) = s.open_editor(uid, &title) {
                 log::warn!("{e}");
@@ -816,6 +839,9 @@ pub fn bounce_in_place(app: tauri::AppHandle, state: State<AppState>, ids: Vec<I
             }
             Made { snapshot: snapshot(&s), ids: made }
         });
+        if res.is_err() {
+            s.abandon_checkpoint();
+        }
         let _ = tx.send(res.map_err(|e| e.to_string()));
     })
     .map_err(|e| e.to_string())?;
@@ -1063,6 +1089,9 @@ pub fn freeze_tracks(app: tauri::AppHandle, state: State<AppState>, ids: Vec<Id>
         let mut s = session.lock();
         s.checkpoint(if ids.len() > 1 { "Freeze Tracks" } else { "Freeze Track" }, None, true);
         let res = s.place_freeze(renders).map(|_| snapshot(&s));
+        if res.is_err() {
+            s.abandon_checkpoint();
+        }
         let _ = tx.send(res.map_err(|e| e.to_string()));
     })
     .map_err(|e| e.to_string())?;
@@ -1158,4 +1187,162 @@ pub fn unpack_take_folder(state: State<AppState>, region: Id) -> R<Made> {
 #[tauri::command]
 pub fn pack_take_folder(state: State<AppState>, ids: Vec<Id>) -> R<Made> {
     edit_made(&state, "Pack Take Folder", false, |s| s.pack_take_folder(&ids).map(|id| vec![id]))
+}
+
+/// Moves several regions as one undo step (a multi-region drag).
+#[tauri::command]
+pub fn move_regions(state: State<AppState>, moves: Vec<daw_engine::session::RegionMove>) -> Snapshot {
+    edit(&state, if moves.len() == 1 { "Move Region" } else { "Move Regions" }, None, false, |s| s.move_regions(&moves))
+}
+
+/// Drops the undo history (after the Project Chooser has set up a template).
+#[tauri::command]
+pub fn clear_undo_history(state: State<AppState>) -> Snapshot {
+    snap(&state, |s| s.clear_history())
+}
+
+/// The Tempo track. With `moveMidi`, MIDI regions keep their bars and beats.
+#[tauri::command]
+pub fn set_tempo_map(state: State<AppState>, events: Vec<TempoEvent>, move_midi: Option<bool>) -> Snapshot {
+    edit(&state, "Tempo Change", None, false, |s| s.set_tempo_map(events, move_midi.unwrap_or(false)))
+}
+
+/// The Signature track.
+#[tauri::command]
+pub fn set_signatures(state: State<AppState>, events: Vec<SigEvent>) -> Snapshot {
+    edit(&state, "Signature Change", None, false, |s| s.set_signatures(events))
+}
+
+/// The LCD's tempo: the tempo event in effect at `pos`.
+#[tauri::command]
+pub fn set_tempo_at(state: State<AppState>, pos: i64, bpm: f64, move_midi: Option<bool>) -> Snapshot {
+    edit(&state, "Tempo", Some("tempo".into()), false, |s| s.set_tempo_at(pos, bpm, move_midi.unwrap_or(false)))
+}
+
+/// The LCD's signature: the change in effect at `bar`.
+#[tauri::command]
+pub fn set_signature_at(state: State<AppState>, bar: u32, num: u32, den: u32) -> Snapshot {
+    edit(&state, "Time Signature", None, false, |s| s.set_signature_at(bar, num, den))
+}
+
+/// Moves MIDI regions to keep their bars and beats from one Tempo track to another.
+#[tauri::command]
+pub fn move_midi_with_tempo(state: State<AppState>, old_map: Vec<TempoEvent>, new_map: Vec<TempoEvent>) -> Snapshot {
+    edit(&state, "Move MIDI Regions with Tempo", None, false, |s| s.move_midi_between(&old_map, &new_map))
+}
+
+// ---- built-in effects -----------------------------------------------------------------------
+
+/// The built-in effects, as src/fx.ts `FxInfo`.
+#[tauri::command]
+pub fn list_builtin_effects() -> Vec<daw_engine::session::BuiltinInfo> {
+    daw_engine::session::builtin_effects()
+}
+
+/// Sets a built-in effect's parameter (plain units). A drag of one parameter makes one undo
+/// step; while automation is being written the move belongs to the pass instead.
+#[tauri::command]
+pub fn set_builtin_param(state: State<AppState>, track: Id, slot: i64, id: u32, value: f32) -> R<Snapshot> {
+    let slot = slot_index(slot);
+    if with(&state, |s| s.automation_writing(track)) {
+        return try_snap(&state, |s| s.set_builtin_param(track, slot, id, value));
+    }
+    let uid = with(&state, |s| {
+        let inserts = if track == daw_engine::model::MASTER_ID { Some(&s.project.master.inserts) } else { s.project.track(track).map(|t| &t.inserts) };
+        inserts.and_then(|i| i.get(slot)).and_then(|p| p.as_ref()).map(|p| p.uid)
+    });
+    let key = uid.map(|uid| format!("fxparam:{uid}:{id}"));
+    try_edit(&state, "Plug-in Parameter", key, false, |s| s.set_builtin_param(track, slot, id, value))
+}
+
+/// Every parameter value of a built-in effect instance: (id, plain value).
+#[tauri::command]
+pub fn builtin_params(state: State<AppState>, uid: Id) -> Vec<(u32, f32)> {
+    with(&state, |s| s.builtin_params(uid))
+}
+
+/// Keys a built-in effect's side-chain from a track (null: its own input); refuses loops.
+#[tauri::command]
+pub fn set_sidechain(state: State<AppState>, track: Id, slot: i64, source: Option<Id>) -> R<Snapshot> {
+    try_edit(&state, "Side Chain", None, false, |s| s.set_sidechain(track, slot_index(slot), source))
+}
+
+/// A built-in effect's panel opened or closed: its meters and live values come with each tick
+/// while it is open.
+#[tauri::command]
+pub fn watch_builtin(state: State<AppState>, uid: Id, on: bool) {
+    with(&state, |s| s.watch_builtin(uid, on))
+}
+
+// ---- copy and paste, presets ----------------------------------------------------------------
+
+/// Preset and paste commands address a strip's Channel EQ as slot -2, the instrument as -1.
+fn preset_slot(slot: i64) -> usize {
+    if slot == -2 {
+        daw_engine::session::EQ_SLOT
+    } else {
+        slot_index(slot)
+    }
+}
+
+/// A slot's complete settings (a VST3's state included), for the UI's clipboard.
+#[tauri::command]
+pub fn copy_plugin(state: State<AppState>, track: Id, slot: i64) -> R<daw_engine::model::PluginSlot> {
+    with(&state, |s| s.copy_plugin(track, slot_index(slot)).map_err(|e| e.to_string()))
+}
+
+/// Pastes a copied slot into `slot` of each of `tracks`, as one undo step.
+#[tauri::command]
+pub fn paste_plugin(state: State<AppState>, tracks: Vec<Id>, slot: i64, plugin: daw_engine::model::PluginSlot) -> R<Snapshot> {
+    try_edit(&state, "Paste Plug-in", None, true, |s| s.paste_plugin(&tracks, slot_index(slot), &plugin))
+}
+
+/// Pastes Channel EQ settings onto each strip, as one undo step.
+#[tauri::command]
+pub fn paste_eq(state: State<AppState>, tracks: Vec<Id>, eq: ChannelEq) -> R<Snapshot> {
+    try_edit(&state, "Paste Channel EQ", None, false, |s| s.paste_eq(&tracks, &eq))
+}
+
+/// An effect's factory and user presets (`builtin:channel-eq` for the Channel EQ).
+#[tauri::command]
+pub fn list_presets(effect: String) -> daw_engine::presets::PresetList {
+    daw_engine::presets::list(&daw_engine::presets::user_root(), &effect)
+}
+
+/// One preset's settings.
+#[tauri::command]
+pub fn get_preset(effect: String, name: String, factory: bool) -> R<daw_engine::presets::Preset> {
+    daw_engine::presets::get(&daw_engine::presets::user_root(), &effect, &name, factory).map_err(|e| e.to_string())
+}
+
+/// Applies a preset to a built-in effect's slot or (slot -2) the strip's Channel EQ.
+#[tauri::command]
+pub fn load_preset(state: State<AppState>, track: Id, slot: i64, effect: String, name: String, factory: bool) -> R<Snapshot> {
+    try_edit(&state, "Load Preset", None, false, |s| s.load_preset(track, preset_slot(slot), &effect, &name, factory))
+}
+
+/// Saves a slot's (or, slot -2, the Channel EQ's) settings as a user preset. Refuses to replace
+/// an existing one unless `overwrite`. Returns the name it was saved under.
+#[tauri::command]
+pub fn save_preset(state: State<AppState>, track: Id, slot: i64, name: String, overwrite: Option<bool>) -> R<String> {
+    with(&state, |s| s.save_preset(track, preset_slot(slot), &name, overwrite.unwrap_or(false)).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+pub fn delete_preset(effect: String, name: String) -> R<()> {
+    daw_engine::presets::delete_user(&daw_engine::presets::user_root(), &effect, &name).map_err(|e| e.to_string())
+}
+
+/// Renames a user preset; returns the new name.
+#[tauri::command]
+pub fn rename_preset(effect: String, old: String, new: String) -> R<String> {
+    daw_engine::presets::rename_user(&daw_engine::presets::user_root(), &effect, &old, &new).map_err(|e| e.to_string())
+}
+
+/// Drags a plug-in to another Audio FX slot: on the same strip it moves (the plug-ins between
+/// shift over); onto another strip it moves there, or is copied when `copy` (Alt-drag).
+#[tauri::command]
+pub fn move_plugin(state: State<AppState>, from: Id, from_slot: i64, to: Id, to_slot: i64, copy: bool) -> R<Snapshot> {
+    let label = if copy { "Copy Plug-in" } else { "Move Plug-in" };
+    try_edit(&state, label, None, true, |s| s.move_plugin(from, slot_index(from_slot), to, slot_index(to_slot), copy))
 }

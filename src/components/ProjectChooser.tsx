@@ -5,8 +5,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { act, call, type InputSel, type RecentProject, type TrackKind } from "../api";
 import { confirmDiscard } from "../files";
 import { getState, setState, useStore } from "../store";
-import { NumberField, Select } from "./Form";
-import { getSettings, openProjectPath, updateSettings } from "../prefs";
+import { NumberField, Select, sheetKey } from "./Form";
+import { getSettings, openProjectPath, updateSettings, type Startup } from "../prefs";
 
 interface TemplateTrack {
   kind: TrackKind;
@@ -84,6 +84,7 @@ const SIGNATURES: [string, string][] = [
   ["5/4", "5/4"],
   ["6/8", "6/8"],
   ["7/8", "7/8"],
+  ["9/8", "9/8"],
   ["12/8", "12/8"],
 ];
 
@@ -92,8 +93,10 @@ export function chooserAtLaunch(): boolean {
   return getSettings().ui.startup === "chooser";
 }
 
-function setChooserAtLaunch(on: boolean) {
-  updateSettings((s) => ({ ...s, ui: { ...s.ui, startup: on ? "chooser" : "empty_project" } }));
+/** Turning the box off goes back to `otherwise` (the At Launch choice the sheet opened with,
+ *  unless that was the Chooser), so "Open last project" survives a check and uncheck. */
+function setChooserAtLaunch(on: boolean, otherwise: Startup) {
+  updateSettings((s) => ({ ...s, ui: { ...s.ui, startup: on ? "chooser" : otherwise === "chooser" ? "empty_project" : otherwise } }));
 }
 
 export function ProjectChooser() {
@@ -108,6 +111,7 @@ export function ProjectChooser() {
   const [selected, setSelected] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [atLaunch, setAtLaunch] = useState(chooserAtLaunch());
+  const [launchWas] = useState(() => getSettings().ui.startup);
   const close = () => setState({ dialog: null });
 
   useEffect(() => {
@@ -153,6 +157,8 @@ export function ProjectChooser() {
       const added = snap?.project.tracks[snap.project.tracks.length - 1];
       if (added && added.name !== t.name) await act("update_track", { id: added.id, patch: { name: t.name } });
     }
+    // The setup above went through ordinary edits; none of it should be undoable.
+    await act("clear_undo_history");
     const saved = await act("save_project", { path: target });
     const first = saved?.project.tracks[0];
     if (first) await act("select_track", { id: first.id });
@@ -193,7 +199,7 @@ export function ProjectChooser() {
 
   return (
     <div className="chooser-backdrop">
-      <div className="chooser" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <div className="chooser" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, close)}>
         <aside className="chooser-side">
           <div className="chooser-brand">
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
@@ -219,10 +225,10 @@ export function ProjectChooser() {
                 checked={atLaunch}
                 onChange={(e) => {
                   setAtLaunch(e.target.checked);
-                  setChooserAtLaunch(e.target.checked);
+                  setChooserAtLaunch(e.target.checked, launchWas);
                 }}
               />
-              Show at launch
+              {launchWas === "last_project" && !atLaunch ? "Show at launch, not the last project" : "Show at launch"}
             </label>
           </div>
         </aside>
@@ -269,7 +275,7 @@ export function ProjectChooser() {
                 </div>
                 <label>Tempo</label>
                 <div className="row-inline">
-                  <NumberField value={tempo} min={20} max={400} onChange={(v) => setTempo(Math.round(v * 100) / 100)} width={96} />
+                  <NumberField value={tempo} min={5} max={990} resolution={0.01} onChange={(v) => setTempo(Math.round(v * 100) / 100)} width={96} />
                   <span className="dim">BPM</span>
                   <span className="detail-gap" />
                   <span className="inline-label">Time Signature</span>

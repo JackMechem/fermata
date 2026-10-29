@@ -3,13 +3,16 @@
 // hands over drawing and pointer events while the automation view is on.
 
 import { useEffect, useRef, useState } from "react";
-import { act, call, type AutoLane, type AutoMode, type AutoParam, type AutoPoint, type Id, type ParamInfo, type Project, type Track } from "./api";
+import { act, BUILTIN_SYNTH, call, type AutoLane, type AutoMode, type AutoParam, type AutoPoint, type Id, type ParamInfo, type Project, type Track } from "./api";
 import type { MenuItem } from "./components/Menu";
+import { keyHint } from "./keymap";
 import { indexAt, type Layout } from "./layout";
 import { currentTick, getState, onTick, setState } from "./store";
 import { mix, theme } from "./theme";
 import { dbToFader, faderToDb, formatDb, snapPos } from "./time";
 import type { Viewport } from "./view";
+import type { FxParamSpec } from "./fx";
+import { formatValue as fxFormat, fromNorm, toNorm } from "./fxFormat";
 
 export const VOLUME: AutoParam = { type: "volume" };
 
@@ -92,9 +95,19 @@ export function formatValue(p: AutoParam, v: number): string {
     }
     case "mute":
       return v >= 0.5 ? "Muted" : "On";
-    case "plugin":
-      return `${Math.round(v * 100)}%`;
+    case "plugin": {
+      // A built-in effect's lane reads in the parameter's own units.
+      const spec = builtinSpec(p.value.uid, p.value.param);
+      return spec ? fxFormat(spec, fromNorm(spec, v)) : `${Math.round(v * 100)}%`;
+    }
   }
+}
+
+function builtinSpec(uid: Id, param: number): FxParamSpec | undefined {
+  const st = getState();
+  const project = st.snap?.project;
+  const slot = project?.tracks.flatMap((t) => t.inserts).find((s) => s?.uid === uid);
+  return st.fxList.find((f) => f.id === slot?.plugin_id)?.params.find((p) => p.id === param);
 }
 
 /** The control's own value, what an empty lane stands for. */
@@ -107,9 +120,13 @@ function liveValue(t: Track, p: AutoParam): number {
     case "mute":
       return t.mute ? 1 : 0;
     case "send":
-      return 0;
-    case "plugin":
-      return 0.5;
+      return t.sends?.[p.value]?.level_db ?? 0;
+    case "plugin": {
+      // A built-in effect's control is known here; a VST3's sits in its editor.
+      const spec = builtinSpec(p.value.uid, p.value.param);
+      const saved = t.inserts.find((s) => s?.uid === p.value.uid)?.params?.find((x) => x[0] === p.value.param)?.[1];
+      return spec ? toNorm(spec, saved ?? spec.default) : 0.5;
+    }
   }
 }
 
@@ -160,7 +177,8 @@ export async function paramMenu(t: Track): Promise<MenuItem[]> {
     const aux = project?.tracks.find((x) => x.id === s.bus);
     items.push(item({ type: "send", value: k }, `Send ${k + 1} → ${aux?.name ?? "Bus"}`));
   });
-  const slots = [t.instrument, ...t.inserts].filter((s) => s && !s.plugin_id.startsWith("builtin:"));
+  // The built-in synth has no parameters; built-in effects list theirs.
+  const slots = [t.instrument, ...t.inserts].filter((s) => s && s.plugin_id !== BUILTIN_SYNTH);
   for (const s of slots) {
     const params = await pluginParams(s!.uid);
     if (!params.length) continue;
@@ -550,14 +568,14 @@ export function deleteSelectedPoints(): boolean {
 
 /** Right-click on a lane in the automation view. */
 export function automationMenu(t: Track | undefined): MenuItem[] {
-  if (!t || !automatable(t)) return [{ label: "Hide Automation", hint: "A", onClick: () => setState({ showAutomation: false }) }];
+  if (!t || !automatable(t)) return [{ label: "Hide Automation", hint: keyHint("automation"), onClick: () => setState({ showAutomation: false }) }];
   const p = shownParam(t);
   const n = selection && selection.track === t.id && sameParam(selection.param, p) ? selection.pos.size : 0;
   return [
-    { label: n > 1 ? "Delete Selected Points" : "Delete Selected Point", disabled: !n, hint: "⌫", onClick: () => deleteSelectedPoints() },
+    { label: n > 1 ? "Delete Selected Points" : "Delete Selected Point", disabled: !n, hint: keyHint("delete-regions"), onClick: () => deleteSelectedPoints() },
     { label: `Delete ${paramLabel(p)} Automation`, disabled: !laneOf(t, p)?.points.length, onClick: () => act("clear_automation", { track: t.id, param: p }) },
     { label: "Delete All Automation on Track", disabled: !t.automation.some((l) => l.points.length), onClick: () => act("clear_automation", { track: t.id, param: null }) },
     { separator: true },
-    { label: "Hide Automation", hint: "A", onClick: () => setState({ showAutomation: false }) },
+    { label: "Hide Automation", hint: keyHint("automation"), onClick: () => setState({ showAutomation: false }) },
   ];
 }

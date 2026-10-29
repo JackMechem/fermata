@@ -10,7 +10,11 @@ use daw_engine::model::{AutoParam, AutoPoint, InputSel, Note, TrackKind};
 use daw_engine::session::{MidiContent, TrackPatch};
 use daw_engine::Session;
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) -> bool {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
     ok
 }
@@ -155,7 +159,7 @@ fn main() {
     ok &= check("an aux can't be frozen", s.freeze_tracks(&[aux], &mut |_| {}).is_err());
 
     println!("{}", if ok { "ALL PASS" } else { "SOME FAILED" });
-    if !ok {
+    if !ok || FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);
     }
 }

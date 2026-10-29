@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { setState } from "./store";
+import type { SigEvent, TempoEvent } from "./tempo";
 
 export type Id = number;
 export type TrackKind = "audio" | "instrument" | "folder" | "summing" | "aux";
@@ -14,6 +15,12 @@ export interface PluginSlot {
   plugin_id: string;
   name: string;
   bypass: boolean;
+  /** A built-in effect's values: [parameter id, plain value]; missing ids are at their default. */
+  params?: [number, number][];
+  /** The track keying a built-in effect's side-chain. */
+  sidechain?: Id | null;
+  /** A VST3's state, only in what `copy_plugin` returns (for the clipboard). */
+  state?: string | null;
 }
 
 export interface Note {
@@ -230,6 +237,10 @@ export interface Project {
   markers: Marker[];
   /** The Autopunch range. */
   punch: { enabled: boolean; start: number; end: number };
+  /** The Tempo track; empty means `tempo` throughout (see tempo.ts). */
+  tempo_map: TempoEvent[];
+  /** The Signature track; empty means `sig_num/sig_den` throughout. */
+  signatures: SigEvent[];
 }
 
 export type BitDepth = "int24" | "float32";
@@ -318,6 +329,8 @@ export interface TakePreview {
 }
 
 export interface Tick {
+  /** Something went wrong out of sight (a recording couldn't be written); shown once. */
+  warning?: string | null;
   pos: number;
   playing: boolean;
   recording: boolean;
@@ -330,6 +343,8 @@ export interface Tick {
   overruns: number;
   latency: { input_ms: number; output_ms: number; compensation_ms: number };
   spectrum: [Id, number[]] | null;
+  /** Meters and running values of the built-in effects whose panels are open. */
+  fx?: { uid: Id; meters: number[]; values: [number, number][] }[];
 }
 
 export interface DeviceInfo {
@@ -352,6 +367,13 @@ export interface DeviceList {
   outputs: DeviceInfo[];
 }
 
+/** The sample rates `cfg`'s devices both support (the output's, less any the input lacks). */
+export function supportedRates(cfg: AudioConfig, devices: DeviceList | null): number[] {
+  const outDev = devices?.outputs.find((d) => d.id === cfg.output) ?? devices?.outputs.find((d) => d.is_default);
+  const inDev = devices?.inputs.find((d) => d.id === cfg.input) ?? devices?.inputs.find((d) => d.is_default);
+  return (outDev?.sample_rates ?? [44100, 48000]).filter((r) => !inDev || !cfg.input_enabled || inDev.sample_rates.includes(r));
+}
+
 export interface AudioConfig {
   host: string | null;
   input: string | null;
@@ -366,6 +388,8 @@ export interface AudioConfig {
 export const MASTER_ID = 0;
 export const INSTRUMENT_SLOT = -1;
 export const BUILTIN_SYNTH = "builtin:synth";
+/** The Channel EQ in the preset and paste commands (which take it in place of a slot). */
+export const EQ_SLOT = -2;
 
 function report(e: unknown) {
   const msg = typeof e === "string" ? e : (e as Error)?.message ?? String(e);

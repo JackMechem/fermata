@@ -10,7 +10,11 @@ use daw_engine::prefs::PdcMode;
 use daw_engine::session::TrackPatch;
 use daw_engine::Session;
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) -> bool {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
     ok
 }
@@ -211,7 +215,7 @@ fn main() {
     ok &= check(&format!("renders in Low Latency Mode stay aligned (lag {l}, low latency {})", s.pdc_report().low_latency), l == 0 && s.pdc_report().low_latency);
 
     println!("{}", if ok { "ALL PASS" } else { "SOME FAILED" });
-    if !ok {
+    if !ok || FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);
     }
 }

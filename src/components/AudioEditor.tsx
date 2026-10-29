@@ -8,11 +8,13 @@ import { coalesced, framePos, onFrame } from "../frame";
 import { laneMenu, regionMenu } from "../ops";
 import { currentTick, getState, setState, useStore } from "../store";
 import { theme } from "../theme";
-import { formatDb, formatTime, PEAK_BUCKET, samplesPerBeat, snapPos, toBbt } from "../time";
+import { formatDb, formatTime, lengthBbt as lengthAt, PEAK_BUCKET, samplesPerBeat, snapPos, toBbt } from "../time";
+import { forEachGridLine, tempoMap } from "../tempo";
 import { pixelRatio } from "../uiScale";
 import { ensureWave, waveCache, type Wave } from "../waveform";
 import { drawRegion, FADE_ZONE } from "./Arrange";
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
+import { fmt } from "../keymap";
 
 /** Ruler height, with the cycle strip at its top. */
 const RULER = 24;
@@ -40,15 +42,11 @@ function timelineFrames(p: Project): number {
   return Math.max(p.sample_rate * 60 * 6, ...p.tracks.flatMap((t) => t.regions.map((r) => r.start + r.length + p.sample_rate * 60)));
 }
 
-/** A length as bars, beats, divisions and ticks, counted from zero like Logic's length field. */
-function lengthBbt(p: Project, len: number): string {
-  const beats = len / samplesPerBeat(p);
-  const bars = Math.floor(beats / p.sig_num);
-  const inBar = beats - bars * p.sig_num;
-  const beat = Math.floor(inBar);
-  const div = Math.floor((inBar - beat) * 4);
-  const tick = Math.floor(((inBar - beat) * 4 - div) * 240);
-  return `${bars} ${beat} ${div} ${tick}`;
+/** A length from `start` as bars, beats, divisions and ticks, counted from zero like Logic's
+ *  length field (through the tempo map). */
+function lengthBbt(p: Project, start: number, len: number): string {
+  const b = lengthAt(p, start, len);
+  return `${b.bar} ${b.beat} ${b.div} ${b.tick}`;
 }
 
 const bbt = (p: Project, pos: number) => {
@@ -133,6 +131,8 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
   const project = useStore((s) => s.snap?.project);
   const selectedRegions = useStore((s) => s.selectedRegions);
   const themeId = useStore((s) => s.themeId);
+  // Subscribed to without using the value: a change re-renders, and so redraws, the canvas
+  // (the draw code reads these itself).
   useStore((s) => s.uiScale);
   useStore((s) => s.waveStyle);
   const pps = ed.useEd((s) => s.pps);
@@ -223,7 +223,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       // First time open: fit the region (or the track's regions, or eight bars).
       const regs = focus ? [focus] : track.regions;
       if (regs.length) zoomTo(Math.min(...regs.map((r) => r.start)), Math.max(...regs.map((r) => r.start + r.length)));
-      else zoomTo(0, samplesPerBeat(project) * project.sig_num * 8);
+      else zoomTo(0, tempoMap(project).barStart(9));
       return;
     }
     if (pendingLeft.current !== null) {
@@ -270,20 +270,11 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
     ctx.fillStyle = theme.editorBg;
     ctx.fillRect(0, 0, W, H);
 
-    // Grid: bars, beats and (zoomed in) sixteenths.
-    const spb = samplesPerBeat(project);
-    const beatPx = spb * pps;
-    const barPx = beatPx * project.sig_num;
-    const firstBar = Math.max(0, Math.floor(left / barPx));
-    const lastBar = Math.ceil((left + W) / barPx);
-    for (let b = firstBar; b <= lastBar; b++) {
-      const x = Math.round(b * barPx - left);
-      ctx.fillStyle = theme.gridBar;
-      ctx.fillRect(x, RULER, 1, H - RULER);
-      ctx.fillStyle = theme.gridBeat;
-      if (beatPx > 9) for (let k = 1; k < project.sig_num; k++) ctx.fillRect(Math.round(x + k * beatPx), RULER, 1, H - RULER);
-      if (beatPx > 120) for (let k = 1; k < project.sig_num * 4; k++) if (k % 4) ctx.fillRect(Math.round(x + (k * beatPx) / 4), RULER, 1, H - RULER);
-    }
+    // Grid: bars, beats and (zoomed in) sixteenths, through the tempo map.
+    forEachGridLine(tempoMap(project), Math.max(0, left / pps), (left + W) / pps, pps, { beatsMinPx: 9.01, subdiv: 4, subMinPx: 30.01 }, (pos, kind) => {
+      ctx.fillStyle = kind === "bar" ? theme.gridBar : theme.gridBeat;
+      ctx.fillRect(Math.round(X(pos)), RULER, 1, H - RULER);
+    });
     if (project.cycle.enabled) {
       ctx.fillStyle = theme.cycleTint;
       ctx.fillRect(X(project.cycle.start), RULER, (project.cycle.end - project.cycle.start) * pps, H - RULER);
@@ -393,14 +384,16 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       ctx.roundRect(c.start * pps - left, 1, (c.end - c.start) * pps, CYCLE_STRIP - 2, 2);
       ctx.fill();
     }
-    const beatPx = samplesPerBeat(project) * pps;
-    const barPx = beatPx * project.sig_num;
-    const every = [1, 2, 4, 8, 16, 32, 64, 128].find((n) => barPx * n >= 34) ?? 256;
-    const first = Math.max(0, Math.floor(left / barPx));
-    const last = Math.ceil((left + W) / barPx);
+    const map = tempoMap(project);
+    // Label spacing from the bar length where the view starts.
+    const every = [1, 2, 4, 8, 16, 32, 64, 128].find((n) => map.samplesPerBarAt(left / pps) * pps * n >= 34) ?? 256;
     ctx.textBaseline = "alphabetic";
-    for (let b = first; b <= last; b++) {
-      const x = Math.round(b * barPx - left) + 0.5;
+    for (const bar of map.bars(Math.max(0, left / pps), (left + W) / pps)) {
+      const b = bar.bar - 1;
+      const x = Math.round(bar.start * pps - left) + 0.5;
+      const barPx = (bar.end - bar.start) * pps;
+      const beatPx = barPx / bar.num;
+      const beatX = (k: number) => Math.round(map.sampleAt(bar.startQ + (k * 4) / bar.den) * pps - left + 0.5);
       if (b % every === 0) {
         ctx.fillStyle = theme.rulerTick;
         ctx.fillRect(x, CYCLE_STRIP + 1, 1, RULER - CYCLE_STRIP - 2);
@@ -413,8 +406,8 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       }
       if (beatPx < 10) continue;
       ctx.font = "10px Inter, 'SF Pro Text', system-ui, sans-serif";
-      for (let k = 1; k < project.sig_num; k++) {
-        const bx = Math.round(x + k * beatPx);
+      for (let k = 1; k < bar.num; k++) {
+        const bx = beatX(k);
         ctx.fillStyle = theme.rulerMinor;
         ctx.fillRect(bx, RULER - 5, 1, 4);
         if (beatPx >= 48) {
@@ -424,7 +417,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       }
       if (beatPx >= 48) {
         ctx.fillStyle = theme.rulerMinor;
-        for (let k = 1; k < project.sig_num * 4; k++) if (k % 4) ctx.fillRect(Math.round(x + (k * beatPx) / 4), RULER - 3, 1, 2);
+        for (let k = 1; k < bar.num * 4; k++) if (k % 4) ctx.fillRect(beatX(k / 4), RULER - 3, 1, 2);
       }
     }
   };
@@ -750,8 +743,10 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
     if (!getState().selectedRegions.includes(r.id)) setState({ selectedRegions: [r.id], focus: "regions" });
     const extra: MenuItem[] = [
       { label: "Select Whole Region", hint: "Double-click", onClick: () => ed.setEd({ sel: { track: track.id, start: r.start, end: r.start + r.length } }) },
-      { label: "Zoom to Region", hint: "Z", onClick: () => zoomTo(r.start, r.start + r.length) },
-      { label: "Split at Transients", hint: "⇧⌘T", disabled: r.content.type !== "audio", onClick: ed.splitAtTransients },
+      // Z zooms to the focused region (or the selection); this one may be another region, so
+      // no key is shown. Z still zooms back.
+      { label: "Zoom to Region", onClick: () => ed.zoomToSpan(r.start, r.start + r.length) },
+      { label: "Split at Transients", hint: fmt("Mod+Shift+T"), disabled: r.content.type !== "audio", onClick: ed.splitAtTransients },
       { separator: true },
     ];
     openMenu(
@@ -808,7 +803,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
             max={1}
             step={0.001}
             value={Math.log(amp) / Math.log(ed.MAX_AMP)}
-            title={`Waveform zoom ×${amp.toFixed(1)} (Alt-scroll, ⌘↑ / ⌘↓)`}
+            title={`Waveform zoom ×${amp.toFixed(1)} (${fmt("Alt")}-scroll, ${fmt("Mod+ArrowUp")} / ${fmt("Mod+ArrowDown")})`}
             onChange={(e) => ed.setAmp(Math.pow(ed.MAX_AMP, parseFloat(e.target.value)))}
             onDoubleClick={() => ed.setAmp(1)}
           />
@@ -824,7 +819,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
             max={1}
             step={0.001}
             value={zoomValue}
-            title="Horizontal zoom (⌘-scroll, ⌘← / ⌘→, Z)"
+            title={`Horizontal zoom (${fmt("Mod")}-scroll, ${fmt("Mod+ArrowLeft")} / ${fmt("Mod+ArrowRight")}, Z)`}
             onChange={(e) => setZoom(lo * Math.pow(hi / lo, parseFloat(e.target.value)))}
           />
         </div>
@@ -873,7 +868,7 @@ function InfoStrip({ project, track, region, sel }: { project: Project; track: T
             Start <b>{bbt(project, region.start)}</b>
           </span>
           <span>
-            Length <b>{lengthBbt(project, region.length)}</b> · {formatTime(project, region.length)}
+            Length <b>{lengthBbt(project, region.start, region.length)}</b> · {formatTime(project, region.length)}
           </span>
           {region.content.type === "audio" && (
             <span>
@@ -906,10 +901,12 @@ function GainField({ region }: { region: Region | null }) {
   const audio = region?.content.type === "audio" ? region.content : null;
   const db = audio?.gain_db ?? 0;
   const want = useRef<{ id: Id; db: number } | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
   const [send] = useState(() =>
     coalesced(() => {
       const w = want.current;
-      if (w) act("set_region_gain", { ids: [w.id], db: w.db, delta: null });
+      // Once the store has the value, the shown one is current again.
+      if (w) act("set_region_gain", { ids: [w.id], db: w.db, delta: null }).then(() => want.current === w && (want.current = null));
     }),
   );
   const set = (v: number) => {
@@ -917,8 +914,27 @@ function GainField({ region }: { region: Region | null }) {
     want.current = { id: region.id, db: Math.round(Math.min(30, Math.max(-96, v)) * 10) / 10 };
     send();
   };
+  // The wheel steps from the value last asked for, not the one shown: fast ticks arrive before
+  // the store catches up. A native listener, because React's wheel events are passive and
+  // can't stop the pane from scrolling.
+  const live = useRef({ region, db, set });
+  live.current = { region, db, set };
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const wheel = (e: WheelEvent) => {
+      const { region, db, set } = live.current;
+      if (region?.content.type !== "audio") return;
+      e.preventDefault();
+      const from = want.current?.id === region.id ? want.current.db : db;
+      set(from + (e.deltaY < 0 ? 0.5 : -0.5));
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, []);
   return (
     <div
+      ref={ref}
       className={"aed-gain" + (audio ? "" : " disabled")}
       title="Region gain: drag, scroll, or double-click for 0 dB"
       onMouseDown={(e) => {
@@ -940,7 +956,6 @@ function GainField({ region }: { region: Region | null }) {
         window.addEventListener("mouseup", up);
       }}
       onDoubleClick={() => set(0)}
-      onWheel={(e) => audio && set(db + (e.deltaY < 0 ? 0.5 : -0.5))}
     >
       {audio ? `${formatDb(db)} dB` : "—"}
     </div>

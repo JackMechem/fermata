@@ -18,7 +18,8 @@ import {
   type RenderOptions,
 } from "../bounce";
 import { getState, setState, useStore } from "../store";
-import { formatTime, samplesPerBar } from "../time";
+import { formatTime } from "../time";
+import { tempoMap } from "../tempo";
 import { Sheet } from "./Dialogs";
 import { NumberField, Select } from "./Form";
 
@@ -33,7 +34,13 @@ function loadPref<T extends object>(key: string, fallback: T): T {
   }
 }
 
-const savePref = (key: string, v: unknown) => localStorage.setItem(key, JSON.stringify(v));
+function savePref(key: string, v: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    // Storage full or blocked: the settings are just not remembered; the bounce still runs.
+  }
+}
 
 /** Tracks render progress while `run` is busy; null when idle. */
 function useRender() {
@@ -100,9 +107,9 @@ export function BounceDialog() {
   const cycle = project.cycle;
   const hasCycle = cycle.end > cycle.start;
   const [range, setRange] = useState<RangeKind>(hasCycle && cycle.enabled ? "cycle" : "project");
-  const bar = samplesPerBar(project);
+  const map = tempoMap(project);
   const end = projectEnd(project);
-  const [custom, setCustom] = useState({ from: 1, to: Math.max(2, Math.ceil(end / bar) + 1) });
+  const [custom, setCustom] = useState({ from: 1, to: Math.max(2, Math.ceil(map.barPosition(end) - 1e-6) + 1) });
   const [targets, setTargets] = useState<Id[]>([]);
   const { progress, busy, run } = useRender();
   const region = regionId !== null ? project.tracks.flatMap((t) => t.regions).find((r) => r.id === regionId) : undefined;
@@ -117,7 +124,7 @@ export function BounceDialog() {
     : range === "cycle"
       ? [cycle.start, cycle.end]
       : range === "custom"
-        ? [Math.round((custom.from - 1) * bar), Math.round((custom.to - 1) * bar)]
+        ? [Math.round(map.barStart(custom.from)), Math.round(map.barStart(custom.to))]
         : [0, end];
   const empty = span[1] <= span[0];
   const set = (p: Partial<BouncePrefs>) => {
@@ -125,7 +132,7 @@ export function BounceDialog() {
     setPrefs(next);
     savePref(BOUNCE_PREFS, next);
   };
-  const barOf = (pos: number) => Math.round((pos / bar) * 100) / 100 + 1;
+  const barOf = (pos: number) => Math.round(map.barPosition(pos) * 100) / 100 + 1;
 
   const go = async () => {
     const options: RenderOptions = { start: span[0], end: span[1], ...prefs };

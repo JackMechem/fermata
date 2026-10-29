@@ -10,8 +10,11 @@ import { ProjectChooser } from "./components/ProjectChooser";
 import { ProjectSettingsSheet, RecoverySheet } from "./components/Settings";
 import { commandForEvent } from "./keymap";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
+import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
 import { EqEditor } from "./components/Eq";
+import { FxWindows } from "./components/fx/FxWindow";
+import { loadFxList } from "./fxHost";
 import { MusicalTyping } from "./components/MusicalTyping";
 import { MenuHost } from "./components/Menu";
 import { loadPaneSizes, Splitter } from "./components/Splitter";
@@ -28,6 +31,7 @@ import { installNativeDrop } from "./dnd";
 import { newAux } from "./routing";
 import { editorMenuCommand } from "./audioEdit";
 import { deleteSelectedPoints } from "./automation";
+import { deleteSelectedTempoEvent } from "./components/GlobalTracks";
 import { pianoRollMenu } from "./components/PianoRoll";
 import { exportSelectionMidi, importMidiDialog } from "./midiFiles";
 import { freezeTracks, unfreezeTracks } from "./freeze";
@@ -258,6 +262,9 @@ function handleMenu(id: string) {
     case "automation":
       setState({ showAutomation: !s.showAutomation });
       break;
+    case "global-tracks":
+      setState({ showGlobalTracks: !s.showGlobalTracks });
+      break;
     case "ui-larger":
       stepUiScale(1);
       break;
@@ -320,8 +327,8 @@ const KEY_ACTIONS: Record<string, () => void> = {
   paste: () => ops.pasteRegions(),
   "mute-regions": () => ops.toggleRegionMute(),
   "delete-regions": () => {
-    // Selected automation points go first, as in Logic.
-    if (deleteSelectedPoints()) return;
+    // Selected automation points (or a tempo change) go first, as in Logic.
+    if (deleteSelectedPoints() || deleteSelectedTempoEvent()) return;
     if (getState().selectedRegions.length) ops.deleteRegions();
   },
   "set-locators": () => ops.setLocatorsByRegions(),
@@ -329,6 +336,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "show-hidden": () => ops.toggleShowHidden(),
   "hide-tracks": () => ops.hideTracks(),
   automation: () => handleMenu("automation"),
+  "global-tracks": () => handleMenu("global-tracks"),
   "nudge-left": () => nudgeRegions(-1),
   "nudge-right": () => nudgeRegions(1),
   "project-settings": () => handleMenu("project-settings"),
@@ -345,7 +353,9 @@ const KEY_ACTIONS: Record<string, () => void> = {
 function nudgeRegions(dir: number) {
   const s = getState();
   if (!s.snap || !s.selectedRegions.length) return;
-  act("nudge_regions", { ids: s.selectedRegions, delta: Math.round(dir * nudgeSamples(s.snap.project)) });
+  // A bar or beat as long as it is where the selection starts.
+  const at = Math.min(...s.snap.project.tracks.flatMap((t) => t.regions.filter((r) => s.selectedRegions.includes(r.id)).map((r) => r.start)));
+  act("nudge_regions", { ids: s.selectedRegions, delta: Math.round(dir * nudgeSamples(s.snap.project, Number.isFinite(at) ? at : 0)) });
 }
 
 function onKey(e: KeyboardEvent) {
@@ -424,6 +434,7 @@ export default function App() {
     dialog: useStore((s) => s.dialog),
   };
   useHeightPersistence();
+  useAppearancePersistence();
   const showTyping = useStore((s) => s.showTyping);
   const groupSheet = useStore((s) => s.groupSheet);
   const showMarkerList = useStore((s) => s.showMarkerList);
@@ -432,6 +443,7 @@ export default function App() {
   useEffect(() => {
     act("get_state").then(async (snap) => {
       await loadSettings();
+      restoreAppearance();
       // Launched without a project: recover lost work, or open the last project or the Project
       // Chooser, as Settings › General says.
       if (snap && !snap.saved && snap.project.tracks.length === 0) await runStartup();
@@ -450,6 +462,7 @@ export default function App() {
       });
     });
     call<PluginDesc[]>("list_plugins").then((p) => p && setState({ plugins: p }));
+    loadFxList();
     const offs = [
       listen<Tick>("tick", (e) => pushTick(e.payload)),
       listen<Snapshot>("project", (e) => setState({ snap: e.payload })),
@@ -511,6 +524,7 @@ export default function App() {
       {groupSheet !== null && <GroupSheet />}
       {showMarkerList && <MarkerList />}
       <EqEditor />
+      <FxWindows />
       {showTyping && <MusicalTyping />}
       <MenuHost />
       <Toast />

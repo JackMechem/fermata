@@ -4,10 +4,14 @@
 import { useSyncExternalStore } from "react";
 import { act, actMade, call, type Id, type Region, type Track } from "./api";
 import type { MenuItem } from "./components/Menu";
+import { fmt } from "./keymap";
 import { framePos, onFrame } from "./frame";
 import { undoRedo } from "./files";
 import * as ops from "./ops";
 import { currentTick, getState, setState } from "./store";
+import { regionsIn, subRegion } from "./audioRange";
+
+export { regionsIn };
 
 /** A time range on a track, in timeline frames (start < end). */
 export interface RangeSel {
@@ -94,11 +98,6 @@ export function clearSel() {
   if (st.sel) setEd({ sel: null });
 }
 
-/** Regions of `t` that overlap [a, b). */
-export function regionsIn(t: Track, a: number, b: number): Region[] {
-  return t.regions.filter((r) => r.start < b && r.start + r.length > a);
-}
-
 function focusRegion(): Region | undefined {
   const t = edTrack();
   return t?.regions.find((r) => r.id === view?.region);
@@ -119,25 +118,6 @@ export async function rangeEdit(action: RangeAction) {
   }
   const made = await actMade("edit_range", { ids, start: Math.round(sel.start), end: Math.round(sel.end), action });
   if (made) setState({ selectedRegions: made, focus: "regions" });
-}
-
-/** The part of `r` between `a` and `b` as a region of its own (for the clipboard). Fades stay
- *  only on the region's own ends, as the engine's range edits do. */
-function subRegion(r: Region, a: number, b: number): Region {
-  const rs = r.start;
-  const re = r.start + r.length;
-  const s = Math.round(Math.max(a, rs));
-  const e = Math.round(Math.min(b, re));
-  const length = Math.max(1, e - s);
-  const cut = s - rs;
-  if (r.content.type !== "audio") {
-    const notes = r.content.notes.filter((n) => n.start >= cut && n.start < cut + length).map((n) => ({ ...n, start: n.start - cut }));
-    return { ...r, start: s, length, loop_end: null, content: { type: "midi", notes } };
-  }
-  const c = r.content;
-  const fadeIn = s > rs ? 0 : Math.min(c.fade_in, length);
-  const fadeOut = e < re ? 0 : Math.min(c.fade_out, length - fadeIn);
-  return { ...r, start: s, length, loop_end: null, content: { ...c, offset: c.offset + cut, fade_in: fadeIn, fade_out: fadeOut } };
 }
 
 /** Puts the selected part of each region under the selection on the clipboard. */
@@ -178,7 +158,8 @@ function watchStop() {
       return;
     }
     const pos = framePos(now);
-    if (pos < s.start - 4800) return done(); // located elsewhere
+    // Located elsewhere: well before the selection (a tenth of a second, at any sample rate).
+    if (pos < s.start - (project()?.sample_rate ?? 48000) / 10) return done();
     if (pos >= s.end) {
       done();
       act("stop").then(() => call("locate", { pos: s.start }));
@@ -302,8 +283,14 @@ export function toggleZoom() {
   if (sel) span = [sel.start, sel.end];
   else if (r) span = [r.start, r.start + r.length];
   else if (t?.regions.length) span = [Math.min(...t.regions.map((x) => x.start)), Math.max(...t.regions.map((x) => x.start + x.length))];
-  if (!span) return;
-  view.zoomTo(span[0], span[1]);
+  if (span) zoomToSpan(span[0], span[1]);
+}
+
+/** Zooms to timeline `a..b`, remembering the view so Z goes back to it. */
+export function zoomToSpan(a: number, b: number) {
+  if (!view) return;
+  const now = view.saveView();
+  view.zoomTo(a, b);
   zoomBack = { ...now, to: view.saveView() };
 }
 
@@ -324,17 +311,17 @@ const SENSITIVITIES: [string, number][] = [
 export function functionsMenu(): MenuItem[] {
   const none = !rangeSel();
   return [
-    { label: "Split at Selection", hint: "⌘T", disabled: none, onClick: () => rangeEdit("split") },
-    { label: "Split at Transients", hint: "⇧⌘T", onClick: splitAtTransients },
-    { label: "Trim Region to Selection", hint: "⌥T", disabled: none, onClick: () => rangeEdit("trim") },
+    { label: "Split at Selection", hint: fmt("Mod+T"), disabled: none, onClick: () => rangeEdit("split") },
+    { label: "Split at Transients", hint: fmt("Mod+Shift+T"), onClick: splitAtTransients },
+    { label: "Trim Region to Selection", hint: fmt("Alt+T"), disabled: none, onClick: () => rangeEdit("trim") },
     { separator: true },
-    { label: "Silence Selection", hint: "⌥⌫", disabled: none, onClick: () => rangeEdit("silence") },
-    { label: "Delete Selection", hint: "⌫", disabled: none, onClick: () => rangeEdit("delete") },
+    { label: "Silence Selection", hint: fmt("Alt+Backspace"), disabled: none, onClick: () => rangeEdit("silence") },
+    { label: "Delete Selection", hint: fmt("Backspace"), disabled: none, onClick: () => rangeEdit("delete") },
     { separator: true },
-    { label: "Normalize Selection", hint: "⌥N", disabled: none, onClick: () => rangeEdit("normalize") },
-    { label: "Reverse Selection", hint: "⌥R", disabled: none, onClick: () => rangeEdit("reverse") },
-    { label: "Fade In to Selection", hint: "⌥I", disabled: none, onClick: () => rangeEdit("fade_in") },
-    { label: "Fade Out to Selection", hint: "⌥O", disabled: none, onClick: () => rangeEdit("fade_out") },
+    { label: "Normalize Selection", hint: fmt("Alt+N"), disabled: none, onClick: () => rangeEdit("normalize") },
+    { label: "Reverse Selection", hint: fmt("Alt+R"), disabled: none, onClick: () => rangeEdit("reverse") },
+    { label: "Fade In to Selection", hint: fmt("Alt+I"), disabled: none, onClick: () => rangeEdit("fade_in") },
+    { label: "Fade Out to Selection", hint: fmt("Alt+O"), disabled: none, onClick: () => rangeEdit("fade_out") },
   ];
 }
 
@@ -344,14 +331,14 @@ export function editMenu(): MenuItem[] {
   const sel = rangeSel();
   const r = focusRegion();
   return [
-    { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: "⌘Z", disabled: !snap?.undo, onClick: () => undoRedo("undo") },
-    { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: "⇧⌘Z", disabled: !snap?.redo, onClick: () => undoRedo("redo") },
+    { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: fmt("Mod+Z"), disabled: !snap?.undo, onClick: () => undoRedo("undo") },
+    { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: fmt("Mod+Shift+Z"), disabled: !snap?.redo, onClick: () => undoRedo("redo") },
     { separator: true },
-    { label: "Cut Selection", hint: "⌘X", disabled: !sel, onClick: cutSelection },
-    { label: "Copy Selection", hint: "⌘C", disabled: !sel, onClick: copySelection },
-    { label: "Paste at Playhead", hint: "⌘V", disabled: !getState().clipboard.length, onClick: () => ops.pasteRegions() },
+    { label: "Cut Selection", hint: fmt("Mod+X"), disabled: !sel, onClick: cutSelection },
+    { label: "Copy Selection", hint: fmt("Mod+C"), disabled: !sel, onClick: copySelection },
+    { label: "Paste at Playhead", hint: fmt("Mod+V"), disabled: !getState().clipboard.length, onClick: () => ops.pasteRegions() },
     { separator: true },
-    { label: "Play Selection", hint: "⇧Space", disabled: !sel, onClick: playSelection },
+    { label: "Play Selection", hint: fmt("Shift+Space"), disabled: !sel, onClick: playSelection },
     { label: "Set Locators by Selection", disabled: !sel, onClick: setLocatorsBySelection },
     { separator: true },
     { label: "Select Region", hint: "Double-click", disabled: !r, onClick: () => r && view && setEd({ sel: { track: view.track, start: r.start, end: r.start + r.length } }) },
@@ -362,12 +349,12 @@ export function editMenu(): MenuItem[] {
 /** The local View menu. */
 export function viewMenu(): MenuItem[] {
   return [
-    { label: "Zoom In", hint: "⌘→", onClick: () => view?.zoomBy(1.5) },
-    { label: "Zoom Out", hint: "⌘←", onClick: () => view?.zoomBy(1 / 1.5) },
+    { label: "Zoom In", hint: fmt("Mod+ArrowRight"), onClick: () => view?.zoomBy(1.5) },
+    { label: "Zoom Out", hint: fmt("Mod+ArrowLeft"), onClick: () => view?.zoomBy(1 / 1.5) },
     { label: rangeSel() ? "Zoom to Selection" : "Zoom to Region", hint: "Z", onClick: toggleZoom },
     { separator: true },
-    { label: "Waveform Zoom In", hint: "⌘↓", disabled: st.amp >= MAX_AMP, onClick: () => setAmp(st.amp * 2) },
-    { label: "Waveform Zoom Out", hint: "⌘↑", disabled: st.amp <= MIN_AMP, onClick: () => setAmp(st.amp / 2) },
+    { label: "Waveform Zoom In", hint: fmt("Mod+ArrowDown"), disabled: st.amp >= MAX_AMP, onClick: () => setAmp(st.amp * 2) },
+    { label: "Waveform Zoom Out", hint: fmt("Mod+ArrowUp"), disabled: st.amp <= MIN_AMP, onClick: () => setAmp(st.amp / 2) },
     { label: "Reset Waveform Zoom", disabled: st.amp === 1, onClick: () => setAmp(1) },
     { separator: true },
     { label: "Show Transients", checked: st.showTransients, onClick: () => setEd({ showTransients: !st.showTransients }) },
@@ -381,10 +368,10 @@ export function viewMenu(): MenuItem[] {
 /** Right-clicking inside the selection. */
 export function selectionMenu(): MenuItem[] {
   return [
-    { label: "Play Selection", hint: "⇧Space", onClick: playSelection },
+    { label: "Play Selection", hint: fmt("Shift+Space"), onClick: playSelection },
     { separator: true },
-    { label: "Cut", hint: "⌘X", onClick: cutSelection },
-    { label: "Copy", hint: "⌘C", onClick: copySelection },
+    { label: "Cut", hint: fmt("Mod+X"), onClick: cutSelection },
+    { label: "Copy", hint: fmt("Mod+C"), onClick: copySelection },
     { separator: true },
     ...functionsMenu(),
     { separator: true },

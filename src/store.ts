@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { AutoParam, Id, PluginDesc, Region, Snapshot, Tick } from "./api";
+import type { FxInfo } from "./fx";
 import type { DropTarget } from "./dnd";
 import type { WaveStyle } from "./waveform";
 
@@ -65,6 +66,16 @@ export interface State {
   openFolders: Id[];
   /** The Marker List sheet. */
   showMarkerList: boolean;
+  /** The Tempo and Signature global tracks above the tracks (G). */
+  showGlobalTracks: boolean;
+  /** Height of the Tempo lane. */
+  tempoLaneH: number;
+  /** Tempo edits move MIDI regions to keep their bars and beats (the Tempo lane's menu). */
+  moveMidiWithTempo: boolean;
+  /** The built-in effects (`list_builtin_effects`). */
+  fxList: FxInfo[];
+  /** Built-in effect instances whose panel windows are open, the frontmost last. */
+  fxPanels: Id[];
 }
 
 let state: State = {
@@ -100,6 +111,11 @@ let state: State = {
   autoLane: {},
   openFolders: [],
   showMarkerList: false,
+  showGlobalTracks: false,
+  tempoLaneH: 56,
+  moveMidiWithTempo: false,
+  fxList: [],
+  fxPanels: [],
 };
 
 const listeners = new Set<() => void>();
@@ -132,6 +148,7 @@ let meterMap = new Map<Id, [number, number]>();
 const tickListeners = new Set<(t: Tick) => void>();
 
 export function pushTick(t: Tick) {
+  if (t.warning) setState({ toast: { text: t.warning, at: Date.now(), ms: 8000 } });
   lastTick = t;
   lastArrival = performance.now();
   seq++;

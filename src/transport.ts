@@ -1,15 +1,16 @@
 import { act } from "./api";
 import { currentTick, getState } from "./store";
-import { samplesPerBar } from "./time";
+import { barFloor, barsFrom } from "./time";
+import { tempoMap } from "./tempo";
 
 export const transport = {
   nudgeBars(n: number) {
     const p = getState().snap?.project;
     if (!p) return;
-    const bar = samplesPerBar(p);
-    const pos = currentTick()?.pos ?? 0;
-    const cur = n < 0 ? Math.ceil(pos / bar - 0.001) : Math.floor(pos / bar + 0.001);
-    act("locate", { pos: Math.max(0, Math.round((cur + n) * bar)) });
+    const m = tempoMap(p);
+    const at = m.barPosition(currentTick()?.pos ?? 0);
+    const cur = n < 0 ? Math.ceil(at - 0.001) : Math.floor(at + 0.001);
+    act("locate", { pos: Math.max(0, Math.round(m.barStart(cur + n + 1))) });
   },
   toggleCycle() {
     const p = getState().snap?.project;
@@ -19,9 +20,8 @@ export const transport = {
       act("set_cycle", { enabled: !c.enabled, start: c.start, end: c.end });
     } else {
       // No locators yet: cycle the four bars from the playhead's bar, as Logic does.
-      const bar = samplesPerBar(p);
-      const start = Math.floor((currentTick()?.pos ?? 0) / bar) * bar;
-      act("set_cycle", { enabled: true, start: Math.round(start), end: Math.round(start + 4 * bar) });
+      const pos = currentTick()?.pos ?? 0;
+      act("set_cycle", { enabled: true, start: Math.round(barFloor(p, pos)), end: Math.round(barsFrom(p, pos, 4)) });
     }
   },
   toStart() {
@@ -37,10 +37,10 @@ export const transport = {
       act("set_punch", { enabled: !r.enabled, start: r.start, end: r.end });
       return;
     }
-    const bar = samplesPerBar(p);
     const c = p.cycle;
-    const start = c.end > c.start ? c.start : Math.floor((currentTick()?.pos ?? 0) / bar) * bar;
-    const end = c.end > c.start ? c.end : start + 2 * bar;
+    const pos = currentTick()?.pos ?? 0;
+    const start = c.end > c.start ? c.start : barFloor(p, pos);
+    const end = c.end > c.start ? c.end : barsFrom(p, pos, 2);
     act("set_punch", { enabled: true, start: Math.round(start), end: Math.round(end) });
   },
 };

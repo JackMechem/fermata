@@ -1,0 +1,91 @@
+# Changelog
+
+All notable changes to Fermata are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Fermata uses
+[semantic versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.0-alpha.1] - 2026-10-29
+
+The first prerelease. Everything below is new.
+
+### Added
+
+- **Recording:** audio from any input, mono or stereo per track, with live waveforms and
+  latency compensation from the measured round trip plus a manual Recording Delay; MIDI with
+  controllers, pitch bend and aftertouch; count-in and pre-roll; cycle recording into take
+  folders; Autopunch; on top, new track or replace for overlapping recordings.
+- **Take folders and comping:** Quick Swipe Comping with crossfaded boundaries; Flatten,
+  Flatten and Merge, Pack and Unpack.
+- **Tracks area:** move, trim, split, join, loop, fade, gain, reverse, colour, copy, paste,
+  repeat, nudge and Alt-drag copy; rubber-band selection; Smart snap; a click without a drag
+  moves the playhead (Settings › Editing › Click Moves Playhead).
+- **Tracks:** audio, instrument and aux tracks; folder and summing stacks; groups; hidden
+  tracks; Track Freeze.
+- **Tempo and markers:** Tempo and Signature global tracks with tempo changes, linear ramps and
+  signature changes, followed by the grid, click, quantize, plug-ins and MIDI files; Move MIDI
+  Regions with Tempo; a Marker track and Marker List.
+- **Editors:** Piano Roll with eight tools, Time Quantize with strength and swing, scale
+  quantize, humanize and a velocity/controller lane; Audio Track Editor with range edits,
+  normalize, fades to selection and Split at Transients; Standard MIDI File import and export.
+- **Mixing:** channel strips with an eight-band Channel EQ and analyzer, eight Audio FX slots,
+  eight pre- or post-fader sends, aux buses and output routing; plug-in delay compensation on
+  every path, with Low Latency Mode.
+- **Automation:** volume, pan, mute, send levels and plug-in parameters, in Off, Read, Touch,
+  Latch and Write modes.
+- **Plug-ins:** VST3 instruments and effects, scanned out of process with a scan report;
+  Fermata Synth; copy and paste of plug-ins (VST3 state included) and Channel EQ settings from
+  the right-click menus; dragging plug-ins between Audio FX slots to reorder them, move them to
+  another strip, or copy them with Alt.
+- **Built-in effects:** Compressor (Platinum Digital, Studio VCA, Studio FET, Classic Opto and
+  Vintage Vari-Mu circuits), Limiter, Noise Gate, De-Esser, Reverb, Delay, Tuner and Loudness
+  Meter, with their own panels, automation, side-chain input from any track (Compressor, Noise
+  Gate, De-Esser), latency reported to delay compensation, and freeze support.
+- **Presets:** factory and user presets for every built-in effect and the Channel EQ. User
+  presets are files in the config folder's `presets/` and are shared by every project.
+- **Bounce and export:** offline Bounce of the project or a section, Export All Tracks, Export
+  Region, Bounce in Place; 16-bit dithered, 24-bit or 32-bit float WAV.
+- **Projects:** `.fermata` folders with readable `project.json`; Project Chooser with templates;
+  autosave and crash recovery; undo for every edit (100 steps by default).
+- **Interface:** Logic Pro 11's layout; five themes; interface scaling from 90 to 200 %; four
+  waveform styles; rebindable key commands, shown the way each platform writes them; Musical
+  Typing.
+- **Real-time safety:** wait-free `rtrb` queues between the session and the audio thread; a
+  panic in the engine silences one block instead of crashing; every plug-in's output is
+  checked, NaNs are silenced, runaway levels are clamped, and a message names the plug-in.
+- **Denormals:** the audio thread runs with flush-to-zero (and denormals-are-zero on x86_64),
+  so decaying signals no longer slow DSP down about a hundredfold.
+- **Overload protection:** when callbacks run late back to back for 60 ms, the engine outputs
+  silence for 250 ms without processing, stops playback or recording, and shows "System
+  overload…". Before, the kernel killed the app (SIGXCPU, `RLIMIT_RTTIME`). Offline renders are
+  exempt.
+- **Tuner:** gates on its DC-blocked level, so an interface's DC offset doesn't run the
+  detector.
+- **About Fermata** in the Fermata menu, with the version.
+- **Platforms and packaging:** Linux x86_64 and aarch64 (AppImage, .deb, .rpm) and a Nix
+  flake, Windows (NSIS installer, x64) and macOS (.dmg for Apple Silicon and Intel), built and
+  published by GitHub Actions; CI on all three; `scripts/set-version.sh` sets the version
+  everywhere.
+
+### Known issues
+
+- VST3 editor windows open only on Linux (X11, through XWayland on Wayland). On Windows and
+  macOS plug-ins load, play and can be automated, but show no editor.
+- Windows and macOS builds are early and less tested. Only the system's default audio driver is
+  available there (WASAPI, Core Audio; no ASIO).
+- The builds are unsigned: macOS needs right-click › Open (or `xattr -cr`), Windows
+  SmartScreen needs More info › Run anyway.
+- Automation lanes of a plug-in dragged to another track stay on the old track and no longer
+  drive it.
+- No crossfades, fade curve shapes, drag modes (X-Fade, Shuffle) or Marquee tool.
+- Regions stay at fixed sample positions when the tempo changes; only MIDI can follow (Move MIDI
+  Regions with Tempo).
+- A built-in effect's side-chain key is always post-fader; VST3 side-chain buses are not
+  connected.
+- AAC/M4A imports can start about 40 ms late (encoder delay not fully trimmed).
+- The `takes_check` headless check "autopunch trims the take" fails about one run in five,
+  from the null audio device's timing.
+
+[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.1...HEAD
+[0.1.0-alpha.1]: https://github.com/JackMechem/fermata/releases/tag/v0.1.0-alpha.1

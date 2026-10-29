@@ -47,6 +47,8 @@ struct Pass {
     points: Vec<AutoPoint>,
     /// The latest live value.
     value: f32,
+    /// The control is held (a touch began). Touch passes without one are discrete changes.
+    held: bool,
 }
 
 impl Session {
@@ -58,7 +60,7 @@ impl Session {
             AutoParam::Pan => Some(t.pan),
             AutoParam::Mute => Some(t.mute as u8 as f32),
             AutoParam::Send(slot) => t.sends.get(*slot as usize).copied().flatten().map(|s| s.level_db),
-            AutoParam::Plugin { uid, param, .. } => self.controllers.get(uid).and_then(|c| c.param_value(*param)).map(|v| v as f32),
+            AutoParam::Plugin { uid, param, .. } => self.controllers.get(uid).and_then(|c| c.param_value(*param)).map(|v| v as f32).or_else(|| self.builtin_normalized(*uid, *param)),
         }
     }
 
@@ -73,8 +75,9 @@ impl Session {
                 return;
             }
             AutoParam::Plugin { uid, param, .. } => {
-                if let Some(c) = self.controllers.get(uid) {
-                    c.set_param_value(*param, v as f64);
+                match self.controllers.get(uid) {
+                    Some(c) => c.set_param_value(*param, v as f64),
+                    None => self.set_builtin_normalized(*uid, *param, v),
                 }
                 return;
             }
@@ -92,6 +95,7 @@ impl Session {
         if let Some(t) = self.project.track(track) {
             let lanes = lanes_dsp(&t.automation);
             self.send(Cmd::Automation(track, lanes));
+            self.resync_builtins(track);
         }
     }
 
@@ -117,7 +121,7 @@ impl Session {
         if mode != AutoMode::Write {
             self.send(Cmd::AutoTouch { track, target: AutoTarget::from(param), on: true });
         }
-        self.auto.passes.push(Pass { track, param: param.clone(), mode, before, done: Vec::new(), start: pos, points: vec![AutoPoint { pos, value }], value });
+        self.auto.passes.push(Pass { track, param: param.clone(), mode, before, done: Vec::new(), start: pos, points: vec![AutoPoint { pos, value }], value, held: false });
         Some(self.auto.passes.len() - 1)
     }
 
@@ -186,6 +190,18 @@ impl Session {
             if let Some(v) = self.live_value(track, &param) {
                 self.sample_pass(i, v);
             }
+            self.release_unheld(i);
+        }
+    }
+
+    /// In Touch, a change that came without a touch (a click on Mute, the M key) writes its
+    /// point and lets go straight away, rather than writing on until Stop as Latch would.
+    fn release_unheld(&mut self, i: usize) {
+        let p = &self.auto.passes[i];
+        if p.mode == AutoMode::Touch && !p.held {
+            let pass = self.auto.passes.remove(i);
+            let end = self.position();
+            self.commit(vec![pass], end);
         }
     }
 
@@ -202,6 +218,7 @@ impl Session {
             if let Some(v) = self.live_value(track, &param) {
                 self.sample_pass(i, v);
             }
+            self.release_unheld(i);
         }
     }
 
@@ -240,6 +257,7 @@ impl Session {
             }
         }
         if let Some(i) = self.begin_pass(track, param, pos, None) {
+            self.auto.passes[i].held = true;
             if let Some(v) = self.live_value(track, param) {
                 self.sample_pass(i, v);
             }
@@ -264,7 +282,8 @@ impl Session {
         }
         let mut params = vec![AutoParam::Volume, AutoParam::Pan];
         for l in &t.automation {
-            if !params.iter().any(|p| p.same(&l.param)) && !matches!(l.param, AutoParam::Send(_)) {
+            // Send lanes too (an empty send slot has no value, so begin_pass skips it).
+            if !params.iter().any(|p| p.same(&l.param)) {
                 params.push(l.param.clone());
             }
         }
@@ -369,7 +388,8 @@ impl Session {
         if let Some(l) = self.project.track(track).and_then(|t| t.automation.iter().find(|l| l.param.same(&probe))) {
             return l.param.clone();
         }
-        let name = self.controllers.get(&uid).and_then(|c| c.parameters().into_iter().find(|p| p.id == param)).map(|p| p.name).unwrap_or_else(|| format!("Parameter {param}"));
+        let name = self.controllers.get(&uid).and_then(|c| c.parameters().into_iter().find(|p| p.id == param)).map(|p| p.name);
+        let name = name.or_else(|| self.builtin_param_name(uid, param)).unwrap_or_else(|| format!("Parameter {param}"));
         AutoParam::Plugin { uid, param, name }
     }
 
@@ -505,7 +525,26 @@ impl Session {
 
     /// A plug-in instance's automatable parameters (none for the built-in synth).
     pub fn plugin_params(&self, uid: Id) -> Vec<ParamInfo> {
+        if let Some(p) = self.builtin_param_infos(uid) {
+            return p;
+        }
         self.controllers.get(&uid).map(|c| c.parameters()).unwrap_or_default()
+    }
+
+    /// A built-in effect's control moved (from `before`, normalized); recorded like a send
+    /// knob while writing.
+    pub(super) fn auto_plugin_moved(&mut self, track: Id, uid: Id, param: u32, before: f32) {
+        if !self.is_playing() {
+            return;
+        }
+        let p = self.plugin_param(track, uid, param);
+        let pos = self.position();
+        if let Some(i) = self.begin_pass(track, &p, pos, Some(before)) {
+            if let Some(v) = self.live_value(track, &p) {
+                self.sample_pass(i, v);
+            }
+            self.release_unheld(i);
+        }
     }
 
     /// Whether moving the track's controls now records automation (playing in Touch, Latch or

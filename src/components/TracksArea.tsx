@@ -11,6 +11,8 @@ import { TrackHeaders } from "./TrackHeaders";
 import { importAudioDialog, undoRedo } from "../files";
 import { isLooped } from "../loops";
 import { exportSelectionMidi, importMidiDialog } from "../midiFiles";
+import { fmt, keyHint } from "../keymap";
+import { GlobalTracks, globalTracksHeight } from "./GlobalTracks";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 
@@ -19,23 +21,23 @@ export function editMenu(): MenuItem[] {
   const snap = getState().snap;
   const regs = snap?.project.tracks.flatMap((t) => t.regions).filter((r) => sel.includes(r.id)) ?? [];
   return [
-    { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: "⌘Z", disabled: !snap?.undo, onClick: () => undoRedo("undo") },
-    { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: "⇧⌘Z", disabled: !snap?.redo, onClick: () => undoRedo("redo") },
+    { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: fmt("Mod+Z"), disabled: !snap?.undo, onClick: () => undoRedo("undo") },
+    { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: fmt("Mod+Shift+Z"), disabled: !snap?.redo, onClick: () => undoRedo("redo") },
     { separator: true },
-    { label: "Cut", hint: "⌘X", disabled: !sel.length, onClick: () => ops.cutRegions() },
-    { label: "Copy", hint: "⌘C", disabled: !sel.length, onClick: () => ops.copyRegions() },
-    { label: "Paste", hint: "⌘V", disabled: !getState().clipboard.length, onClick: () => ops.pasteRegions() },
-    { label: "Duplicate", hint: "⌘D", onClick: ops.duplicate },
+    { label: "Cut", hint: keyHint("cut"), disabled: !sel.length, onClick: () => ops.cutRegions() },
+    { label: "Copy", hint: keyHint("copy"), disabled: !sel.length, onClick: () => ops.copyRegions() },
+    { label: "Paste", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => ops.pasteRegions() },
+    { label: "Duplicate", hint: fmt("Mod+D"), onClick: ops.duplicate },
     { label: "Repeat", disabled: !sel.length, children: [1, 2, 3, 4, 8, 16].map((n) => ({ label: n === 1 ? "Once" : `${n} Times`, onClick: () => ops.repeatRegions(n) })) },
     { separator: true },
-    { label: "Split Regions at Playhead", hint: "⌘T", onClick: () => ops.splitAtPlayhead() },
-    { label: "Join Regions", hint: "⌘J", disabled: sel.length < 2, onClick: () => ops.joinRegions() },
-    { label: "Loop Regions", hint: "L", disabled: !sel.length, checked: regs.length > 0 && regs.every(isLooped), onClick: () => ops.toggleLoop() },
+    { label: "Split Regions at Playhead", hint: fmt("Mod+T"), onClick: () => ops.splitAtPlayhead() },
+    { label: "Join Regions", hint: fmt("Mod+J"), disabled: sel.length < 2, onClick: () => ops.joinRegions() },
+    { label: "Loop Regions", hint: keyHint("loop"), disabled: !sel.length, checked: regs.length > 0 && regs.every(isLooped), onClick: () => ops.toggleLoop() },
     { label: "Convert Loops to Real Copies", disabled: !regs.some(isLooped), onClick: () => ops.convertLoops() },
-    { label: "Set Locators by Regions", hint: "U", disabled: !sel.length, onClick: () => ops.setLocatorsByRegions() },
+    { label: "Set Locators by Regions", hint: keyHint("set-locators"), disabled: !sel.length, onClick: () => ops.setLocatorsByRegions() },
     { separator: true },
-    { label: "Select All", hint: "⌘A", onClick: ops.selectAllRegions },
-    { label: "Delete", hint: "⌫", disabled: !sel.length, onClick: () => ops.deleteRegions() },
+    { label: "Select All", hint: fmt("Mod+A"), onClick: ops.selectAllRegions },
+    { label: "Delete", hint: keyHint("delete-regions"), disabled: !sel.length, onClick: () => ops.deleteRegions() },
   ];
 }
 
@@ -46,45 +48,47 @@ export function TracksArea() {
   const trackHeight = useStore((s) => s.trackHeight);
   const headerW = useStore((s) => s.paneSizes.headers);
   const showHidden = useStore((s) => s.showHidden);
+  const globalH = useStore(globalTracksHeight);
   // Menus read the rest of the state when they open.
   const s = { ...getState(), pxPerBeat, catchPlayhead, snapMode, trackHeight };
   const zoom = Math.log(s.pxPerBeat / 2) / Math.log(200);
 
   const functionsMenu = (): MenuItem[] => [
-    { label: "New Tracks…", hint: "⌥⌘N", onClick: () => setState({ dialog: "new-tracks" }) },
+    { label: "New Tracks…", hint: fmt("Mod+Alt+N"), onClick: () => setState({ dialog: "new-tracks" }) },
     { label: "Duplicate Track", onClick: () => ops.duplicateTracks(true) },
     { label: "New Track with Same Settings", onClick: () => ops.duplicateTracks(false) },
     { separator: true },
-    { label: "Create Folder Stack", hint: "⇧⌘D", onClick: () => ops.createStack(false) },
+    { label: "Create Folder Stack", hint: fmt("Mod+Shift+D"), onClick: () => ops.createStack(false) },
     { label: "Create Summing Stack", onClick: () => ops.createStack(true) },
-    { label: "Group Selected Tracks", hint: "⌘G", onClick: () => ops.groupTracks() },
+    { label: "Group Selected Tracks", hint: fmt("Mod+G"), onClick: () => ops.groupTracks() },
     { separator: true },
-    { label: "Import Audio File…", hint: "⇧⌘I", onClick: importAudioDialog },
+    { label: "Import Audio File…", hint: fmt("Mod+Shift+I"), onClick: importAudioDialog },
     { label: "Import MIDI File…", onClick: importMidiDialog },
     { label: "Export Selection as MIDI File…", onClick: exportSelectionMidi },
     { separator: true },
-    { label: "Hide Track", hint: "⌃H", onClick: () => ops.hideTracks() },
+    { label: "Hide Track", hint: keyHint("hide-tracks"), onClick: () => ops.hideTracks() },
     { label: "Unhide All Tracks", disabled: !getState().snap?.project.tracks.some((t) => t.hidden), onClick: ops.unhideAllTracks },
     { separator: true },
-    { label: "Delete Track", hint: "⌘⌫", onClick: () => ops.deleteTracks() },
+    { label: "Delete Track", hint: fmt("Mod+Backspace"), onClick: () => ops.deleteTracks() },
     { label: "Delete Unused Tracks", onClick: ops.deleteUnusedTracks },
   ];
   const viewMenu = (): MenuItem[] => {
     const s = getState();
     return [
-    { label: "Inspector", hint: "I", checked: s.showInspector, onClick: () => setState({ showInspector: !s.showInspector }) },
-    { label: "Library", hint: "Y", checked: s.showLibrary, onClick: () => setState({ showLibrary: !s.showLibrary }) },
-    { label: "Mixer", hint: "X", checked: s.bottom === "mixer", onClick: () => setState({ bottom: s.bottom === "mixer" ? "none" : "mixer" }) },
-    { label: "Browsers", hint: "F", checked: s.showBrowser, onClick: () => setState({ showBrowser: !s.showBrowser }) },
-    { label: "Show Automation", hint: "A", checked: s.showAutomation, onClick: () => setState({ showAutomation: !s.showAutomation }) },
+    { label: "Inspector", hint: keyHint("inspector"), checked: s.showInspector, onClick: () => setState({ showInspector: !s.showInspector }) },
+    { label: "Library", hint: keyHint("library"), checked: s.showLibrary, onClick: () => setState({ showLibrary: !s.showLibrary }) },
+    { label: "Mixer", hint: keyHint("mixer"), checked: s.bottom === "mixer", onClick: () => setState({ bottom: s.bottom === "mixer" ? "none" : "mixer" }) },
+    { label: "Browsers", hint: keyHint("browser"), checked: s.showBrowser, onClick: () => setState({ showBrowser: !s.showBrowser }) },
+    { label: "Show Automation", hint: keyHint("automation"), checked: s.showAutomation, onClick: () => setState({ showAutomation: !s.showAutomation }) },
+    { label: "Show Global Tracks", hint: keyHint("global-tracks"), checked: s.showGlobalTracks, onClick: () => setState({ showGlobalTracks: !s.showGlobalTracks }) },
     { separator: true },
-    { label: "Show Hidden Tracks", hint: "H", checked: s.showHidden, onClick: ops.toggleShowHidden },
+    { label: "Show Hidden Tracks", hint: keyHint("show-hidden"), checked: s.showHidden, onClick: ops.toggleShowHidden },
     { separator: true },
-    { label: "Zoom In", hint: "⌘→", onClick: () => setState({ pxPerBeat: Math.min(400, s.pxPerBeat * 1.4) }) },
-    { label: "Zoom Out", hint: "⌘←", onClick: () => setState({ pxPerBeat: Math.max(2, s.pxPerBeat / 1.4) }) },
+    { label: "Zoom In", hint: keyHint("zoom-in"), onClick: () => setState({ pxPerBeat: Math.min(400, s.pxPerBeat * 1.4) }) },
+    { label: "Zoom Out", hint: keyHint("zoom-out"), onClick: () => setState({ pxPerBeat: Math.max(2, s.pxPerBeat / 1.4) }) },
     { separator: true },
-    { label: "Taller Tracks", hint: "⌘↓", onClick: () => zoomTracks(1.2) },
-    { label: "Shorter Tracks", hint: "⌘↑", onClick: () => zoomTracks(1 / 1.2) },
+    { label: "Taller Tracks", hint: keyHint("taller-tracks"), onClick: () => zoomTracks(1.2) },
+    { label: "Shorter Tracks", hint: keyHint("shorter-tracks"), onClick: () => zoomTracks(1 / 1.2) },
     {
       label: "Track Height",
       children: [
@@ -149,7 +153,7 @@ export function TracksArea() {
             max={MAX_TRACK_H}
             step={1}
             value={s.trackHeight}
-            title="Track height (Alt-scroll, ⌘↑ / ⌘↓)"
+            title={`Track height (${fmt("Alt")}-scroll, ${keyHint("shorter-tracks")} / ${keyHint("taller-tracks")})`}
             onChange={(e) => setState({ trackHeight: parseInt(e.target.value), trackHeights: {} })}
           />
           <span className="lb-label" title="Horizontal zoom">
@@ -164,22 +168,23 @@ export function TracksArea() {
             max={1}
             step={0.001}
             value={zoom}
-            title="Horizontal zoom (⌘← / ⌘→)"
+            title={`Horizontal zoom (${keyHint("zoom-out")} / ${keyHint("zoom-in")})`}
             onChange={(e) => setState({ pxPerBeat: 2 * Math.pow(200, parseFloat(e.target.value)) })}
           />
         </div>
       </div>
-      <div className="tracks-body" style={{ gridTemplateColumns: `${headerW}px 1fr`, gridTemplateRows: `${RULER_H}px 1fr` }}>
+      <div className="tracks-body" style={{ gridTemplateColumns: `${headerW}px 1fr`, gridTemplateRows: globalH ? `${RULER_H}px ${globalH}px 1fr` : `${RULER_H}px 1fr` }}>
         <div className="headers-top">
-          <button className="add-track" title="New Tracks (⌥⌘N)" onClick={() => setState({ dialog: "new-tracks" })}>
+          <button className="add-track" title={`New Tracks (${fmt("Mod+Alt+N")})`} onClick={() => setState({ dialog: "new-tracks" })}>
             <Icon.plus />
           </button>
-          <button className={"hide-mode" + (showHidden ? " on" : "")} title="Show Hidden Tracks (H)" onClick={ops.toggleShowHidden}>
+          <button className={"hide-mode" + (showHidden ? " on" : "")} title={`Show Hidden Tracks (${keyHint("show-hidden")})`} onClick={ops.toggleShowHidden}>
             H
           </button>
           <span className="global-label">Marker</span>
         </div>
         <Ruler />
+        {globalH > 0 && <GlobalTracks />}
         <div className="headers-cell">
           <TrackHeaders />
           <Splitter pane="headers" dir="x" sign={1} />

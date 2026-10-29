@@ -80,6 +80,15 @@ export function stepVisible(l: Layout, index: number, d: number): number {
   return i;
 }
 
+/** The signed number of tracks with height passed going from `from` to `to`: how far a
+ *  vertical drag went in visible steps, to apply with `stepVisible`. */
+export function visibleSteps(l: Layout, from: number, to: number): number {
+  const dir = Math.sign(to - from);
+  let n = 0;
+  for (let k = from + dir; dir && k !== to + dir; k += dir) if (l.heights[k] > 0) n += dir;
+  return n;
+}
+
 export function clampHeight(h: number): number {
   return Math.round(Math.min(MAX_TRACK_H, Math.max(MIN_TRACK_H, h)));
 }

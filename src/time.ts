@@ -1,33 +1,50 @@
 import type { Project } from "./api";
+import { tempoMap, type Bbt } from "./tempo";
 
 export const PEAK_BUCKET = 256;
 
+/** Samples per beat at the tempo and signature at position 0: the horizontal scale of the
+ *  editors (pixels per beat). Grids, snapping and bars go through the tempo map instead. */
 export function samplesPerBeat(p: Project): number {
   return ((p.sample_rate * 60) / p.tempo) * (4 / p.sig_den);
 }
 
+/** Samples per bar at position 0 (see `samplesPerBeat`). */
 export function samplesPerBar(p: Project): number {
   return samplesPerBeat(p) * p.sig_num;
 }
 
-export interface Bbt {
-  bar: number;
-  beat: number;
-  div: number;
-  tick: number;
-}
+export type { Bbt };
 
 /** Position in bars/beats/divisions(16ths)/ticks, 1-based like Logic's LCD. */
 export function toBbt(p: Project, pos: number): Bbt {
-  const spb = samplesPerBeat(p);
-  const beats = pos / spb;
-  const bar = Math.floor(beats / p.sig_num);
-  const inBar = beats - bar * p.sig_num;
-  const beat = Math.floor(inBar);
-  const frac = inBar - beat;
-  const div = Math.floor(frac * 4);
-  const tick = Math.floor((frac * 4 - div) * 240);
-  return { bar: bar + 1, beat: beat + 1, div: div + 1, tick: tick + 1 };
+  return tempoMap(p).bbtAt(pos);
+}
+
+/** The bar line at or before `pos`. */
+export function barFloor(p: Project, pos: number): number {
+  const m = tempoMap(p);
+  return m.barStart(m.barAt(pos));
+}
+
+/** The bar line `n` bars after the bar holding `pos` (n may be negative). */
+export function barsFrom(p: Project, pos: number, n: number): number {
+  const m = tempoMap(p);
+  return m.barStart(m.barAt(pos) + n);
+}
+
+/** A length starting at `start`, in bars, beats, divisions and ticks (0-based, Logic's
+ *  length display), counted through the tempo map. */
+export function lengthBbt(p: Project, start: number, len: number): Bbt {
+  const m = tempoMap(p);
+  const [num, den] = m.sigAt(start);
+  const beats = ((m.beatsAt(start + len) - m.beatsAt(start)) * den) / 4;
+  const bar = Math.floor(beats / num + 1e-9);
+  const rest = Math.max(0, beats - bar * num);
+  const beat = Math.floor(rest + 1e-9);
+  const div = Math.floor((rest - beat) * 4 + 1e-9);
+  const tick = Math.round(((rest - beat) * 4 - div) * 240);
+  return { bar, beat, div, tick };
 }
 
 export function formatTime(p: Project, pos: number): string {
@@ -39,15 +56,18 @@ export function formatTime(p: Project, pos: number): string {
 
 export function snapPos(p: Project, pos: number, mode: string, pxPerBeat: number): number {
   if (mode === "off") return Math.round(pos);
-  const spb = samplesPerBeat(p);
-  let grid: number;
-  if (mode === "bar") grid = spb * p.sig_num;
-  else if (mode === "beat") grid = spb;
+  const m = tempoMap(p);
+  const [num, den] = m.sigAt(pos);
+  const beat = 4 / den;
+  let step: number;
+  if (mode === "bar") step = beat * num;
+  else if (mode === "beat") step = beat;
   else {
     // Smart: follow the visible grid resolution.
-    grid = pxPerBeat > 60 ? spb / 4 : pxPerBeat > 14 ? spb : spb * p.sig_num;
+    step = pxPerBeat > 60 ? beat / 4 : pxPerBeat > 14 ? beat : beat * num;
   }
-  return Math.round(pos / grid) * grid;
+  // Counted from the bar line, so the grid follows tempo and signature changes.
+  return m.sampleAt(m.snapQ(m.beatsAt(pos), step));
 }
 
 export function dbToFader(db: number): number {

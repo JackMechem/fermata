@@ -114,6 +114,12 @@ impl Session {
             return Err(anyhow!("Nothing to bounce: the range is empty"));
         }
         let engine = self.engine.clone();
+        // A built-in effect's lookahead may have just changed: let the engine apply it, so
+        // the render's delay compensation is up to date.
+        engine.lock().process(&[], 0, &mut [], 0);
+        if self.builtin_latency_changed() {
+            self.update_pdc();
+        }
         let audio = engine.lock().render(from, to, tail, isolate, progress);
         Ok(audio)
     }
@@ -132,7 +138,8 @@ impl Session {
             }
             tracks.push((d, heard));
         }
-        Isolate { tracks, tap, fader, effects }
+        let keys = self.key_sources(&tracks.iter().map(|t| t.0).collect::<Vec<_>>());
+        Isolate { tracks, tap, fader, effects, keys }
     }
 
     /// The span covered by a track's unmuted regions and its subtracks'.

@@ -47,7 +47,7 @@ export function PdcSettings() {
           <input type="checkbox" checked={lat.low_latency} onChange={(e) => setLatency({ low_latency: e.target.checked })} />
           On, limit
         </label>
-        <NumberField value={lat.low_latency_limit_ms} step={0.5} min={0} max={100} width={60} onChange={(v) => setLatency({ low_latency_limit_ms: v })} />
+        <NumberField value={lat.low_latency_limit_ms} step={0.5} resolution={0.1} min={0} max={100} width={60} onChange={(v) => setLatency({ low_latency_limit_ms: v })} />
         <span className="dim">ms</span>
       </div>
       <span />

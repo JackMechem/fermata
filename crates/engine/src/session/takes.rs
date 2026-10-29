@@ -60,7 +60,7 @@ impl Session {
             cycle,
             punch: self.project.punch.range(),
             latency: self.record_latency_frames(),
-            min_take: self.project.samples_per_beat().round() as i64,
+            min_take: self.tempo_map().samples_per_beat_at(punch as f64).round() as i64,
         };
         let Some(capture) = plan.capture(punch) else {
             return Err(anyhow!(if cycle.is_some() { "The Autopunch range is outside the cycle" } else { "The playhead is past the punch-out point" }));

@@ -1,5 +1,19 @@
 import { BUILTIN_SYNTH, type PluginDesc } from "./api";
 import type { MenuItem } from "./components/Menu";
+import type { FxInfo } from "./fx";
+import { getState } from "./store";
+
+/** The built-in effects as menu items, one submenu per category (Dynamics, Reverb, ...). */
+export function builtinFxItems(list: FxInfo[], pick: (id: string) => void, current?: string): MenuItem[] {
+  const cats = new Map<string, FxInfo[]>();
+  for (const f of list) {
+    if (!cats.has(f.category)) cats.set(f.category, []);
+    cats.get(f.category)!.push(f);
+  }
+  return [...cats.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([cat, fs]) => ({ label: cat, children: fs.sort((a, b) => a.name.localeCompare(b.name)).map((f) => ({ label: f.name, checked: f.id === current, onClick: () => pick(f.id) })) }));
+}
 
 function category(p: PluginDesc): string {
   const parts = p.subcategories.split("|").filter((s) => s && s !== "Fx" && s !== "Instrument" && s !== "Mono" && s !== "Stereo");
@@ -38,6 +52,8 @@ export function pluginMenu(
   if (opts.instrument) {
     items.push({ label: "Fermata Synth", checked: opts.current === BUILTIN_SYNTH, onClick: () => opts.pick(BUILTIN_SYNTH) });
     items.push({ separator: true });
+  } else if (getState().fxList.length) {
+    items.push({ label: "Fermata", header: true }, ...builtinFxItems(getState().fxList, opts.pick, opts.current), { separator: true });
   }
   const cats = new Map<string, PluginDesc[]>();
   for (const p of pool) {

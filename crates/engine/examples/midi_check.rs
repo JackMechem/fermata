@@ -21,7 +21,11 @@ fn level(s: &mut Session, id: u64) -> f32 {
     t.meters.iter().find(|m| m.0 == id).map(|m| m.1.max(m.2)).unwrap_or(-1.0)
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
 }
 
@@ -130,5 +134,16 @@ fn main() {
     let close = |a: &[(i64, u8)], b: &[(i64, u8)]| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| (x.0 - y.0).abs() <= 2 && x.1 == y.1);
     check(&format!("imported notes land where they were ({} notes)", inn.len()), close(&abs(st, &en), &abs(ist, &inn)));
     check("imported controllers", icc.len() == ec.len());
+
+    // A looped region exports every pass, as it plays.
+    let (st, len, en, _) = midi(&s, joined);
+    s.set_region_loop(joined, Some(st + 2 * len));
+    let looped = scratch.join("looped.mid");
+    s.export_midi(&[joined], &looped).unwrap();
+    let made = s.import_midi(&looped, None, 0, None).unwrap();
+    let (_, _, ln, _) = midi(&s, made[0]);
+    let once = en.iter().filter(|n| !n.muted && n.start >= 0 && n.start < len).count();
+    check(&format!("a loop exports both passes ({} of {} notes)", ln.len(), 2 * once), once > 0 && ln.len() == 2 * once);
     println!("tracks: {:?}", s.project.tracks.iter().map(|t| (t.name.clone(), t.regions.len())).collect::<Vec<_>>());
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

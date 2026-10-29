@@ -2,6 +2,7 @@ import { ask, open, save } from "@tauri-apps/plugin-dialog";
 import { act, call, type Snapshot } from "./api";
 import { getSettings, openProjectPath } from "./prefs";
 import { currentTick, getState, setState } from "./store";
+import { AUDIO_EXTENSIONS } from "./dnd";
 
 /** Asks before discarding unsaved changes. Resolves true when it is fine to continue. */
 export async function confirmDiscard(action: string): Promise<boolean> {
@@ -58,7 +59,7 @@ export async function importAudioDialog() {
     setState({ toast: { text: "Create or select an audio track first", at: Date.now() } });
     return;
   }
-  const file = await open({ title: "Import Audio File", filters: [{ name: "WAV audio", extensions: ["wav", "wave"] }] });
+  const file = await open({ title: "Import Audio File", filters: [{ name: "Audio files", extensions: AUDIO_EXTENSIONS }] });
   if (typeof file === "string") {
     await act("import_audio", { path: file, track: track.id, start: currentTick()?.pos ?? 0 });
   }

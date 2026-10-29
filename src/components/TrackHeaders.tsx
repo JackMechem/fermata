@@ -11,6 +11,7 @@ import { automatable, useAutomation, VOLUME } from "../automation";
 import { AutomationControls } from "./AutomationHeader";
 import { canFreeze, toggleFreeze } from "../freeze";
 import { takeRowsHeight } from "../takes";
+import { fmt } from "../keymap";
 
 const INDENT = 12;
 
@@ -211,7 +212,7 @@ function Header({
       </div>
       <div
         className="th-resize"
-        title="Drag to resize · Alt-drag resizes all tracks · double-click to reset"
+        title={`Drag to resize · ${fmt("Alt")}-drag resizes all tracks · double-click to reset`}
         onMouseDown={startResize}
         onDoubleClick={(e) => {
           e.stopPropagation();
@@ -305,7 +306,7 @@ export function TrackHeaders() {
       onContextMenu={(e) => {
         if (e.target !== e.currentTarget && !(e.target as HTMLElement).classList.contains("headers-inner")) return;
         e.preventDefault();
-        openMenu(e.clientX, e.clientY, [{ label: "New Tracks…", hint: "⌥⌘N", onClick: () => setState({ dialog: "new-tracks" }) }]);
+        openMenu(e.clientX, e.clientY, [{ label: "New Tracks…", hint: fmt("Mod+Alt+N"), onClick: () => setState({ dialog: "new-tracks" }) }]);
       }}
     >
       <div ref={inner} className="headers-inner">
@@ -336,7 +337,7 @@ export function TrackHeaders() {
             <button className="big-add" onClick={() => setState({ dialog: "new-tracks" })}>
               New Track…
             </button>
-            <span className="dim">⌥⌘N</span>
+            <span className="dim">{fmt("Mod+Alt+N")}</span>
           </div>
         )}
       </div>

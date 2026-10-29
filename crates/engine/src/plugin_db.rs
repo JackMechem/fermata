@@ -60,6 +60,19 @@ fn scan_one(exe: &Path, bundle: &Path) -> Result<Vec<PluginDescriptor>, String> 
         .stderr(Stdio::piped())
         .spawn();
     let mut child = child.map_err(|e| format!("could not start the scanner: {e}"))?;
+    // Both pipes are read while the child runs: a chatty plug-in would otherwise fill one,
+    // block, and look like a hang.
+    let drain = |pipe: Option<Box<dyn Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            if let Some(mut p) = pipe {
+                let _ = p.read_to_string(&mut text);
+            }
+            text
+        })
+    };
+    let out_reader = drain(child.stdout.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
+    let err_reader = drain(child.stderr.take().map(|p| Box::new(p) as Box<dyn Read + Send>));
     let deadline = Instant::now() + Duration::from_secs(20);
     let status = loop {
         match child.try_wait() {
@@ -67,24 +80,24 @@ fn scan_one(exe: &Path, bundle: &Path) -> Result<Vec<PluginDescriptor>, String> 
             Ok(None) if Instant::now() > deadline => {
                 log::warn!("plugin scan timed out: {}", bundle.display());
                 let _ = child.kill();
+                // Reap it, which also closes its pipes so the reader threads finish.
+                let _ = child.wait();
                 return Err("timed out after 20 s".into());
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(20)),
-            Err(e) => return Err(e.to_string()),
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(e.to_string());
+            }
         }
     };
-    let mut out = String::new();
-    if let Some(mut s) = child.stdout.take() {
-        let _ = s.read_to_string(&mut out);
-    }
+    let out = out_reader.join().unwrap_or_default();
     // Plugins sometimes print to stdout themselves; the JSON is the last line.
     if let Some(list) = out.lines().rev().find_map(|l| serde_json::from_str::<Vec<PluginDescriptor>>(l).ok()) {
         return if list.is_empty() { Err("no plug-ins in the bundle".into()) } else { Ok(list) };
     }
-    let mut err = String::new();
-    if let Some(mut s) = child.stderr.take() {
-        let _ = s.read_to_string(&mut err);
-    }
+    let err = err_reader.join().unwrap_or_default();
     let detail = err.lines().rev().find(|l| !l.trim().is_empty()).map(|l| l.trim().to_string());
     Err(match (status.code(), detail) {
         (_, Some(d)) => d,

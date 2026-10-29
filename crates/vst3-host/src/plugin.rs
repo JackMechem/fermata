@@ -399,12 +399,13 @@ impl PluginProcessor {
 
             let mut ctx: ProcessContext = std::mem::zeroed();
             use ProcessContext_::StatesAndFlags_::*;
-            ctx.state = kTempoValid | kTimeSigValid | kProjectTimeMusicValid | kBarPositionValid;
+            // C enums are i32 in the MSVC bindings and u32 elsewhere; `as _` fits both.
+            ctx.state = (kTempoValid | kTimeSigValid | kProjectTimeMusicValid | kBarPositionValid) as _;
             if t.playing {
-                ctx.state |= kPlaying;
+                ctx.state |= kPlaying as u32;
             }
             if t.recording {
-                ctx.state |= kRecording;
+                ctx.state |= kRecording as u32;
             }
             ctx.sampleRate = t.sample_rate;
             ctx.projectTimeSamples = t.position_samples;
@@ -414,7 +415,7 @@ impl PluginProcessor {
             ctx.timeSigNumerator = t.sig_num;
             ctx.timeSigDenominator = t.sig_den;
             if let Some((a, b)) = t.cycle {
-                ctx.state |= kCycleValid | kCycleActive;
+                ctx.state |= (kCycleValid | kCycleActive) as u32;
                 ctx.cycleStartMusic = a;
                 ctx.cycleEndMusic = b;
             }

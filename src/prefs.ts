@@ -2,8 +2,8 @@
 // src-tauri/src/settings.rs, plus the launch sequence and crash recovery they drive.
 import { useSyncExternalStore } from "react";
 import { act, call, type BitDepth, type ClickSettings, type PluginDesc, type Project, type RecentProject, type Snapshot } from "./api";
-import { setState, type Snap } from "./store";
-import { samplesPerBar, samplesPerBeat } from "./time";
+import { getState, setState, type Snap } from "./store";
+import { tempoMap } from "./tempo";
 
 export type AudioOverlap = "on_top" | "new_track" | "replace";
 export type MidiOverlap = "new_region" | "merge";
@@ -12,6 +12,7 @@ export type VelocityCurve = "linear" | "soft" | "hard" | "fixed";
 export type Startup = "chooser" | "last_project" | "empty_project";
 export type Nudge = "bar" | "beat" | "8" | "16" | "32" | "ms10" | "ms1";
 export type PdcMode = "all" | "off";
+export type ClickLocates = "anywhere" | "empty" | "off";
 
 /** Session behaviour (crates/engine/src/prefs.rs). */
 export interface Prefs {
@@ -40,6 +41,12 @@ export interface UiPrefs {
   nudge: Nudge;
   /** Key command overrides: command id -> keys (an empty list removes the default). */
   keymap: Record<string, string[]>;
+  /** Settings › Appearance (see appearance.ts); null until first saved. */
+  theme?: string | null;
+  ui_scale?: number | null;
+  wave_style?: string | null;
+  /** Settings › Editing: what a click in the tracks area does to the playhead. */
+  click_locates?: ClickLocates;
 }
 
 export interface PluginPrefs {
@@ -126,15 +133,16 @@ export async function refreshPlugins() {
   if (p) setState({ plugins: p });
 }
 
-/** The Nudge step in samples for the current project. */
-export function nudgeSamples(p: Project): number {
+/** The Nudge step in samples for the current project, at the tempo and signature at `pos`. */
+export function nudgeSamples(p: Project, pos = 0): number {
   const n = settings.ui.nudge;
-  if (n === "bar") return samplesPerBar(p);
-  if (n === "beat") return samplesPerBeat(p);
+  const m = tempoMap(p);
+  if (n === "bar") return m.samplesPerBarAt(pos);
+  if (n === "beat") return m.samplesPerBeatAt(pos);
   if (n === "ms10") return p.sample_rate / 100;
   if (n === "ms1") return p.sample_rate / 1000;
   // Note values: 8 = eighth note, relative to a quarter.
-  return ((p.sample_rate * 60) / p.tempo) * (4 / Number(n));
+  return m.samplesPerQuarterAt(pos) * (4 / Number(n));
 }
 
 // ---- launch and crash recovery ------------------------------------------------------------
@@ -149,6 +157,8 @@ export interface Recovery {
 
 let recoveries: Recovery[] = [];
 let recoveryAtLaunch = false;
+/** Projects whose recovery was put off ("Later") during this launch: not offered again. */
+let putOff: string[] = [];
 const recoveryListeners = new Set<() => void>();
 
 export function useRecoveries(): Recovery[] {
@@ -174,6 +184,7 @@ function showRecovery(list: Recovery[], atLaunch: boolean) {
  */
 export function recoveryDone(opened: boolean) {
   const atLaunch = recoveryAtLaunch;
+  if (atLaunch && !opened) putOff = [...putOff, ...recoveries.map((r) => r.path)];
   recoveries = [];
   recoveryAtLaunch = false;
   recoveryListeners.forEach((l) => l());
@@ -195,8 +206,14 @@ export async function runStartup(checkRecovery = true) {
   if (startup === "empty_project") return;
   const recent = await call<RecentProject[]>("recent_projects");
   const last = recent?.find((p) => p.exists);
-  if (startup === "last_project" && last) {
+  if (startup === "last_project" && last && !putOff.includes(last.path)) {
     if (await openProjectPath(last.path)) return;
+    // It has newer autosaved changes, so the recovery sheet is up instead. Leave it there; if
+    // it's closed without opening anything, startup carries on with the Chooser.
+    if (getState().dialog === "recovery") {
+      recoveryAtLaunch = true;
+      return;
+    }
   }
   setState({ dialog: "chooser", chooserTab: last ? "recent" : "new" });
 }

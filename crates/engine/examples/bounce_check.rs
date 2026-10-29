@@ -8,7 +8,11 @@ use daw_engine::model::{InputSel, Note, Region, RegionContent, TrackKind};
 use daw_engine::session::{BipOptions, BipSource, BitDepth, RenderOptions, TrackPatch};
 use daw_engine::Session;
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
 }
 
@@ -273,4 +277,5 @@ fn main() {
         }
         None => println!("SKIP no ZamCompX2 in the plug-in cache"),
     }
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

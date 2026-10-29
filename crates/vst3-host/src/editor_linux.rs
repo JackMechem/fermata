@@ -38,6 +38,21 @@ struct Window {
     conn: RustConnection,
     id: u32,
     size: Mutex<(u32, u32)>,
+    /// The view said it can be resized by the user; otherwise the WM hints pin its size.
+    resizable: bool,
+}
+
+impl Window {
+    /// WM_NORMAL_HINTS pinning a fixed-size editor to `w` x `h` (PMinSize | PMaxSize), plus
+    /// PPosition when `at` gives the position.
+    fn pin_size(&self, w: u32, h: u32, at: Option<(i16, i16)>) {
+        let (pos, x, y) = match at {
+            Some((x, y)) => (4, x as u32, y as u32),
+            None => (0, 0, 0),
+        };
+        let hints: [u32; 18] = [pos | 16 | 32, x, y, w, h, w, h, w, h, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let _ = self.conn.change_property32(PropMode::REPLACE, self.id, AtomEnum::WM_NORMAL_HINTS, AtomEnum::WM_SIZE_HINTS, &hints);
+    }
 }
 
 pub struct PlugFrame {
@@ -74,6 +89,11 @@ impl IPlugFrameTrait for PlugFrame {
         let r = *new_size;
         let (w, h) = ((r.right - r.left).max(1) as u32, (r.bottom - r.top).max(1) as u32);
         *self.window.size.lock() = (w, h);
+        // A fixed-size editor's hints hold it at its old size; move them along, or the WM
+        // refuses the new one.
+        if !self.window.resizable {
+            self.window.pin_size(w, h, None);
+        }
         let _ = self.window.conn.configure_window(self.window.id, &ConfigureWindowAux::new().width(w).height(h));
         let _ = self.window.conn.flush();
         if let Some(v) = ComRef::from_raw(view) {
@@ -211,17 +231,16 @@ impl Editor {
             let _ = conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_NAME, AtomEnum::STRING, title.as_bytes());
             let _ = conn.change_property8(PropMode::REPLACE, id, net_wm_name, utf8, title.as_bytes());
             let _ = conn.change_property8(PropMode::REPLACE, id, AtomEnum::WM_CLASS, AtomEnum::STRING, b"fermata-plugin\0Fermata\0");
-            {
-                // WM_NORMAL_HINTS: PPosition, plus PMinSize|PMaxSize for fixed-size editors.
-                let fixed = if resizable { 0 } else { 16 | 32 };
-                let (mw, mh) = if resizable { (0, 0) } else { (w as u32, h as u32) };
-                let hints: [u32; 18] = [4 | fixed, x as u32, y as u32, w as u32, h as u32, mw, mh, mw, mh, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-                let _ = conn.change_property32(PropMode::REPLACE, id, AtomEnum::WM_NORMAL_HINTS, AtomEnum::WM_SIZE_HINTS, &hints);
+            let window = Arc::new(Window { conn, id, size: Mutex::new((w as u32, h as u32)), resizable });
+            if resizable {
+                // WM_NORMAL_HINTS: just PPosition.
+                let hints: [u32; 18] = [4, x as u32, y as u32, w as u32, h as u32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+                let _ = window.conn.change_property32(PropMode::REPLACE, id, AtomEnum::WM_NORMAL_HINTS, AtomEnum::WM_SIZE_HINTS, &hints);
+            } else {
+                window.pin_size(w as u32, h as u32, Some((x, y)));
             }
-            conn.map_window(id).map_err(|e| e.to_string())?;
-            conn.flush().map_err(|e| e.to_string())?;
-
-            let window = Arc::new(Window { conn, id, size: Mutex::new((w as u32, h as u32)) });
+            window.conn.map_window(id).map_err(|e| e.to_string())?;
+            window.conn.flush().map_err(|e| e.to_string())?;
             let frame = ComWrapper::new(PlugFrame {
                 window: window.clone(),
                 view: Mutex::new(Some(view.clone())),
@@ -239,9 +258,13 @@ impl Editor {
             let closed = Arc::new(AtomicBool::new(false));
             let x_source = event_loop().map(|l| {
                 let (win, closed) = (window.clone(), closed.clone());
+                // A resizable view hears about the user's resizes from here too (onSize). It
+                // stays alive with this source, which `close` removes before the window goes;
+                // the callback can't run in between, as both are on the main thread.
+                let sized = resizable.then(|| view.clone());
                 let fd = window.conn.stream().as_raw_fd();
                 l.add_fd(fd, Box::new(move || {
-                    drain_events(&win, wm_delete, &closed, None);
+                    drain_events(&win, wm_delete, &closed, sized.as_ref());
                 }))
             });
 

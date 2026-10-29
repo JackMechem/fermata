@@ -16,7 +16,9 @@ export type DropTarget =
   | { kind: "new"; index: number; sample: number }
   | { kind: "headers"; index: number };
 
-const AUDIO_EXT = /\.(wav|wave|aif|aiff|aifc|flac|mp3|ogg|oga|m4a|mp4|aac|caf)$/i;
+/** What the engine can decode (crates/engine/src/decode.rs, AUDIO_EXTENSIONS). */
+export const AUDIO_EXTENSIONS = ["wav", "wave", "aif", "aiff", "aifc", "flac", "mp3", "ogg", "oga", "m4a", "mp4", "aac", "caf"];
+const AUDIO_EXT = new RegExp(`\\.(${AUDIO_EXTENSIONS.join("|")})$`, "i");
 
 export function isAudioPath(p: string): boolean {
   return AUDIO_EXT.test(p);
@@ -81,7 +83,7 @@ export async function performDrop(paths: string[], target: DropTarget | null) {
   const midi = paths.filter(isMidiPath);
   const skipped = paths.length - audio.length - midi.length;
   if (!audio.length && !midi.length) {
-    setState({ toast: { text: "Only audio files (WAV, AIFF, FLAC, MP3, OGG, M4A) and MIDI files can be dropped here", at: Date.now(), ms: 5000 } });
+    setState({ toast: { text: "Only audio files (WAV, AIFF, CAF, FLAC, MP3, OGG, M4A, MP4, AAC) and MIDI files can be dropped here", at: Date.now(), ms: 5000 } });
     return;
   }
   if (midi.length) {

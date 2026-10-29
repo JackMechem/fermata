@@ -24,7 +24,11 @@ fn level(s: &mut Session, a: i64, b: i64) -> f32 {
     t.master.0.max(t.master.1)
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
 }
 
@@ -113,4 +117,5 @@ fn main() {
 
     let _ = std::fs::remove_dir_all(&s.dir);
     let _ = std::fs::remove_file(&file);
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

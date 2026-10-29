@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::prefs::{BitDepth, ClickSettings};
+use crate::tempo::{SigEvent, TempoEvent};
 
 pub type Id = u64;
 
@@ -68,6 +69,14 @@ pub struct PluginSlot {
     /// Base64 plugin state. Only populated in saved files, never sent to the UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<String>,
+    /// A built-in effect's parameter values: (parameter id, value in its plain units). Ids
+    /// missing here play at their defaults.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub params: Vec<(u32, f32)>,
+    /// The track whose post-fader output keys a built-in effect's side-chain (None: the
+    /// effect's detector listens to its own input).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sidechain: Option<Id>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -629,6 +638,14 @@ pub struct Project {
     /// The Autopunch range.
     #[serde(default)]
     pub punch: Punch,
+    /// The Tempo track (see `tempo.rs`). Empty: `tempo` throughout. Otherwise the first
+    /// event is at 0 and `tempo` mirrors it.
+    #[serde(default)]
+    pub tempo_map: Vec<TempoEvent>,
+    /// The Signature track. Empty: `sig_num/sig_den` throughout. Otherwise the first change
+    /// is at bar 1 and `sig_num/sig_den` mirror it.
+    #[serde(default)]
+    pub signatures: Vec<SigEvent>,
 }
 
 pub const INSERT_SLOTS: usize = 8;
@@ -663,6 +680,8 @@ impl Project {
             notes: String::new(),
             markers: Vec::new(),
             punch: Punch::default(),
+            tempo_map: Vec::new(),
+            signatures: Vec::new(),
         }
     }
 
@@ -761,7 +780,7 @@ impl Project {
         let mut inputs: HashMap<Id, Vec<Id>> = HashMap::new();
         for &id in &base {
             let parent = self.track(id).and_then(|t| t.parent);
-            for dst in parent.into_iter().chain(self.feeds(id)) {
+            for dst in parent.into_iter().chain(self.feeds(id)).chain(self.keyed_by(id)) {
                 inputs.entry(dst).or_default().push(id);
             }
         }
@@ -807,6 +826,31 @@ impl Project {
             }
         }
         out
+    }
+
+    /// The tracks with an insert keyed (side-chained) by `id`.
+    pub fn keyed_by(&self, id: Id) -> Vec<Id> {
+        self.tracks.iter().filter(|t| t.id != id && t.inserts.iter().flatten().any(|s| s.sidechain == Some(id))).map(|t| t.id).collect()
+    }
+
+    /// Whether `to` must play after `from`: `from`'s audio reaches it, or keys a side-chain on
+    /// it or on anything it reaches. Edits that would make this true both ways are refused.
+    pub fn depends(&self, from: Id, to: Id) -> bool {
+        let mut stack = vec![from];
+        let mut seen: HashSet<Id> = HashSet::new();
+        while let Some(id) = stack.pop() {
+            if !seen.insert(id) {
+                continue;
+            }
+            let parent = self.track(id).and_then(|t| t.parent);
+            for d in parent.into_iter().chain(self.feeds(id)).chain(self.keyed_by(id)) {
+                if d == to {
+                    return true;
+                }
+                stack.push(d);
+            }
+        }
+        false
     }
 
     /// Whether `from`'s audio reaches `to`, through outputs, stacks and sends.
@@ -866,12 +910,37 @@ impl Project {
                 }
             }
         }
+        // Side-chains from tracks that are gone or carry no audio, and ones closing a loop. A
+        // frozen track's plug-ins can't change (and aren't loaded), so they are left alone.
+        let sources: HashSet<Id> = self.tracks.iter().filter(|t| t.kind != TrackKind::Folder).map(|t| t.id).collect();
+        for i in 0..self.tracks.len() {
+            if self.tracks[i].frozen.is_some() {
+                continue;
+            }
+            let id = self.tracks[i].id;
+            for k in 0..self.tracks[i].inserts.len() {
+                let Some(src) = self.tracks[i].inserts[k].as_ref().and_then(|s| s.sidechain) else { continue };
+                if src == id || !sources.contains(&src) || self.depends(id, src) {
+                    if let Some(s) = &mut self.tracks[i].inserts[k] {
+                        s.sidechain = None;
+                    }
+                }
+            }
+        }
+        for s in self.master.inserts.iter_mut().flatten() {
+            if s.sidechain.map(|src| !sources.contains(&src)).unwrap_or(false) {
+                s.sidechain = None;
+            }
+        }
     }
 
+    /// Samples per beat at the tempo and signature at position 0 (see `tempo::TempoMap` for
+    /// positions elsewhere).
     pub fn samples_per_beat(&self) -> f64 {
         self.sample_rate as f64 * 60.0 / self.tempo * (4.0 / self.sig_den as f64)
     }
 
+    /// Samples per bar at position 0.
     pub fn samples_per_bar(&self) -> f64 {
         self.samples_per_beat() * self.sig_num as f64
     }
@@ -1051,5 +1120,37 @@ mod routing_tests {
         assert!(t.sends.iter().all(|s| s.is_none()) && t.output.is_none() && t.sends.len() == SEND_SLOTS);
         // Loaded loops never hang the ordering.
         assert_eq!(p.process_order().len(), 3);
+    }
+
+    fn keyed(p: &mut Project, track: Id, source: Id) {
+        let slot = PluginSlot { uid: p.alloc_id(), plugin_id: "builtin:noise-gate".into(), name: "Noise Gate".into(), bypass: false, state: None, params: Vec::new(), sidechain: Some(source) };
+        p.track_mut(track).unwrap().inserts = vec![Some(slot)];
+    }
+
+    #[test]
+    fn side_chain_sources_play_first_and_loops_are_cut() {
+        let mut p = Project::new("t", 48000);
+        let bass = track(&mut p, TrackKind::Audio);
+        let kick = track(&mut p, TrackKind::Audio);
+        keyed(&mut p, bass, kick);
+        let order = p.process_order();
+        let pos = |id| order.iter().position(|&i| i == id).unwrap();
+        assert!(pos(kick) < pos(bass));
+        assert!(p.depends(kick, bass) && !p.depends(bass, kick));
+        // Audio reaching it doesn't make it a feed: soloing the kick doesn't solo the bass.
+        assert!(!p.reaches(kick, bass));
+        // Keying the kick from an aux the bass sends to would make a loop.
+        let aux = track(&mut p, TrackKind::Aux);
+        p.track_mut(bass).unwrap().sends[0] = send(aux);
+        keyed(&mut p, kick, aux);
+        p.prune_routes();
+        let key = |id: Id| p.track(id).unwrap().inserts[0].as_ref().unwrap().sidechain;
+        // One edge of the loop goes, and the ordering is sound again.
+        assert!(key(kick).is_none() != key(bass).is_none());
+        assert_eq!(p.process_order().len(), 3);
+        // A side-chain from a track that's gone goes too.
+        keyed(&mut p, aux, 999);
+        p.prune_routes();
+        assert_eq!(p.track(aux).unwrap().inserts[0].as_ref().unwrap().sidechain, None);
     }
 }

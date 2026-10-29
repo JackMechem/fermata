@@ -3,11 +3,12 @@ import { act } from "../api";
 import { Icon } from "../icons";
 import { getState, onTick, setState, useStore } from "../store";
 import { framePos, onFrame } from "../frame";
-import { formatTime, samplesPerBar, toBbt } from "../time";
+import { formatTime, toBbt } from "../time";
+import { fmtBpm, tempoMap } from "../tempo";
 import { HSlider } from "./Controls";
 import { openMenuAt, type MenuItem } from "./Menu";
 import { transport } from "../transport";
-import { keyHint } from "../keymap";
+import { fmt, keyHint } from "../keymap";
 
 const KEYS = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
 
@@ -19,12 +20,15 @@ function ViewButton({ on, title, onClick, children }: { on: boolean; title: stri
   );
 }
 
-/** Vertical drag on a number, like Logic's LCD fields. */
-function useScrub(onStep: (steps: number) => void, px = 6) {
+/** Vertical drag on a number, like Logic's LCD fields. `onStep` gets the steps since the
+ *  last call and the total since the mouse went down. */
+function useScrub(onStep: (steps: number, total: number) => void, px = 6) {
   return (e: React.MouseEvent) => {
-    if (e.detail > 1) return;
+    // A text field in the field (the tempo being typed) keeps the mouse for its caret.
+    if (e.detail > 1 || (e.target as HTMLElement).tagName === "INPUT") return;
     e.preventDefault();
     let acc = 0;
+    let total = 0;
     let last = e.clientY;
     const move = (ev: MouseEvent) => {
       acc += last - ev.clientY;
@@ -32,7 +36,8 @@ function useScrub(onStep: (steps: number) => void, px = 6) {
       const steps = Math.trunc(acc / px);
       if (steps !== 0) {
         acc -= steps * px;
-        onStep(steps);
+        total += steps;
+        onStep(steps, total);
       }
     };
     const up = () => {
@@ -62,7 +67,10 @@ function Lcd() {
         const pos = framePos(now);
         posRef.current = pos;
         const b = toBbt(p, pos);
-        const key = modeRef.current === "time" ? formatTime(p, pos) : `${b.bar}:${b.beat}`;
+        // The tempo and signature at the playhead follow it too (tempo changes and ramps).
+        const m = tempoMap(p);
+        const [num, den] = m.sigAt(pos);
+        const key = `${modeRef.current === "time" ? formatTime(p, pos) : `${b.bar}:${b.beat}`} ${fmtBpm(m.bpmAt(pos))} ${num}/${den}`;
         if (key !== shown.current) {
           shown.current = key;
           setPos(pos);
@@ -71,21 +79,37 @@ function Lcd() {
     [],
   );
   const scrubBar = useScrub((n) => {
-    if (!project) return;
-    const bar = samplesPerBar(project);
-    const cur = Math.floor(posRef.current / bar);
-    act("locate", { pos: Math.max(0, Math.round((cur + n) * bar)) });
+    const p = getState().snap?.project;
+    if (!p) return;
+    const m = tempoMap(p);
+    act("locate", { pos: Math.max(0, Math.round(m.barStart(m.barAt(posRef.current) + n))) });
   }, 8);
-  const scrubTempo = useScrub((n) => project && act("set_tempo", { bpm: Math.round(project.tempo) + n }), 3);
+  // The tempo in effect at the playhead (the project's when there are no changes). The drag
+  // counts from the tempo at mouse-down.
+  const moveMidi = () => getState().moveMidiWithTempo;
+  const tempoNow = (p: typeof project) => (p ? tempoMap(p).events[tempoMap(p).eventIndexAt(posRef.current)].bpm : 120);
+  const scrubTempo = useScrub((_, total) => project && act("set_tempo_at", { pos: Math.round(posRef.current), bpm: Math.round(tempoNow(project)) + total, moveMidi: moveMidi() }), 3);
+  const cancelTempo = useRef(false);
+  const commitTempo = (text: string) => {
+    setEditTempo(false);
+    const v = parseFloat(text);
+    if (!cancelTempo.current && v > 0 && project && v !== tempoNow(project)) act("set_tempo_at", { pos: Math.round(posRef.current), bpm: v, moveMidi: moveMidi() });
+    cancelTempo.current = false;
+  };
   if (!project) return <div className="lcd" />;
   const bbt = toBbt(project, pos);
+  const map = tempoMap(project);
+  const bpmHere = map.bpmAt(pos);
+  const [sigNum, sigDen] = map.sigAt(pos);
   const keyRoot = project.key.split(" ")[0];
   const keyMinor = project.key.includes("minor");
 
   const sigMenu = (e: React.MouseEvent) => {
     const items: MenuItem[] = [];
+    // The signature in effect at the playhead's bar.
+    const bar = map.barAt(posRef.current);
     for (const [n, d] of [[2, 4], [3, 4], [4, 4], [5, 4], [6, 8], [7, 8], [9, 8], [12, 8]] as const) {
-      items.push({ label: `${n}/${d}`, checked: project.sig_num === n && project.sig_den === d, onClick: () => act("set_signature", { num: n, den: d }) });
+      items.push({ label: `${n}/${d}`, checked: sigNum === n && sigDen === d, onClick: () => act("set_signature_at", { bar, num: n, den: d }) });
     }
     openMenuAt(e.currentTarget as HTMLElement, items);
   };
@@ -126,20 +150,20 @@ function Lcd() {
           <input
             className="lcd-input"
             autoFocus
-            defaultValue={project.tempo}
-            onBlur={() => setEditTempo(false)}
+            defaultValue={fmtBpm(tempoNow(project))}
+            // Clicking away keeps what was typed.
+            onBlur={(e) => commitTempo(e.currentTarget.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                const v = parseFloat((e.target as HTMLInputElement).value);
-                if (v > 0) act("set_tempo", { bpm: v });
-                setEditTempo(false);
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") {
+                cancelTempo.current = true;
+                e.currentTarget.blur();
               }
-              if (e.key === "Escape") setEditTempo(false);
               e.stopPropagation();
             }}
           />
         ) : (
-          <div className="lcd-digits">{Number.isInteger(project.tempo) ? project.tempo : project.tempo.toFixed(2)}</div>
+          <div className="lcd-digits">{Number.isInteger(Math.round(bpmHere * 100) / 100) ? Math.round(bpmHere) : bpmHere.toFixed(2)}</div>
         )}
         <div className="lcd-labels">
           <span>TEMPO</span>
@@ -148,7 +172,7 @@ function Lcd() {
       <div className="lcd-sep" />
       <div className="lcd-field lcd-stack">
         <div className="lcd-small" onMouseDown={sigMenu}>
-          {project.sig_num}/{project.sig_den}
+          {sigNum}/{sigDen}
         </div>
         <div className="lcd-small" onMouseDown={keyMenu}>
           {keyRoot}
@@ -181,10 +205,10 @@ function TransportButtons() {
       <button className="tp-btn" title="Stop" onClick={() => act("stop")}>
         <Icon.stop />
       </button>
-      <button className={"tp-btn play" + (t.playing && !t.recording ? " on" : "")} title="Play (Space)" onClick={() => act("play")}>
+      <button className={"tp-btn play" + (t.playing && !t.recording ? " on" : "")} title={`Play (${keyHint("play")})`} onClick={() => act("play")}>
         <Icon.play />
       </button>
-      <button className={"tp-btn rec" + (t.recording ? " on" : "")} title="Record (R)" onClick={() => act("record")}>
+      <button className={"tp-btn rec" + (t.recording ? " on" : "")} title={`Record (${keyHint("record")})`} onClick={() => act("record")}>
         <Icon.record />
       </button>
     </div>
@@ -221,16 +245,16 @@ export function ControlBar() {
   return (
     <div className="control-bar">
       <div className="cb-group">
-        <ViewButton on={s.showLibrary} title="Library (Y)" onClick={() => setState({ showLibrary: !s.showLibrary })}>
+        <ViewButton on={s.showLibrary} title={`Library (${keyHint("library")})`} onClick={() => setState({ showLibrary: !s.showLibrary })}>
           <Icon.library />
         </ViewButton>
-        <ViewButton on={s.showInspector} title="Inspector (I)" onClick={() => setState({ showInspector: !s.showInspector })}>
+        <ViewButton on={s.showInspector} title={`Inspector (${keyHint("inspector")})`} onClick={() => setState({ showInspector: !s.showInspector })}>
           <Icon.inspector />
         </ViewButton>
-        <ViewButton on={s.bottom === "mixer"} title="Mixer (X)" onClick={() => setState({ bottom: s.bottom === "mixer" ? "none" : "mixer" })}>
+        <ViewButton on={s.bottom === "mixer"} title={`Mixer (${keyHint("mixer")})`} onClick={() => setState({ bottom: s.bottom === "mixer" ? "none" : "mixer" })}>
           <Icon.mixer />
         </ViewButton>
-        <ViewButton on={s.bottom === "editor"} title="Editors (E)" onClick={() => setState({ bottom: s.bottom === "editor" ? "none" : "editor" })}>
+        <ViewButton on={s.bottom === "editor"} title={`Editors (${keyHint("editor")})`} onClick={() => setState({ bottom: s.bottom === "editor" ? "none" : "editor" })}>
           <Icon.editors />
         </ViewButton>
       </div>
@@ -239,7 +263,7 @@ export function ControlBar() {
         <TransportButtons />
         <Lcd />
         <div className="cb-modes">
-          <button className={"mode-btn cycle" + (p?.cycle.enabled ? " on" : "")} title="Cycle (C)" onClick={() => transport.toggleCycle()}>
+          <button className={"mode-btn cycle" + (p?.cycle.enabled ? " on" : "")} title={`Cycle (${keyHint("cycle")})`} onClick={() => transport.toggleCycle()}>
             <Icon.cycle />
           </button>
           <button className={"mode-btn punch" + (punchOn ? " on" : "")} title={`Autopunch (${keyHint("autopunch")})`} onClick={() => transport.togglePunch()}>
@@ -248,10 +272,10 @@ export function ControlBar() {
               <path d="M6.5 8h5" strokeWidth="2.6" />
             </svg>
           </button>
-          <button className={"mode-btn purple countin" + (p?.count_in ? " on" : "")} title="Count-in (Shift-K)" onClick={() => act("set_count_in", { on: !p?.count_in })}>
+          <button className={"mode-btn purple countin" + (p?.count_in ? " on" : "")} title={`Count-in (${keyHint("count-in")})`} onClick={() => act("set_count_in", { on: !p?.count_in })}>
             1234
           </button>
-          <button className={"mode-btn purple" + (p?.metronome ? " on" : "")} title="Metronome (K)" onClick={() => act("set_metronome", { on: !p?.metronome })}>
+          <button className={"mode-btn purple" + (p?.metronome ? " on" : "")} title={`Metronome (${keyHint("metronome")})`} onClick={() => act("set_metronome", { on: !p?.metronome })}>
             <Icon.metronome />
           </button>
         </div>
@@ -262,14 +286,14 @@ export function ControlBar() {
       </div>
 
       <div className="cb-group right">
-        <ViewButton on={showTyping} title="Musical Typing (⌘K)" onClick={() => setState({ showTyping: !showTyping })}>
+        <ViewButton on={showTyping} title={`Musical Typing (${fmt("Mod+K")})`} onClick={() => setState({ showTyping: !showTyping })}>
           <svg width="18" height="16" viewBox="0 0 18 16" fill="none" stroke="currentColor" strokeWidth="1.3">
             <rect x="1.5" y="3" width="15" height="10" rx="1.5" />
             <path d="M5 3v10M9 3v10M13 3v10" />
             <path d="M4 3v5.5h2V3M8 3v5.5h2V3M12 3v5.5h2V3" fill="currentColor" strokeWidth="0" />
           </svg>
         </ViewButton>
-        <ViewButton on={s.showBrowser} title="Browsers (F)" onClick={() => setState({ showBrowser: !s.showBrowser })}>
+        <ViewButton on={s.showBrowser} title={`Browsers (${keyHint("browser")})`} onClick={() => setState({ showBrowser: !s.showBrowser })}>
           <Icon.browser />
         </ViewButton>
       </div>

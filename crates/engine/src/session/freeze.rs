@@ -81,6 +81,8 @@ impl Session {
             let Some((from, to)) = span else { return Err(anyhow!("{} has no regions to freeze", t.name)) };
             let name = t.name.clone();
             let iso = self.isolate_track(id, false, true);
+            // Built-in reverbs and delays may ring longer than the usual tail.
+            let tail = tail.max((self.builtin_tail_secs(id).min(60.0) * sr).round() as i64);
             let mut audio = self.render(from, to, tail, Some(iso), &mut |f| progress((k as f64 + f) / n))?;
             // Keep the ringing tail, not the silence after it.
             let keep = (to - from) as usize;
@@ -170,6 +172,7 @@ impl Session {
                 if let Some(mut c) = self.controllers.remove(&s.uid) {
                     c.close_editor();
                 }
+                self.fx.remove(&s.uid);
                 self.send(Cmd::Insert { track: t.id, slot, insert: None });
             }
         }

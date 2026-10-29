@@ -12,7 +12,6 @@ use std::time::{Duration, Instant};
 
 use anyhow::{anyhow, Context, Result};
 use base64::Engine as _;
-use crossbeam_channel::{Receiver, Sender};
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use vst3_host::{PluginController, PluginDescriptor, PluginState};
@@ -42,6 +41,14 @@ mod freeze;
 pub use freeze::FreezeRender;
 mod markers;
 mod takes;
+mod region_moves;
+pub use region_moves::RegionMove;
+mod tempo;
+mod builtin;
+pub use builtin::{builtin_effects, BuiltinInfo, FxTick};
+mod presets;
+pub use presets::EQ_SLOT;
+mod insert_order;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -81,6 +88,10 @@ pub struct Tick {
     pub latency: Latency,
     /// Post-EQ spectrum (dBFS per log band) of the strip shown in the EQ editor.
     pub spectrum: Option<(Id, Vec<f32>)>,
+    /// Something went wrong out of sight (a recording couldn't be written); shown once.
+    pub warning: Option<String>,
+    /// Meters and live values of the built-in effects whose panels are open.
+    pub fx: Vec<FxTick>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -97,10 +108,15 @@ pub struct Session {
     pub saved: bool,
     pub dirty: bool,
     clips: HashMap<Id, Arc<Clip>>,
+    /// The real-time engine. The audio callback only `try_lock`s it and outputs silence when
+    /// that fails, so nothing may hold this lock on the main thread's regular paths (ticks,
+    /// edits): talk to the engine through `cmd_tx`. The exceptions are offline renders (the
+    /// engine isn't playing then), the graph swap in `rebuild_graph`, and draining the
+    /// command queue while no audio device runs (`send`).
     engine: Arc<Mutex<Engine>>,
-    cmd_tx: Sender<Cmd>,
+    cmd_tx: rtrb::Producer<Cmd>,
     cmds_sent: u64,
-    garbage_rx: Receiver<Garbage>,
+    garbage_rx: rtrb::Consumer<Garbage>,
     pub status: Arc<EngineStatus>,
     audio: Option<AudioIo>,
     pub audio_status: AudioStatus,
@@ -133,6 +149,22 @@ pub struct Session {
     pdc_report: PdcReport,
     /// How the recording in progress is cut into takes (see `session/takes.rs`).
     rec_plan: Option<crate::takes::RecPlan>,
+    /// The engine's sample rate, kept here so reading it needn't lock the engine (see
+    /// `engine`: the audio callback only try_locks it, and loses its block when that fails).
+    /// Set where the graph is replaced, in `rebuild_graph`.
+    engine_rate: f64,
+    /// For the next tick's `warning`.
+    warning: Option<String>,
+    /// Engine panics already reported (see `engine_error_warning`).
+    engine_errors_seen: u32,
+    engine_error_at: Instant,
+    bad_audio_seen: u32,
+    bad_audio_at: Instant,
+    overloads_seen: u32,
+    /// What each loaded built-in effect shares with the session, by instance id (see
+    /// `session/builtin.rs`), and the instances whose panels are open.
+    fx: HashMap<Id, Arc<FxShared>>,
+    fx_watch: std::collections::HashSet<Id>,
 }
 
 /// A project snapshot taken before an edit.
@@ -142,6 +174,21 @@ struct UndoEntry {
     /// Consecutive edits with the same key within a moment (a fader drag) share one entry.
     key: Option<String>,
     at: Instant,
+}
+
+/// `folder/<src's name>` inside `target`, numbered ("take 2.wav") if that name is already in
+/// `taken` or on disk. The result is added to `taken`.
+fn unique_name(target: &Path, folder: &Path, src: &Path, taken: &mut std::collections::HashSet<PathBuf>) -> PathBuf {
+    let stem = src.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "audio".into());
+    let ext = src.extension().map(|e| format!(".{}", e.to_string_lossy())).unwrap_or_default();
+    let mut rel = folder.join(format!("{stem}{ext}"));
+    let mut n = 2;
+    while taken.contains(&rel) || target.join(&rel).exists() {
+        rel = folder.join(format!("{stem} {n}{ext}"));
+        n += 1;
+    }
+    taken.insert(rel.clone());
+    rel
 }
 
 fn same<T: Serialize>(a: &T, b: &T) -> bool {
@@ -178,8 +225,8 @@ fn decode_state(s: &str) -> PluginState {
 
 impl Session {
     pub fn new(audio_config: AudioConfig, plugins: Vec<PluginDescriptor>) -> Session {
-        let (cmd_tx, cmd_rx) = crossbeam_channel::bounded(4096);
-        let (garbage_tx, garbage_rx) = crossbeam_channel::bounded(4096);
+        let (cmd_tx, cmd_rx) = rtrb::RingBuffer::new(4096);
+        let (garbage_tx, garbage_rx) = rtrb::RingBuffer::new(4096);
         let status = Arc::new(EngineStatus::default());
         let (live_tx, live_rx) = rtrb::RingBuffer::new(1024);
         let (rec_tx, rec_rx) = rtrb::RingBuffer::new(8192);
@@ -195,6 +242,7 @@ impl Session {
         )));
         let mut midi = MidiIo::new(live_tx);
         midi.refresh();
+        let engine_rate = audio_config.sample_rate as f64;
         let mut s = Session {
             project: Project::new("Untitled", audio_config.sample_rate),
             dir: untitled_dir(&default_projects_root()),
@@ -232,6 +280,15 @@ impl Session {
             pdc_global: PdcGlobal::default(),
             pdc_report: PdcReport::default(),
             rec_plan: None,
+            engine_rate,
+            warning: None,
+            engine_errors_seen: 0,
+            engine_error_at: Instant::now() - Duration::from_secs(60),
+            bad_audio_seen: 0,
+            overloads_seen: 0,
+            bad_audio_at: Instant::now() - Duration::from_secs(60),
+            fx: HashMap::new(),
+            fx_watch: Default::default(),
         };
         s.restart_audio();
         s.sync_globals();
@@ -241,7 +298,7 @@ impl Session {
     // ---- engine plumbing ------------------------------------------------------------------
 
     fn send(&mut self, cmd: Cmd) {
-        if self.cmd_tx.try_send(cmd).is_ok() {
+        if self.cmd_tx.push(cmd).is_ok() {
             self.cmds_sent += 1;
         }
         if self.audio.is_none() {
@@ -259,7 +316,7 @@ impl Session {
     }
 
     pub fn sample_rate(&self) -> f64 {
-        self.engine.lock().sample_rate
+        self.engine_rate
     }
 
     pub fn restart_audio(&mut self) {
@@ -273,7 +330,11 @@ impl Session {
         self.audio_status = status;
         // The command counter restarts with the engine's view of it.
         self.cmds_sent = self.status.cmds_done.load(Ordering::Relaxed);
-        if rate != self.project.sample_rate || (self.engine.lock().sample_rate as u32) != rate {
+        if rate != self.project.sample_rate || (self.engine_rate as u32) != rate {
+            // The project runs at the device's rate, and that's saved with it.
+            if rate != self.project.sample_rate {
+                self.dirty = true;
+            }
             self.project.sample_rate = rate;
             self.rebuild_graph();
         }
@@ -314,12 +375,12 @@ impl Session {
     fn sync_globals(&mut self) {
         let p = &self.project;
         let cmds = [
-            Cmd::Tempo { bpm: p.tempo, num: p.sig_num, den: p.sig_den },
+            Cmd::Tempo(Arc::new(crate::tempo::TempoMap::from_project(p))),
             Cmd::Cycle { enabled: p.cycle.enabled, start: p.cycle.start, end: p.cycle.end },
             Cmd::Metronome { on: p.metronome, count_in: p.count_in },
             Cmd::MasterVolume(volume_gain(p.master.volume_db)),
             Cmd::AutoMonitor(self.audio_config.auto_monitor),
-            Cmd::Eq(MASTER_ID, crate::eq::coefficients(&p.master.eq, self.engine.lock().sample_rate)),
+            Cmd::Eq(MASTER_ID, crate::eq::coefficients(&p.master.eq, self.engine_rate)),
             Cmd::Analyzer(self.analyzer_target),
             Cmd::Click(ClickParams::from_settings(&p.click)),
             Cmd::MidiThru(self.prefs.midi.thru),
@@ -520,7 +581,9 @@ impl Session {
 
     fn instantiate_slot(&mut self, slot: &PluginSlot) -> Result<InsertDsp> {
         let sr = self.sample_rate();
-        let plugin = if slot.plugin_id == BUILTIN_SYNTH {
+        let plugin = if let Some(info) = crate::fx::find(&slot.plugin_id) {
+            self.instantiate_builtin(&info, slot)
+        } else if slot.plugin_id == BUILTIN_SYNTH {
             Plugin::Synth(Box::new(BasicSynth::new(sr as f32)))
         } else {
             let desc = self
@@ -575,6 +638,7 @@ impl Session {
             c.close_editor();
         }
         let old_controllers = std::mem::take(&mut self.controllers);
+        self.fx.clear();
         let tracks: Vec<Track> = snapshot.tracks.clone();
         let mut built: Vec<Box<TrackDsp>> = tracks.iter().map(|t| self.build_track(t)).collect();
         // The engine plays tracks in this order; routes only point forwards.
@@ -585,7 +649,9 @@ impl Session {
             master.push(slot.as_ref().and_then(|s| self.instantiate_slot(s).map_err(|e| log::error!("{e}")).ok()));
         }
         let sr = self.project.sample_rate as f64;
+        // The one lock outside an offline render: a swap, with the old graph dropped after.
         let old = self.engine.lock().replace_graph(sr, built, master);
+        self.engine_rate = sr;
         drop(old);
         drop(old_controllers);
         self.sync_globals();
@@ -627,12 +693,14 @@ impl Session {
 
     /// Records the project as it is before an edit. `key` merges a burst of edits (a fader drag)
     /// into one step; `plugins` also captures plug-in settings, for edits that remove plug-ins.
-    pub fn checkpoint(&mut self, label: &str, key: Option<String>, plugins: bool) {
+    /// Returns whether a new step was pushed (false when merged into the last one), for
+    /// [`Session::abandon_checkpoint`].
+    pub fn checkpoint(&mut self, label: &str, key: Option<String>, plugins: bool) -> bool {
         self.redo_stack.clear();
         if let (Some(k), Some(top)) = (&key, self.undo_stack.last_mut()) {
             if top.key.as_ref() == Some(k) && top.at.elapsed() < Duration::from_millis(1500) {
                 top.at = Instant::now();
-                return;
+                return false;
             }
         }
         let project = if plugins { self.capture_plugin_states() } else { self.project.clone() };
@@ -640,6 +708,16 @@ impl Session {
         let limit = self.prefs.general.undo_limit.max(1);
         if self.undo_stack.len() > limit {
             self.undo_stack.drain(..self.undo_stack.len() - limit);
+        }
+        true
+    }
+
+    /// Takes back the step [`Session::checkpoint`] just pushed, after its edit failed: anything
+    /// the edit changed before failing is put back, and no undo entry is left for it.
+    pub fn abandon_checkpoint(&mut self) {
+        let Some(e) = self.undo_stack.pop() else { return };
+        if !same(&e.project, &self.project) {
+            self.restore(e.project);
         }
     }
 
@@ -702,6 +780,7 @@ impl Session {
             }
             if !same(&cur.automation, &t.automation) {
                 self.send(Cmd::Automation(t.id, lanes_dsp(&t.automation)));
+                self.resync_builtins(t.id);
             }
             if cur.auto_mode != t.auto_mode {
                 self.send(Cmd::AutoMode(t.id, t.auto_mode));
@@ -717,8 +796,10 @@ impl Session {
                 let ins = t.instrument.as_ref().and_then(|s| self.instantiate_slot(s).map_err(|e| log::error!("{e}")).ok());
                 self.send(Cmd::Instrument { track: t.id, insert: ins });
             }
+            let reordered = self.restore_insert_order(t.id, &cur.inserts, &t.inserts);
+            let had_inserts = reordered.as_deref().unwrap_or(&cur.inserts);
             for (slot, want) in t.inserts.iter().enumerate() {
-                let had = cur.inserts.get(slot).cloned().flatten();
+                let had = had_inserts.get(slot).cloned().flatten();
                 if uid(&had) != uid(want) {
                     if let Some(old) = &had {
                         self.controllers.remove(&old.uid);
@@ -729,6 +810,7 @@ impl Session {
                     if a.bypass != b.bypass {
                         self.send(Cmd::Bypass { track: t.id, uid: b.uid, bypass: b.bypass });
                     }
+                    self.restore_builtin(t.id, a, b);
                 }
             }
         }
@@ -737,8 +819,10 @@ impl Session {
 
         // Stereo Out
         let master = self.project.master.clone();
+        let reordered = self.restore_insert_order(MASTER_ID, &current.master.inserts, &master.inserts);
+        let had_inserts = reordered.as_deref().unwrap_or(&current.master.inserts);
         for (slot, want) in master.inserts.iter().enumerate() {
-            let had = current.master.inserts.get(slot).cloned().flatten();
+            let had = had_inserts.get(slot).cloned().flatten();
             if uid(&had) != uid(want) {
                 if let Some(old) = &had {
                     self.controllers.remove(&old.uid);
@@ -749,6 +833,7 @@ impl Session {
                 if a.bypass != b.bypass {
                     self.send(Cmd::Bypass { track: MASTER_ID, uid: b.uid, bypass: b.bypass });
                 }
+                self.restore_builtin(MASTER_ID, a, b);
             }
         }
 
@@ -833,7 +918,9 @@ impl Session {
         let from = if playing {
             punch
         } else if self.project.count_in {
-            punch - (self.project.samples_per_bar() * rec.count_in_bars.clamp(1, 4) as f64).round() as i64
+            // Whole bars at the tempo and signature in effect at the punch.
+            let bar = self.tempo_map().samples_per_bar_at(punch as f64);
+            punch - (bar * rec.count_in_bars.clamp(1, 4) as f64).round() as i64
         } else {
             // Pre-roll: play a moment of the song first, then drop into record at the playhead.
             punch - (rec.pre_roll_secs.clamp(0.0, 30.0) as f64 * self.sample_rate()).round() as i64
@@ -901,6 +988,9 @@ impl Session {
         let midi_comp = (self.status.output_latency_us.load(Ordering::Relaxed) as f64 * self.sample_rate() / 1e6).round() as i64 + self.pdc_global.total as i64;
         let mut touched = Vec::new();
         for (track, take) in takes {
+            if let Some(e) = &take.error {
+                self.warning = Some(e.clone());
+            }
             let frames = take.channels.first().map(|c| c.len()).unwrap_or(0);
             self.send(Cmd::RecordSink { track, sink: None });
             if frames == 0 {
@@ -954,10 +1044,13 @@ impl Session {
             events.push(((pos - midi_comp).max(0), d));
         }
         if let (Some(track), false) = (self.rec_midi_track.take(), events.is_empty()) {
-            let bar = self.project.samples_per_bar();
+            let map = self.tempo_map();
             let w = takes::midi_window(plan, punch, stop_pos);
-            let start = ((w.lo as f64 / bar).floor() * bar) as i64;
-            let end = ((w.hi.max(w.lo + 1) as f64 / bar).ceil() * bar) as i64;
+            // From the bar line at or before the first event to the one at or after the last.
+            let start = map.bar_start(map.bar_at(w.lo as f64)) as i64;
+            let hi = w.hi.max(w.lo + 1) as f64;
+            let last = map.bar_at(hi);
+            let end = if map.bar_start(last) >= hi { map.bar_start(last) } else { map.bar_start(last + 1) } as i64;
             let mut held: [Option<(i64, u8)>; 128] = [None; 128];
             let mut notes = Vec::new();
             let mut cc = Vec::new();
@@ -1013,6 +1106,10 @@ impl Session {
 
     pub fn set_tempo(&mut self, bpm: f64) {
         self.project.tempo = bpm.clamp(5.0, 990.0);
+        // The base tempo is the Tempo track's first event.
+        if let Some(first) = self.project.tempo_map.first_mut() {
+            first.bpm = self.project.tempo;
+        }
         self.dirty = true;
         self.sync_globals();
     }
@@ -1020,6 +1117,10 @@ impl Session {
     pub fn set_signature(&mut self, num: u32, den: u32) {
         self.project.sig_num = num.clamp(1, 32);
         self.project.sig_den = if [1, 2, 4, 8, 16].contains(&den) { den } else { 4 };
+        if let Some(first) = self.project.signatures.first_mut() {
+            first.num = self.project.sig_num;
+            first.den = self.project.sig_den;
+        }
         self.dirty = true;
         self.sync_globals();
     }
@@ -1029,13 +1130,17 @@ impl Session {
         self.dirty = true;
     }
 
+    // Metronome and Count-in are transport switches, not undo steps (as in Logic), but they're
+    // saved with the project, so they count as changes.
     pub fn set_metronome(&mut self, on: bool) {
         self.project.metronome = on;
+        self.dirty = true;
         self.sync_globals();
     }
 
     pub fn set_count_in(&mut self, on: bool) {
         self.project.count_in = on;
+        self.dirty = true;
         self.sync_globals();
     }
 
@@ -1092,7 +1197,7 @@ impl Session {
                 self.plugins.iter().find(|d| d.id == pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into())
             };
             track.name = if pid == BUILTIN_SYNTH { format!("Inst {count}") } else { name.clone() };
-            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None });
+            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params: Vec::new(), sidechain: None });
         }
         let dsp = self.build_track(&track);
         let idx = index.unwrap_or(self.project.tracks.len()).min(self.project.tracks.len());
@@ -1851,16 +1956,25 @@ impl Session {
     }
 
     /// Moves note starts to the nearest `grid` step on the timeline.
+    /// Quantizes note starts to `grid` samples at the base tempo (a note value), counted in
+    /// musical time from each bar line, so the grid follows tempo and signature changes.
     pub fn quantize_regions(&mut self, ids: &[Id], grid: i64) {
         if grid <= 0 {
             return;
+        }
+        let map = self.tempo_map();
+        let mut step = grid as f64 / (60.0 * self.project.sample_rate as f64 / self.project.tempo);
+        // The grid arrives rounded to whole samples; use the note value it stands for.
+        let per_whole = 4.0 / step;
+        if (per_whole - per_whole.round()).abs() < 0.01 * per_whole {
+            step = 4.0 / per_whole.round();
         }
         self.edit_regions(ids, |r, _| {
             let rs = r.start;
             if let RegionContent::Midi { notes, .. } = &mut r.content {
                 for n in notes.iter_mut() {
-                    let at = rs + n.start;
-                    let q = ((at as f64 / grid as f64).round() as i64) * grid;
+                    let at = (rs + n.start) as f64;
+                    let q = map.sample_at(map.snap_q(map.beats_at(at), step)).round() as i64;
                     n.start = (q - rs).max(0);
                 }
                 notes.sort_by_key(|n| n.start);
@@ -2154,13 +2268,21 @@ impl Session {
     /// Loads a plug-in into an insert slot, or the instrument slot when `slot == usize::MAX`.
     pub fn set_plugin(&mut self, track: Id, slot: usize, plugin_id: &str) -> Result<Id> {
         self.check_unfrozen(&[track])?;
+        let builtin = crate::fx::find(plugin_id);
         let name = if plugin_id == BUILTIN_SYNTH {
             "Fermata Synth".to_string()
+        } else if let Some(info) = &builtin {
+            if slot == usize::MAX {
+                return Err(anyhow!("{} is an audio effect: it goes in an Audio FX slot", info.name));
+            }
+            info.name.to_string()
         } else {
             self.plugins.iter().find(|d| d.id == plugin_id).map(|d| d.name.clone()).ok_or_else(|| anyhow!("unknown plug-in"))?
         };
+        // A built-in effect's values are all written out, so the project file reads clearly.
+        let params = builtin.map(|i| i.params.iter().map(|p| (p.id, p.default)).collect()).unwrap_or_default();
         let uid = self.project.alloc_id();
-        let new_slot = PluginSlot { uid, plugin_id: plugin_id.to_string(), name, bypass: false, state: None };
+        let new_slot = PluginSlot { uid, plugin_id: plugin_id.to_string(), name, bypass: false, state: None, params, sidechain: None };
         let ins = self.instantiate_slot(&new_slot)?;
         let old = self.slot_ref(track, slot).ok_or_else(|| anyhow!("no such slot"))?.replace(new_slot);
         if let Some(o) = old {
@@ -2232,10 +2354,11 @@ impl Session {
             c.idle();
             latency_changed |= c.take_latency_changed();
         }
+        latency_changed |= self.builtin_latency_changed();
         if latency_changed {
             self.update_pdc();
         }
-        while let Ok(g) = self.garbage_rx.try_recv() {
+        while let Ok(g) = self.garbage_rx.pop() {
             drop(g);
         }
         let written = self.auto_idle();
@@ -2261,6 +2384,7 @@ impl Session {
     }
 
     pub fn tick(&mut self) -> Tick {
+        self.check_overload();
         // Keep the newest FFT_SIZE analyzer samples.
         let fresh = self.analyzer_rx.slots();
         let got = fresh > 0;
@@ -2298,7 +2422,55 @@ impl Session {
             overruns: self.status.overruns.load(Ordering::Relaxed),
             latency: self.latency(),
             spectrum,
+            warning: self.warning.take().or_else(|| self.recorder.take_errors()).or_else(|| self.engine_error_warning()).or_else(|| self.bad_audio_warning()),
+            fx: self.fx_ticks(),
         }
+    }
+
+    /// A warning when the audio callback had to silence blocks because the engine panicked
+    /// (the panic message itself goes to the log). Reported at most every few seconds.
+    fn engine_error_warning(&mut self) -> Option<String> {
+        let n = self.status.engine_errors.load(Ordering::Relaxed);
+        if n == self.engine_errors_seen || self.engine_error_at.elapsed() < Duration::from_secs(5) {
+            return None;
+        }
+        self.engine_errors_seen = n;
+        self.engine_error_at = Instant::now();
+        Some("The audio engine hit an internal error and skipped some audio. Please report it, with the terminal output.".into())
+    }
+
+    /// Like Logic's System Overload: when the engine had to skip audio to keep up, playback
+    /// (and recording) stops and the user hears why.
+    fn check_overload(&mut self) {
+        let n = self.status.overloads.load(Ordering::Relaxed);
+        if n == self.overloads_seen {
+            return;
+        }
+        self.overloads_seen = n;
+        let was_running = self.is_playing() || self.is_recording();
+        if was_running {
+            self.stop();
+        }
+        let what = if was_running { "so playback stopped" } else { "so it skipped a moment of audio" };
+        let msg = format!("System overload: the audio engine couldn't keep up, {what}. Try a larger buffer size in Settings › Audio, or bypass or freeze heavy plug-ins.");
+        self.warning.get_or_insert(msg);
+    }
+
+    /// Names the plug-in the engine caught putting out NaNs or a runaway level (at most every
+    /// 5 seconds while it keeps doing it).
+    fn bad_audio_warning(&mut self) -> Option<String> {
+        let n = self.status.bad_audio.load(Ordering::Relaxed);
+        if n == self.bad_audio_seen || self.bad_audio_at.elapsed() < Duration::from_secs(5) {
+            return None;
+        }
+        self.bad_audio_seen = n;
+        self.bad_audio_at = Instant::now();
+        let uid = self.status.bad_audio_uid.load(Ordering::Relaxed);
+        let p = &self.project;
+        let found = p.tracks.iter().find_map(|t| t.inserts.iter().flatten().chain(t.instrument.iter()).find(|s| s.uid == uid).map(|s| (s.name.clone(), t.name.clone())));
+        let found = found.or_else(|| p.master.inserts.iter().flatten().find(|s| s.uid == uid).map(|s| (s.name.clone(), "Stereo Out".to_string())));
+        let (plugin, track) = found.unwrap_or_else(|| ("A plug-in".into(), "a track".into()));
+        Some(format!("{plugin} on {track} put out invalid audio (NaN or a runaway level), so Fermata muted it to protect the rest of the mix. If it keeps happening, bypass it or reset its settings."))
     }
 
     // ---- files ------------------------------------------------------------------------------
@@ -2327,6 +2499,13 @@ impl Session {
         self.rebuild_graph();
     }
 
+    /// Forgets every undo and redo step. The Project Chooser builds a new project's template
+    /// out of ordinary edits, which shouldn't be undoable back to an empty project.
+    pub fn clear_history(&mut self) {
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+    }
+
     /// Saves into `dir` (a `.fermata` folder). Saving somewhere new copies the audio files.
     pub fn save(&mut self, dir: Option<PathBuf>) -> Result<PathBuf> {
         let target = dir.unwrap_or_else(|| self.dir.clone());
@@ -2334,16 +2513,32 @@ impl Session {
         std::fs::create_dir_all(target.join(AUDIO_DIR))?;
         self.ensure_freeze_files();
         if target != self.dir {
+            // Every file the project uses ends up inside the new folder: its own files keep
+            // their subfolder (Audio Files, Freeze Files), files from elsewhere (a custom
+            // Recording Folder, say) go into Audio Files, and a name already taken gets a number.
+            let mut taken = std::collections::HashSet::new();
+            let mut copied: HashMap<PathBuf, String> = HashMap::new();
             for c in &mut self.project.clips {
                 let src = if Path::new(&c.path).is_absolute() { PathBuf::from(&c.path) } else { self.dir.join(&c.path) };
-                if src.starts_with(&self.dir) || Path::new(&c.path).is_relative() {
-                    let name = src.file_name().map(|n| n.to_os_string()).unwrap_or_default();
-                    let dst = target.join(AUDIO_DIR).join(&name);
-                    if src.exists() {
-                        std::fs::copy(&src, &dst).with_context(|| format!("copying {}", src.display()))?;
-                    }
-                    c.path = Path::new(AUDIO_DIR).join(name).to_string_lossy().to_string();
+                if src.starts_with(&target) {
+                    continue;
                 }
+                // Clips sharing a file share the copy.
+                if let Some(rel) = copied.get(&src) {
+                    c.path = rel.clone();
+                    continue;
+                }
+                let folder = match src.strip_prefix(&self.dir).ok().and_then(|rel| rel.parent()) {
+                    Some(sub) if !sub.as_os_str().is_empty() => sub.to_path_buf(),
+                    _ => PathBuf::from(AUDIO_DIR),
+                };
+                let rel = unique_name(&target, &folder, &src, &mut taken);
+                if src.exists() {
+                    std::fs::create_dir_all(target.join(&folder))?;
+                    std::fs::copy(&src, target.join(&rel)).with_context(|| format!("copying {}", src.display()))?;
+                }
+                c.path = rel.to_string_lossy().to_string();
+                copied.insert(src, c.path.clone());
             }
         }
         self.project.name = target.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());

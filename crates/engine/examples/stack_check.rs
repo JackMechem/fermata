@@ -22,7 +22,11 @@ fn levels(s: &mut Session, ids: &[u64]) -> (Vec<f32>, f32) {
     (lv, t.master.0.max(t.master.1))
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
 }
 
@@ -127,4 +131,5 @@ fn main() {
     check("undo brings the stack back", s.project.tracks.len() == tracks_before && s.project.track(a).unwrap().parent == Some(folder));
     let (lv, _) = levels(&mut s, &[b]);
     check(&format!("restored subtrack plays ({:.3})", lv[0]), lv[0] > 0.01);
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

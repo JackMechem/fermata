@@ -2,6 +2,7 @@
 // velocity / controller lane. Everything draws only what is inside the visible range.
 import type { CcKind, Id, Project, Region, Track } from "./api";
 import { ccMax, sameKind, type PCc, type PNote } from "./midiEdit";
+import type { TempoMap } from "./tempo";
 import { mix, theme } from "./theme";
 import { pixelRatio } from "./uiScale";
 
@@ -83,36 +84,40 @@ export function setupCanvas(cv: HTMLCanvasElement, W: number, H: number): Canvas
   return ctx;
 }
 
-/** Bar, beat and grid lengths in samples. */
+/** Bar, beat and grid lengths in samples at the start of the project, the tempo map the
+ *  lines follow, and the grid step in quarter notes. */
 export interface Grid {
   bar: number;
   beat: number;
   grid: number;
+  map: TempoMap;
+  gridQ: number;
 }
 
-/** Vertical bar / beat / grid lines over `H` pixels. */
+/** Vertical bar / beat / grid lines over `H` pixels, through the tempo map. */
 function timeLines(ctx: CanvasRenderingContext2D, v: PrView, g: Grid, H: number) {
-  const first = Math.max(0, Math.floor(timeAt(v, 0) / g.bar));
-  const last = Math.ceil(timeAt(v, v.W) / g.bar);
-  const beatPx = g.beat * v.pps;
-  const gridPx = g.grid * v.pps;
-  for (let b = first; b <= last; b++) {
-    const bx = b * g.bar;
-    if (gridPx >= 7 && g.grid < g.beat) {
+  for (const b of g.map.bars(Math.max(0, timeAt(v, 0)), timeAt(v, v.W))) {
+    const beatQ = 4 / b.den;
+    const barQ = beatQ * b.num;
+    const barPx = (b.end - b.start) * v.pps;
+    const beatPx = barPx / b.num;
+    const gridPx = (barPx * g.gridQ) / barQ;
+    const x = (q: number) => Math.round(xOf(v, g.map.sampleAt(b.startQ + q)));
+    if (gridPx >= 7 && g.gridQ < beatQ) {
       ctx.fillStyle = mix(theme.gridBeat, theme.editorBg, 0.45, 1);
       ctx.globalAlpha = 0.6;
-      for (let t = bx + g.grid; t < bx + g.bar - 1; t += g.grid) {
-        if (Math.abs((t - bx) / g.beat - Math.round((t - bx) / g.beat)) < 1e-6) continue;
-        ctx.fillRect(Math.round(xOf(v, t)), 0, 1, H);
+      for (let q = g.gridQ; q < barQ - 1e-6; q += g.gridQ) {
+        if (Math.abs(q / beatQ - Math.round(q / beatQ)) < 1e-6) continue;
+        ctx.fillRect(x(q), 0, 1, H);
       }
       ctx.globalAlpha = 1;
     }
     if (beatPx >= 6) {
       ctx.fillStyle = theme.gridBeat;
-      for (let t = bx + g.beat; t < bx + g.bar - 1; t += g.beat) ctx.fillRect(Math.round(xOf(v, t)), 0, 1, H);
+      for (let k = 1; k < b.num; k++) ctx.fillRect(x(k * beatQ), 0, 1, H);
     }
     ctx.fillStyle = theme.gridBar;
-    ctx.fillRect(Math.round(xOf(v, bx)), 0, 1, H);
+    ctx.fillRect(Math.round(xOf(v, b.start)), 0, 1, H);
   }
 }
 
@@ -302,15 +307,14 @@ export function drawRuler(ctx: CanvasRenderingContext2D, v: PrView, g: Grid, s: 
     ctx.roundRect(xOf(v, c.start), 1.5, (c.end - c.start) * v.pps, CYCLE_H - 3, 2);
     ctx.fill();
   }
-  const barPx = g.bar * v.pps;
-  const every = barPx >= 34 ? 1 : barPx >= 16 ? 2 : barPx >= 8 ? 4 : 8;
-  const first = Math.max(0, Math.floor(timeAt(v, 0) / g.bar));
-  const last = Math.ceil(timeAt(v, W) / g.bar);
   ctx.font = `500 11px ${FONT}`;
   ctx.textBaseline = "alphabetic";
-  const beatPx = g.beat * v.pps;
-  for (let b = first; b <= last; b++) {
-    const x = Math.round(xOf(v, b * g.bar)) + 0.5;
+  for (const bar of g.map.bars(Math.max(0, timeAt(v, 0)), timeAt(v, W))) {
+    const b = bar.bar - 1;
+    const barPx = (bar.end - bar.start) * v.pps;
+    const every = barPx >= 34 ? 1 : barPx >= 16 ? 2 : barPx >= 8 ? 4 : 8;
+    const beatPx = barPx / bar.num;
+    const x = Math.round(xOf(v, bar.start)) + 0.5;
     if (b % every === 0) {
       ctx.fillStyle = theme.rulerTick;
       ctx.fillRect(x, CYCLE_H + 1, 1, H - CYCLE_H - 6);
@@ -318,9 +322,8 @@ export function drawRuler(ctx: CanvasRenderingContext2D, v: PrView, g: Grid, s: 
       ctx.fillText(String(b + 1), x + 3, H - 8);
     }
     if (beatPx >= 10) {
-      const beats = Math.round(g.bar / g.beat);
-      for (let k = 1; k < beats; k++) {
-        const bx = Math.round(x + k * beatPx);
+      for (let k = 1; k < bar.num; k++) {
+        const bx = Math.round(xOf(v, g.map.sampleAt(bar.startQ + (k * 4) / bar.den)) + 0.5);
         ctx.fillStyle = theme.rulerMinor;
         ctx.fillRect(bx, H - 10, 1, 5);
         if (beatPx >= 48) {

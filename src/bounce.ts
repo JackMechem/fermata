@@ -3,6 +3,7 @@
 import { regionEnd } from "./loops";
 import type { Id, Project } from "./api";
 import { setState } from "./store";
+import { fmt, MENU_SHORTCUTS } from "./keymap";
 
 export type BitDepth = "int16" | "int24" | "float32";
 
@@ -65,4 +66,4 @@ export function projectEnd(p: Project): number {
 }
 
 /** Logic's ⌃B; elsewhere Ctrl+B is Bounce Project, so it gains Alt (see menu.rs). */
-export const BOUNCE_IN_PLACE_HINT = /Mac/.test(navigator.platform) ? "⌃B" : "⌃⌥B";
+export const BOUNCE_IN_PLACE_HINT = fmt(MENU_SHORTCUTS.find((m) => m.label === "Bounce in Place…")!.key);

@@ -6,7 +6,7 @@ import type { MenuItem } from "./components/Menu";
 import { keyHint } from "./keymap";
 import { colorMenu } from "./ops";
 import { currentTick, getState, setState } from "./store";
-import { samplesPerBar } from "./time";
+import { barsFrom, snapPos } from "./time";
 import { mix, theme } from "./theme";
 
 const project = () => getState().snap?.project;
@@ -27,8 +27,7 @@ export function markerEnd(p: Project, m: Marker): number | null {
 export function createMarker(pos?: number) {
   const p = project();
   if (!p) return;
-  const bar = samplesPerBar(p);
-  const at = pos ?? Math.round(playhead() / bar) * bar;
+  const at = pos ?? snapPos(p, playhead(), "bar", 0);
   act("add_marker", { pos: Math.max(0, Math.round(at)), name: null });
 }
 
@@ -63,7 +62,7 @@ export function deleteMarker(id: Id) {
 export function setLocatorsToMarker(m: Marker) {
   const p = project();
   if (!p) return;
-  const end = markerEnd(p, m) ?? m.pos + 4 * samplesPerBar(p);
+  const end = markerEnd(p, m) ?? barsFrom(p, m.pos, 4);
   act("set_cycle", { enabled: true, start: m.pos, end: Math.round(end) });
 }
 

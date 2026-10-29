@@ -10,7 +10,11 @@ const BALLAST: usize = 40;
 use daw_engine::session::{BitDepth, RenderOptions, TrackPatch};
 use daw_engine::Session;
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) -> bool {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
     ok
 }
@@ -261,6 +265,8 @@ fn main() {
     }
     // Recording the same cycle again adds to the folder.
     s.locate(cs);
+    // Let the engine take the locate first: `record` counts a jump back as a cycle wrap.
+    std::thread::sleep(Duration::from_millis(60));
     ok &= record(&mut s, Some((cs, ce)), 2, 0);
     let r = regions(&s, rec);
     let names: Vec<String> = r[0].takes.as_ref().map(|f| f.takes.iter().map(|t| t.name.clone()).collect()).unwrap_or_default();
@@ -305,5 +311,5 @@ fn main() {
     ok &= check("the comped folder still plays as saved", again.iter().zip(&comp_saved).all(|(x, y)| (x - y).abs() < 1e-6));
 
     println!("{}", if ok { "ALL PASS" } else { "SOME FAILED" });
-    std::process::exit(if ok { 0 } else { 1 });
+    std::process::exit(if ok && !FAILED.load(std::sync::atomic::Ordering::Relaxed) { 0 } else { 1 });
 }

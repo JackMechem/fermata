@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/vst3-host", "crates/engine", "src-tauri"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 edition = "2021"
 license = "MIT"
 
@@ -12,3 +12,11 @@ opt-level = 1
 
 [profile.dev.package."*"]
 opt-level = 2
+
+# The audio engine runs in real time even in a dev build: optimize it fully, so `tauri dev`
+# has the same CPU headroom as a release.
+[profile.dev.package.daw-engine]
+opt-level = 3
+
+[profile.dev.package.vst3-host]
+opt-level = 3

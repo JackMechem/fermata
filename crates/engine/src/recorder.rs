@@ -28,6 +28,10 @@ struct Take {
     /// Peaks not yet handed to the UI.
     fresh_from: usize,
     start: i64,
+    /// The first write error (a full disk, say): the file stops there, the take is still kept
+    /// in memory. `reported` once [`Recorder::take_errors`] has passed it on.
+    error: Option<String>,
+    reported: bool,
 }
 
 impl Take {
@@ -43,7 +47,13 @@ impl Take {
             let c = i % ch;
             self.data[c].push(s);
             if let Some(w) = &mut self.writer {
-                let _ = if self.int24 { w.write_sample((s.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32) } else { w.write_sample(s) };
+                let res = if self.int24 { w.write_sample((s.clamp(-1.0, 1.0) * 8_388_607.0).round() as i32) } else { w.write_sample(s) };
+                if let Err(e) = res {
+                    log::error!("writing {}: {e}", self.path.display());
+                    self.error = Some(format!("Couldn't write the recording {}: {e}", self.path.display()));
+                    // Stop writing: dropping the writer finalizes what's in the file.
+                    self.writer = None;
+                }
             }
             self.bucket_peak = self.bucket_peak.max(s.abs());
             if c == ch - 1 {
@@ -63,6 +73,8 @@ pub struct FinishedTake {
     pub path: PathBuf,
     pub start: i64,
     pub channels: Vec<Vec<f32>>,
+    /// Why the file is incomplete or missing, if it is.
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -122,6 +134,8 @@ impl Recorder {
             bucket_fill: 0,
             fresh_from: 0,
             start,
+            error: None,
+            reported: false,
         };
         self.takes.lock().insert(track, take);
         Ok(tx)
@@ -140,6 +154,18 @@ impl Recorder {
             .collect()
     }
 
+    /// Write errors not reported yet, for the UI.
+    pub fn take_errors(&self) -> Option<String> {
+        let mut msgs = Vec::new();
+        for t in self.takes.lock().values_mut() {
+            if let (Some(e), false) = (&t.error, t.reported) {
+                msgs.push(e.clone());
+                t.reported = true;
+            }
+        }
+        (!msgs.is_empty()).then(|| msgs.join("\n"))
+    }
+
     pub fn finish_all(&self) -> Vec<(Id, FinishedTake)> {
         let mut out = Vec::new();
         for (id, mut t) in self.takes.lock().drain() {
@@ -147,9 +173,12 @@ impl Recorder {
             if let Some(w) = t.writer.take() {
                 if let Err(e) = w.finalize() {
                     log::error!("finalizing {}: {e}", t.path.display());
+                    t.error.get_or_insert(format!("Couldn't finish the recording {}: {e}", t.path.display()));
                 }
             }
-            out.push((id, FinishedTake { path: t.path, start: t.start, channels: t.data }));
+            // Already reported while recording: don't say it twice.
+            let error = if t.reported { None } else { t.error };
+            out.push((id, FinishedTake { path: t.path, start: t.start, channels: t.data, error }));
         }
         out
     }

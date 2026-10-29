@@ -46,11 +46,29 @@ pub struct UiPrefs {
     pub nudge: String,
     /// Key command overrides: command id -> key strings (an empty list removes the default).
     pub keymap: BTreeMap<String, Vec<String>>,
+    /// Settings › Appearance: theme id, interface scale and waveform style (None until the
+    /// frontend first saves them; it keeps a localStorage copy for the first paint).
+    pub theme: Option<String>,
+    pub ui_scale: Option<f64>,
+    pub wave_style: Option<String>,
+    /// Settings › Editing: what a click in the tracks area does to the playhead: "anywhere"
+    /// (empty space and regions), "empty" (empty space only) or "off".
+    pub click_locates: String,
 }
 
 impl Default for UiPrefs {
     fn default() -> Self {
-        UiPrefs { startup: Startup::Chooser, confirm_unsaved: true, snap: "smart".into(), nudge: "16".into(), keymap: BTreeMap::new() }
+        UiPrefs {
+            startup: Startup::Chooser,
+            confirm_unsaved: true,
+            snap: "smart".into(),
+            nudge: "16".into(),
+            keymap: BTreeMap::new(),
+            theme: None,
+            ui_scale: None,
+            wave_style: None,
+            click_locates: "anywhere".into(),
+        }
     }
 }
 

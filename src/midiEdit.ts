@@ -4,10 +4,13 @@
 //
 // Times in the working list are timeline samples (not region-relative), so edits that span
 // several regions, or quantize to the project grid, need no conversions. Functions that change
-// "the selection" act on every note when nothing is selected, as Logic's do.
+// "the selection" act on every note when nothing is selected, as Logic's do. Every note means
+// the whole working list: all the MIDI regions of the track the Piano Roll shows, not just the
+// region being edited.
 //
 // This module only imports types, so it runs under plain Node for the tests in tests/.
 import type { CcEvent, CcKind, Id, Note, Region } from "./api";
+import type { BarLines } from "./tempo";
 
 // ---- working list ---------------------------------------------------------------------------
 
@@ -82,7 +85,7 @@ export const sameKind = (a: CcKind, b: CcKind) => a.type === b.type && (a.type !
  * the selection as keys into the content as the engine will store it, which is sorted the same
  * way (notes by start then pitch, controllers by start, both stable).
  */
-export function toEdits(notes: PNote[], cc: PCc[], regions: Region[], bar: number): { edits: ContentEdit[]; selNotes: Set<string>; selCc: Set<string> } {
+export function toEdits(notes: PNote[], cc: PCc[], regions: Region[], bar: Bars): { edits: ContentEdit[]; selNotes: Set<string>; selCc: Set<string> } {
   const edits: ContentEdit[] = [];
   const selNotes = new Set<string>();
   const selCc = new Set<string>();
@@ -94,8 +97,8 @@ export function toEdits(notes: PNote[], cc: PCc[], regions: Region[], bar: numbe
     let end = r.start + r.length;
     const lo = Math.min(minOf(mine, (n) => n.start), minOf(myCc, (c) => c.start));
     const hi = Math.max(maxOf(mine, (n) => n.start + n.length), maxOf(myCc, (c) => c.start + 1));
-    if (lo < start) start = Math.max(0, Math.floor(lo / bar) * bar);
-    if (hi > end) end = Math.ceil(hi / bar) * bar;
+    if (lo < start) start = Math.max(0, barFloor(lo, bar));
+    if (hi > end) end = barCeil(hi, bar);
     start = Math.round(start);
     end = Math.round(end);
     const rel = mine
@@ -170,9 +173,16 @@ export function gridLength(tb: TimeBase, v: string): number {
   return m?.[2] ? (whole / div) * (2 / 3) : whole / div;
 }
 
+/** Bar lines: a bar length (one tempo and signature throughout), or the bar line at or before
+ *  and at or after a time (a tempo map; see `barLines` and `musicalWarp` in tempo.ts). */
+export type Bars = number | BarLines;
+
+export const barFloor = (t: number, bar: Bars) => (typeof bar === "number" ? Math.floor(t / bar) * bar : bar.floor(t));
+export const barCeil = (t: number, bar: Bars) => (typeof bar === "number" ? Math.ceil(t / bar) * bar : bar.ceil(t));
+
 /** Snaps a time to the grid, counted from the start of its bar (so odd meters line up). */
-export function snapTime(t: number, grid: number, bar: number): number {
-  const b = Math.floor(t / bar) * bar;
+export function snapTime(t: number, grid: number, bar: Bars): number {
+  const b = barFloor(t, bar);
   return b + Math.round((t - b) / grid) * grid;
 }
 
@@ -187,8 +197,8 @@ export function targets<T extends { sel: boolean }>(items: T[]): Set<T> {
 export interface QuantizeOpts {
   /** Grid step in samples. */
   grid: number;
-  /** Bar length in samples; the grid is counted from each bar line. */
-  bar: number;
+  /** Bar length in samples (or the bar lines); the grid is counted from each bar line. */
+  bar: Bars;
   /** 0–1: how far notes move towards the grid. */
   strength: number;
   /** 0–1: delays every second grid step by up to half a step (0.66 is a triplet feel). */
@@ -199,7 +209,7 @@ export interface QuantizeOpts {
 
 /** Where `t` quantizes to (fully), swing included. */
 export function quantizeTarget(t: number, o: QuantizeOpts): number {
-  const b = Math.floor(t / o.bar) * o.bar;
+  const b = barFloor(t, o.bar);
   const step = Math.round((t - b) / o.grid);
   return b + step * o.grid + (step % 2 === 1 ? (o.swing * o.grid) / 2 : 0);
 }
@@ -434,6 +444,26 @@ export function pasteNotes(notes: PNote[], clip: ClipNote[], at: number, region:
   ];
 }
 
+/** A controller event on the clipboard, relative to the earliest copied event. */
+export interface ClipCc {
+  offset: number;
+  kind: CcKind;
+  value: number;
+}
+
+export function copyCc(cc: PCc[]): ClipCc[] {
+  const sel = cc.filter((c) => c.sel);
+  if (!sel.length) return [];
+  const lo = minOf(sel, (c) => c.start);
+  return sel.map((c) => ({ offset: c.start - lo, kind: c.kind, value: c.value }));
+}
+
+/** Adds copied controller events at `at` in `region`; they become the selection. */
+export function pasteCc(cc: PCc[], clip: ClipCc[], at: number, region: Id): PCc[] {
+  const pasted = clip.map((c) => ({ region, start: Math.max(0, Math.round(at + c.offset)), kind: c.kind, value: c.value, sel: true }));
+  return [...cc.map((c) => (c.sel ? { ...c, sel: false } : c)), ...pasted].sort((a, b) => a.start - b.start);
+}
+
 /** Copies the selection straight after itself, rounded up to the grid (⌘D). */
 export function duplicate(notes: PNote[], grid: number): PNote[] {
   const sel = notes.filter((n) => n.sel);
@@ -512,10 +542,10 @@ export function drawCcLine(cc: PCc[], region: Id, kind: CcKind, t0: number, v0: 
   return [...kept, ...pts].sort((x, y) => x.start - y.start);
 }
 
-/** Removes the `kind` events between t0 and t1 (the eraser). */
-export function eraseCc(cc: PCc[], kind: CcKind, t0: number, t1: number): PCc[] {
+/** Removes the `kind` events between t0 and t1 (the eraser), only in `region` if given. */
+export function eraseCc(cc: PCc[], kind: CcKind, t0: number, t1: number, region?: Id): PCc[] {
   const [a, b] = t0 <= t1 ? [t0, t1] : [t1, t0];
-  return cc.filter((c) => !(sameKind(c.kind, kind) && c.start >= a && c.start <= b));
+  return cc.filter((c) => !(sameKind(c.kind, kind) && c.start >= a && c.start <= b && (region === undefined || c.region === region)));
 }
 
 /** The value a controller has at `t` (the last event at or before it), or null. */

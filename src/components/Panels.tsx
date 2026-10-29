@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { act, api, BUILTIN_SYNTH, call, INSTRUMENT_SLOT, isStack, type Region, type Track } from "../api";
 import { Icon } from "../icons";
-import { startFileDrag } from "../dnd";
+import { isAudioPath, startFileDrag } from "../dnd";
+import { importMidiFiles, isMidiPath } from "../midiFiles";
 import { currentTick, getState, setState, useStore } from "../store";
 import { formatTime, inputLabel, toBbt } from "../time";
 import { ChannelStrip } from "./ChannelStrip";
@@ -9,6 +10,7 @@ import { NumberField } from "./Form";
 import { useSelectedTrack } from "./TrackHeaders";
 import { isLooped } from "../loops";
 import { toggleLoop } from "../ops";
+import { loadPlugin } from "../fxHost";
 
 function Disclosure({ title, children, initial = true }: { title: string; children: React.ReactNode; initial?: boolean }) {
   const [open, setOpen] = useState(initial);
@@ -65,15 +67,15 @@ export function Inspector() {
               {region.content.type === "audio" && (
                 <>
                   <Row label="Gain">
-                    <NumberField value={Math.round(region.content.gain_db * 10) / 10} step={0.5} min={-96} max={30} width={70} onChange={(db) => act("set_region_gain", { ids: [region.id], db, delta: null })} />
+                    <NumberField value={Math.round(region.content.gain_db * 10) / 10} step={0.5} resolution={0.1} min={-96} max={30} width={70} onChange={(db) => act("set_region_gain", { ids: [region.id], db, delta: null })} />
                     <span className="dim"> dB</span>
                   </Row>
                   <Row label="Fade In">
-                    <NumberField value={Math.round((region.content.fade_in / project.sample_rate) * 1000)} step={10} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: Math.round((v / 1000) * project.sample_rate), fadeOut: null })} />
+                    <NumberField value={Math.round((region.content.fade_in / project.sample_rate) * 1000)} step={10} resolution={1} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: Math.round((v / 1000) * project.sample_rate), fadeOut: null })} />
                     <span className="dim"> ms</span>
                   </Row>
                   <Row label="Fade Out">
-                    <NumberField value={Math.round((region.content.fade_out / project.sample_rate) * 1000)} step={10} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: null, fadeOut: Math.round((v / 1000) * project.sample_rate) })} />
+                    <NumberField value={Math.round((region.content.fade_out / project.sample_rate) * 1000)} step={10} resolution={1} min={0} width={70} onChange={(v) => act("set_region_fades", { ids: [region.id], fadeIn: null, fadeOut: Math.round((v / 1000) * project.sample_rate) })} />
                     <span className="dim"> ms</span>
                   </Row>
                 </>
@@ -156,6 +158,14 @@ export function Library() {
   const [q, setQ] = useState("");
   const [rescanning, setRescanning] = useState(false);
   const isInst = track?.kind === "instrument";
+  const fxList = useStore((s) => s.fxList);
+  // Built-in effects first, by category, as in Logic's Library.
+  const builtins = isInst ? [] : fxList.filter((f) => !q || `${f.name} ${f.category}`.toLowerCase().includes(q.toLowerCase()));
+  const fxGroups = new Map<string, typeof builtins>();
+  for (const f of builtins) {
+    if (!fxGroups.has(f.category)) fxGroups.set(f.category, []);
+    fxGroups.get(f.category)!.push(f);
+  }
   const list = plugins
     .filter((p) => p.is_instrument === isInst)
     .filter((p) => !q || `${p.name} ${p.vendor} ${p.subcategories}`.toLowerCase().includes(q.toLowerCase()));
@@ -171,7 +181,7 @@ export function Library() {
     else {
       const slot = track.inserts.findIndex((s) => !s);
       if (slot < 0) setState({ toast: { text: "All Audio FX slots are in use", at: Date.now() } });
-      else api.setPlugin(track.id, slot, id, true);
+      else loadPlugin(track.id, slot, id, true);
     }
   };
   const current = (t: Track | null) => (t?.kind === "instrument" ? t.instrument?.plugin_id : undefined);
@@ -181,6 +191,9 @@ export function Library() {
       <input className="search" placeholder="Search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.stopPropagation()} />
       {!track ? (
         <div className="insp-empty">Select a track</div>
+      ) : track.kind === "folder" ? (
+        // A folder stack has no channel strip of its own to put plug-ins on.
+        <div className="insp-empty">Folder stacks have no plug-ins</div>
       ) : (
         <div className="lib-list">
           <div className="lib-group">{isInst ? "Instruments" : "Audio FX"}</div>
@@ -189,6 +202,18 @@ export function Library() {
               Fermata Synth
             </div>
           )}
+          {[...fxGroups.entries()]
+            .sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([cat, fs]) => (
+              <div key={`fx:${cat}`}>
+                <div className="lib-vendor">{cat}</div>
+                {fs.map((f) => (
+                  <div key={f.id} className="lib-item" onClick={() => load(f.id)} title={`Fermata ${f.category}`}>
+                    {f.name}
+                  </div>
+                ))}
+              </div>
+            ))}
           {[...groups.entries()].map(([vendor, ps]) => (
             <div key={vendor}>
               <div className="lib-vendor">{vendor}</div>
@@ -199,7 +224,7 @@ export function Library() {
               ))}
             </div>
           ))}
-          {list.length === 0 && <div className="insp-empty">No matching plug-ins</div>}
+          {list.length === 0 && builtins.length === 0 && <div className="insp-empty">No matching plug-ins</div>}
         </div>
       )}
       <div className="pane-foot">
@@ -235,12 +260,23 @@ export function Browser() {
   }, []);
   const importAt = async (path: string) => {
     const snap = getState().snap;
+    const pos = currentTick()?.pos ?? 0;
+    // MIDI files go onto the selected instrument track, or a new one.
+    if (isMidiPath(path)) {
+      const inst = snap?.project.tracks.find((t) => t.id === snap.selected && t.kind === "instrument");
+      await importMidiFiles([path], inst?.id ?? null, pos, null);
+      return;
+    }
+    if (!isAudioPath(path)) {
+      setState({ toast: { text: "Only audio and MIDI files can be imported", at: Date.now() } });
+      return;
+    }
     const track = snap?.project.tracks.find((t) => t.id === snap.selected && t.kind === "audio");
     if (!track) {
       setState({ toast: { text: "Select an audio track to import into", at: Date.now() } });
       return;
     }
-    act("import_audio", { path, track: track.id, start: currentTick()?.pos ?? 0 });
+    act("import_audio", { path, track: track.id, start: pos });
   };
   return (
     <div className="browser">

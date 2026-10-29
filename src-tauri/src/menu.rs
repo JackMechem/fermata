@@ -1,6 +1,6 @@
 //! The native menu bar. Items emit a `menu` event carrying their id to the frontend.
 
-use tauri::menu::{MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
+use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
 use tauri::{App, Emitter, Runtime};
 
 /// Logic's ⌃B. Elsewhere Ctrl+B is already Bounce Project (⌘B), so Bounce in Place adds Alt.
@@ -9,7 +9,17 @@ const BOUNCE_IN_PLACE_KEY: &str = if cfg!(target_os = "macos") { "Ctrl+B" } else
 pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
     let item = |id: &str, label: &str, accel: Option<&str>| MenuItem::with_id(app, id, label, true, accel);
 
+    let about = AboutMetadata {
+        name: Some("Fermata".into()),
+        version: Some(app.package_info().version.to_string()),
+        comments: Some("A digital audio workstation with VST3 hosting, modelled on Logic Pro.".into()),
+        license: Some("MIT".into()),
+        website: Some("https://github.com/JackMechem/fermata".into()),
+        ..Default::default()
+    };
     let app_menu = SubmenuBuilder::new(app, "Fermata")
+        .item(&PredefinedMenuItem::about(app, Some("About Fermata"), Some(about))?)
+        .separator()
         .item(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .item(&item("settings-appearance", "Appearance…", None)?)
         .item(&item("settings-keys", "Key Commands…", None)?)
@@ -110,6 +120,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("editor", "Editors", None)?)
         .item(&item("browser", "Browsers", None)?)
         .item(&item("automation", "Show Automation", None)?)
+        .item(&item("global-tracks", "Show Global Tracks", None)?)
         .item(&item("musical-typing", "Musical Typing", Some("CmdOrCtrl+K"))?)
         .separator()
         .item(&item("show-hidden", "Show Hidden Tracks", None)?)

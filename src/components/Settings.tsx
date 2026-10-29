@@ -3,9 +3,9 @@
 // icon tabs, each pane a form whose changes apply at once.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ask, open } from "@tauri-apps/plugin-dialog";
-import { act, call, type AudioConfig, type BitDepth, type ClickSettings, type ClickSound, type PluginDesc } from "../api";
+import { act, call, supportedRates, type AudioConfig, type BitDepth, type DeviceList, type ClickSettings, type ClickSound, type PluginDesc } from "../api";
 import { Icon } from "../icons";
-import { formatKey, KEY_COMMANDS, KEY_GROUPS, eventKey, keyConflict, keysFor, keyHint, MENU_SHORTCUTS, normalizeKey } from "../keymap";
+import { fmt, formatKey, KEY_COMMANDS, KEY_GROUPS, eventKey, keyConflict, keysFor, keyHint, MENU_SHORTCUTS, normalizeKey } from "../keymap";
 import {
   DEFAULT_CLICK,
   getSettings,
@@ -13,6 +13,7 @@ import {
   updateSettings,
   useRecoveries,
   useSettings,
+  type ClickLocates,
   type Nudge,
   type Prefs,
   type Recovery,
@@ -20,7 +21,7 @@ import {
   type VelocityCurve,
 } from "../prefs";
 import { setState, useStore, type Snap, type SettingsTab } from "../store";
-import { Check, NumberField, Select, Slider } from "./Form";
+import { Check, NumberField, Select, sheetKey, Slider } from "./Form";
 
 const toast = (text: string, ms = 3000) => setState({ toast: { text, at: Date.now(), ms } });
 
@@ -34,7 +35,7 @@ function SheetFrame({ title, children, onClose, width }: { title: string; childr
   }, [onClose]);
   return (
     <div className="sheet-backdrop" onMouseDown={onClose}>
-      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
         <div className="sheet-title">{title}</div>
         {children}
       </div>
@@ -221,7 +222,7 @@ function GeneralPane({ close }: { close: () => void }) {
           />
         </Row>
         <Row label="Undo Steps:" note="How many edits Undo can step back through. More steps use more memory on large projects.">
-          <NumberField value={g.undo_limit} min={10} max={1000} step={10} onChange={(v) => setPrefs("general", { undo_limit: Math.round(v) })} />
+          <NumberField value={g.undo_limit} min={10} max={1000} step={10} resolution={1} onChange={(v) => setPrefs("general", { undo_limit: Math.round(v) })} />
         </Row>
         <Row label="Unsaved Changes:">
           <Check checked={s.ui.confirm_unsaved} onChange={(v) => setUi({ confirm_unsaved: v })}>
@@ -252,7 +253,7 @@ function RecordingPane({ close }: { close: () => void }) {
           label="Bit Depth:"
           note={
             <>
-              32-bit float can't clip on disk however hot the input runs; 24-bit files are a third smaller and open everywhere.
+              32-bit float can't clip on disk however hot the input runs; 24-bit files are a quarter smaller and open everywhere.
               {override && <b> This project overrides it ({BIT_DEPTHS.find((b) => b[0] === override)?.[1]}) in Project Settings.</b>}
             </>
           }
@@ -275,7 +276,7 @@ function RecordingPane({ close }: { close: () => void }) {
         </Row>
       </Section>
       <Section title="Starting to Record">
-        <Row label="Count-in:" note={`Counts in with the click before recording when Count-in is on (${keyHint("count-in") || "⇧K"}).`}>
+        <Row label="Count-in:" note={`Counts in with the click before recording when Count-in is on (${keyHint("count-in") || fmt("Shift+K")}).`}>
           <div className="row-inline">
             <Check checked={countIn} onChange={(on) => act("set_count_in", { on })}>
               On
@@ -423,8 +424,11 @@ function MetronomePane({ close }: { close: () => void }) {
     <>
       <MetronomeFields />
       <Foot close={close} note="Saved with the project, like Logic's metronome settings.">
-        <button className="push" onClick={() => act("set_click", { click: deflt })} disabled={isDefault}>
+        <button className="push" title="The settings new projects start with" onClick={() => act("set_click", { click: deflt })} disabled={isDefault}>
           Revert to Default
+        </button>
+        <button className="push" title="Fermata's original metronome settings" onClick={() => act("set_click", { click: DEFAULT_CLICK })} disabled={JSON.stringify(click) === JSON.stringify(DEFAULT_CLICK)}>
+          Factory Settings
         </button>
         <button
           className="push"
@@ -597,6 +601,12 @@ const SNAPS: [Snap, string][] = [
   ["off", "Off"],
 ];
 
+const CLICK_LOCATES: [ClickLocates, string][] = [
+  ["anywhere", "Anywhere in the tracks"],
+  ["empty", "Empty space only"],
+  ["off", "Never"],
+];
+
 const NUDGES: [Nudge, string][] = [
   ["bar", "Bar"],
   ["beat", "Beat"],
@@ -623,12 +633,15 @@ function EditingPane({ close }: { close: () => void }) {
             }}
           />
         </Row>
-        <Row label="Nudge Value:" note={`How far ${keyHint("nudge-left")} and ${keyHint("nudge-right")} move the selected regions.`}>
+        <Row label="Nudge Value:" note={nudgeNote()}>
           <Select value={ui.nudge} options={NUDGES} onChange={(v) => setUi({ nudge: v })} />
+        </Row>
+        <Row label="Click Moves Playhead:" note="Clicking without dragging puts the playhead there, snapped to the grid. Dragging still moves regions or draws a selection.">
+          <Select value={ui.click_locates ?? "anywhere"} options={CLICK_LOCATES} onChange={(v) => setUi({ click_locates: v })} />
         </Row>
         <Row label="Anti-click Fades:" note="A short fade-in and fade-out on new recordings and imported audio, so region edges don't click. 0 = none.">
           <div className="row-inline">
-            <NumberField value={fade} min={0} max={100} step={0.5} onChange={(v) => setPrefs("editing", { fade_ms: v })} />
+            <NumberField value={fade} min={0} max={100} step={0.5} resolution={0.1} onChange={(v) => setPrefs("editing", { fade_ms: v })} />
             <span className="dim">ms</span>
           </div>
         </Row>
@@ -799,6 +812,13 @@ function PluginsPane({ close }: { close: () => void }) {
   );
 }
 
+/** "How far ⌥← and ⌥→ move…", naming the commands instead when they have no keys. */
+function nudgeNote(): string {
+  const keys = [keyHint("nudge-left"), keyHint("nudge-right")].filter(Boolean);
+  const what = keys.length ? keys.join(" and ") : "Nudge Regions Left / Right (no keys assigned)";
+  return `How far ${what} ${keys.length === 1 ? "moves" : "move"} the selected regions.`;
+}
+
 // ---- Key Commands -------------------------------------------------------------------------
 
 function KeysPane({ close }: { close: () => void }) {
@@ -851,6 +871,22 @@ function KeysPane({ close }: { close: () => void }) {
     return () => window.removeEventListener("keydown", k, true);
   }, [capture]);
 
+  /** Puts a command's default keys back, taking them from any command that has them now (a
+   *  key runs one command only). */
+  const restoreDefault = (id: string, defaults: string[]) => {
+    const keys = defaults.map(normalizeKey);
+    let next = withKeys(overrides, id, keys);
+    const moved: string[] = [];
+    for (const k of keys) {
+      const clash = keyConflict(k, id, next);
+      if (!clash?.id) continue;
+      next = withKeys(next, clash.id, keysFor(clash.id, next).filter((x) => x !== k));
+      moved.push(`${formatKey(k)} from “${clash.label}”`);
+    }
+    setKeys(next);
+    setMessage(moved.length ? `Moved ${moved.join(", ")}.` : null);
+  };
+
   const match = (label: string, keys: string[]) => {
     if (!q) return true;
     const t = q.toLowerCase();
@@ -894,7 +930,7 @@ function KeysPane({ close }: { close: () => void }) {
                       )}
                     </span>
                     {overrides[c.id] ? (
-                      <button className="link-btn" onClick={() => setKeys(withKeys(overrides, c.id, (c.keys ?? []).map(normalizeKey)))}>
+                      <button className="link-btn" onClick={() => restoreDefault(c.id, c.keys)}>
                         Default
                       </button>
                     ) : (
@@ -987,6 +1023,15 @@ function ProjectGeneral() {
   const p = useStore((s) => s.snap?.project);
   const audio = useStore((s) => s.snap?.audio);
   const [pending, setPending] = useState<number | null>(null);
+  // Only the rates the audio devices can run at: the project's rate is the device's.
+  const [rates, setRates] = useState<number[]>(RATES);
+  useEffect(() => {
+    (async () => {
+      const cfg = await call<AudioConfig>("get_audio_config");
+      const devices = cfg && (await call<DeviceList>("audio_devices", { host: cfg.host }));
+      if (cfg && devices) setRates(RATES.filter((r) => supportedRates(cfg, devices).includes(r)));
+    })();
+  }, [audio?.output_name, audio?.input_name]);
   if (!p) return null;
   const hasAudio = p.tracks.some((t) => t.regions.some((r) => r.content.type === "audio"));
   const sigKey = `${p.sig_num}/${p.sig_den}`;
@@ -1002,8 +1047,8 @@ function ProjectGeneral() {
       <Section title="Tempo and Key">
         <Row label="Tempo:">
           <div className="row-inline">
-            <NumberField value={p.tempo} min={5} max={990} step={1} onChange={(bpm) => act("set_tempo", { bpm })} width={96} />
-            <span className="dim">BPM</span>
+            <NumberField value={p.tempo} min={5} max={990} step={1} resolution={0.01} onChange={(bpm) => act("set_tempo", { bpm })} width={96} />
+            <span className="dim">{p.tempo_map.length > 1 ? "BPM at the start (see the Tempo track)" : "BPM"}</span>
           </div>
         </Row>
         <Row label="Time Signature:">
@@ -1048,7 +1093,7 @@ function ProjectGeneral() {
         >
           <Select
             value={pending ?? p.sample_rate}
-            options={RATES.map((r) => [r, `${(r / 1000).toFixed(1)} kHz`] as [number, string])}
+            options={[...new Set([...rates, p.sample_rate])].sort((a, b) => a - b).map((r) => [r, `${(r / 1000).toFixed(1)} kHz`] as [number, string])}
             onChange={(r) => (r === p.sample_rate ? setPending(null) : hasAudio ? setPending(r) : applyRate(r))}
             width={140}
           />
@@ -1203,7 +1248,7 @@ export function RecoverySheet() {
       <div className="pref-note recovery-intro">
         {single
           ? "This project has changes that were autosaved but never saved — most likely Fermata quit before you could save them."
-          : "Fermata didn't quit normally last time. These projects have autosaved changes that were never saved."}
+          : "These projects have autosaved changes that were never saved — most likely Fermata quit before you could save them."}
       </div>
       <div className="recovery-list">
         {items.map((r) => (

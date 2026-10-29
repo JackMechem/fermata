@@ -1,9 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { call, MASTER_ID, type ChannelEq, type EqBand, type Id, type Project } from "../api";
+import { call, EQ_SLOT, MASTER_ID, type ChannelEq, type EqBand, type Id, type Project } from "../api";
 import { BAND_COLORS, bandSections, defaultEq, eqSections, formatFreq, isFlat, responseDb } from "../eqMath";
 import { getState, onTick, setState, useStore } from "../store";
 import { pixelRatio } from "../uiScale";
 import { refuseFrozen } from "../freeze";
+import { fmt } from "../keymap";
+import { CHANNEL_EQ, copyEq, eqClipboard, eqMenu, pasteEq } from "../fxHost";
+import { openMenu } from "./Menu";
+import { PresetButton } from "./fx/Presets";
 
 // ---- state helpers ------------------------------------------------------------------------
 
@@ -91,7 +95,7 @@ export function EqThumb({ trackId, name }: { trackId: Id; name: string }) {
     ctx.fill();
     ctx.globalAlpha = eq.on ? 1 : 0.4;
     ctx.beginPath();
-    db.forEach((d, i) => (i ? ctx.lineTo(i, mid - Math.max(-18, Math.min(18, d)) * scale) : ctx.moveTo(i, mid - d * scale)));
+    db.forEach((d, i) => (i ? ctx.lineTo : ctx.moveTo).call(ctx, i, mid - Math.max(-18, Math.min(18, d)) * scale));
     ctx.strokeStyle = accent;
     ctx.lineWidth = 1.25;
     ctx.stroke();
@@ -103,7 +107,13 @@ export function EqThumb({ trackId, name }: { trackId: Id; name: string }) {
       title={`Channel EQ — ${name}`}
       onMouseDown={(e) => {
         e.stopPropagation();
+        if (e.button !== 0) return;
         setState({ eqEditor: open ? null : trackId });
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        openMenu(e.clientX, e.clientY, eqMenu(trackId, eq));
       }}
     >
       <canvas ref={ref} />
@@ -133,18 +143,29 @@ function BandIcon({ kind }: { kind: EqBand["kind"] }) {
   );
 }
 
-/** A value changed by dragging vertically; double-click resets. */
-function Scrub({ text, onDelta, onReset, title }: { text: string; onDelta: (px: number, fine: boolean) => void; onReset: () => void; title?: string }) {
+/** Pixels of a Shift-drag count this much, for fine adjustment. */
+const FINE = 0.2;
+
+/**
+ * A value changed by dragging vertically; double-click resets. `onScrub` gets the value at
+ * mouse-down and the pixels dragged up since then (Shift-drag counting FINE), so the result is
+ * worked out from the start of the drag: applying each move's few pixels to an already rounded
+ * value would round most of them away.
+ */
+function Scrub({ text, value, onScrub, onReset, title }: { text: string; value: number; onScrub: (start: number, px: number) => void; onReset: () => void; title?: string }) {
   return (
     <div
       className="scrub"
       title={title ?? "Drag up/down · Shift for fine · double-click to reset"}
       onMouseDown={(e) => {
         e.preventDefault();
+        const start = value;
         let last = e.clientY;
+        let px = 0;
         const move = (ev: MouseEvent) => {
-          onDelta(last - ev.clientY, ev.shiftKey);
+          px += (last - ev.clientY) * (ev.shiftKey ? FINE : 1);
           last = ev.clientY;
+          onScrub(start, px);
         };
         const up = () => {
           window.removeEventListener("mousemove", move);
@@ -324,12 +345,17 @@ export function EqEditor() {
   }, [trackId]);
 
   useEffect(() => {
+    // Only while the EQ is open, and not when the Esc belongs to a sheet, a menu or a field.
+    if (trackId === null) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setState({ eqEditor: null });
+      if (e.key !== "Escape" || e.defaultPrevented || getState().dialog) return;
+      const tgt = e.target as HTMLElement | null;
+      if (tgt && ["INPUT", "SELECT", "TEXTAREA"].includes(tgt.tagName)) return;
+      setState({ eqEditor: null });
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
-  }, []);
+  }, [trackId]);
 
   if (trackId === null || !eq) return null;
 
@@ -428,12 +454,25 @@ export function EqEditor() {
         <button className="eq-toggle" onClick={() => updateEq(trackId, defaultEq())} title="Reset every band">
           Reset
         </button>
+        <PresetButton effect={CHANNEL_EQ} track={trackId} slot={EQ_SLOT} instance={`eq:${trackId}`} current={JSON.stringify(eq)} normalize={(p) => JSON.stringify(p.eq)} defaultName="Flat" />
+        <button className="eq-toggle" onClick={() => copyEq(eq)} title="Copy these EQ settings">
+          Copy
+        </button>
+        <button
+          className="eq-toggle"
+          onClick={() => (eqClipboard() ? pasteEq([trackId]) : setState({ toast: { text: "Copy a Channel EQ first", at: Date.now() } }))}
+          title="Paste copied EQ settings onto this strip"
+        >
+          Paste
+        </button>
         <span className="eq-spacer" />
         <span className="dim">Output</span>
         <Scrub
           text={`${eq.output_db > 0 ? "+" : ""}${eq.output_db.toFixed(1)} dB`}
-          onDelta={(px, fine) => updateEq(trackId, { ...eq, output_db: Math.round(Math.max(-24, Math.min(24, eq.output_db + px * (fine ? 0.02 : 0.1))) * 10) / 10 })}
-          onReset={() => updateEq(trackId, { ...eq, output_db: 0 })}
+          value={eq.output_db}
+          // The current EQ, not this render's: bands may change while the drag runs.
+          onScrub={(v0, px) => updateEq(trackId, { ...live.current.eq!, output_db: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10 })}
+          onReset={() => updateEq(trackId, { ...live.current.eq!, output_db: 0 })}
         />
       </div>
       <div className="eq-graph" ref={wrapRef} onMouseDown={onCanvasDown} onWheel={onWheel}>
@@ -455,7 +494,8 @@ export function EqEditor() {
               <div className="eq-band-name">{BAND_NAMES[i]}</div>
               <Scrub
                 text={formatFreq(b.freq)}
-                onDelta={(px, fine) => setBand(i, { freq: Math.round(Math.min(20000, Math.max(20, b.freq * Math.pow(1.01, px * (fine ? 0.2 : 1)))) * 10) / 10 })}
+                value={b.freq}
+                onScrub={(v0, px) => setBand(i, { freq: Math.round(Math.min(20000, Math.max(20, v0 * Math.pow(1.01, px))) * 10) / 10 })}
                 onReset={() => setBand(i, { freq: defaults.bands[i].freq })}
               />
               {isCut ? (
@@ -469,7 +509,8 @@ export function EqEditor() {
               ) : (
                 <Scrub
                   text={`${b.gain > 0 ? "+" : ""}${b.gain.toFixed(1)} dB`}
-                  onDelta={(px, fine) => setBand(i, { gain: Math.round(Math.max(-24, Math.min(24, b.gain + px * (fine ? 0.02 : 0.1))) * 10) / 10, on: true })}
+                  value={b.gain}
+                  onScrub={(v0, px) => setBand(i, { gain: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10, on: true })}
                   onReset={() => setBand(i, { gain: 0 })}
                 />
               )}
@@ -478,7 +519,8 @@ export function EqEditor() {
               ) : (
                 <Scrub
                   text={`Q ${b.q.toFixed(2)}`}
-                  onDelta={(px, fine) => setBand(i, { q: Math.round(Math.min(18, Math.max(0.1, b.q * Math.pow(1.01, px * (fine ? 0.2 : 1)))) * 100) / 100 })}
+                  value={b.q}
+                  onScrub={(v0, px) => setBand(i, { q: Math.round(Math.min(18, Math.max(0.1, v0 * Math.pow(1.01, px))) * 100) / 100 })}
                   onReset={() => setBand(i, { q: defaults.bands[i].q })}
                 />
               )}
@@ -486,7 +528,7 @@ export function EqEditor() {
           );
         })}
       </div>
-      <div className="eq-hint">Drag a point to set frequency and gain · scroll to change Q · double-click a point to switch the band off · Alt-click resets its gain</div>
+      <div className="eq-hint">Drag a point to set frequency and gain · scroll to change Q · double-click a point to switch the band off · {fmt("Alt")}-click resets its gain</div>
     </div>
   );
 }

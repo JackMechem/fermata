@@ -22,6 +22,9 @@ fn levels(s: &mut Session, ids: &[u64]) -> (Vec<f32>, f32) {
     (lv, t.master.0.max(t.master.1))
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let tone = args.next().expect("audio file");
@@ -45,4 +48,6 @@ fn main() {
     let (lv, _) = levels(&mut s, &[aux]);
     let ok2 = (lv[0] - before).abs() / before < 0.05;
     println!("{} Off plays the knob's level again ({:.3} vs {before:.3})", if ok2 { "PASS" } else { "FAIL" }, lv[0]);
+    FAILED.fetch_or(!(ok && ok2), std::sync::atomic::Ordering::Relaxed);
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

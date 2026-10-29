@@ -4,6 +4,16 @@ import { useEffect, useState } from "react";
 import { Icon } from "../icons";
 import { openMenuAt } from "./Menu";
 
+/**
+ * onKeyDown for a sheet: keys typed in it stay there, so the main window's shortcuts don't
+ * fire. That also keeps them from the sheet's own window Esc listener, so Esc is handled here
+ * too (an open menu takes Esc first, in the capture phase).
+ */
+export function sheetKey(e: React.KeyboardEvent, onClose: () => void) {
+  e.stopPropagation();
+  if (e.key === "Escape") onClose();
+}
+
 export function Select<T extends string | number>({
   value,
   options,
@@ -46,6 +56,7 @@ export function NumberField({
   min = -Infinity,
   max = Infinity,
   width = 76,
+  resolution = step,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -53,14 +64,20 @@ export function NumberField({
   min?: number;
   max?: number;
   width?: number;
+  /** Typed values are rounded to this; by default, to `step`. */
+  resolution?: number;
 }) {
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
   const commit = () => {
     const v = parseFloat(text);
-    if (Number.isFinite(v)) onChange(clamp(v));
-    else setText(String(value));
+    if (Number.isFinite(v)) {
+      // Rounded to the resolution, then tidied of float noise (0.1 * 3 = 0.30000000000000004).
+      const r = clamp(Math.round(Math.round(v / resolution) * resolution * 1e6) / 1e6);
+      setText(String(r));
+      onChange(r);
+    } else setText(String(value));
   };
   const nudge = (d: number) => onChange(clamp(Math.round((value + d) * 1000) / 1000));
   return (

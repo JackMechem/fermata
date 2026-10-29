@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { setState, useStore } from "../store";
+import { fmt } from "../keymap";
 
 // Physical key -> semitone above the current octave's C.
 const NOTE_KEYS: Record<string, number> = {
@@ -183,7 +184,7 @@ export function MusicalTyping() {
       <div className="eq-titlebar" onMouseDown={startMove}>
         <span className="eq-title">Musical Typing</span>
         <span className="eq-track">{target ? `→ ${target}` : "Select a software instrument track"}</span>
-        <button className="eq-close" title="Close (⌘K)" onClick={() => setState({ showTyping: false })}>
+        <button className="eq-close" title={`Close (${fmt("Mod+K")})`} onClick={() => setState({ showTyping: false })}>
           ×
         </button>
       </div>

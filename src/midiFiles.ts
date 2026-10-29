@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { call, type Id, type Made } from "./api";
 import { currentTick, getState, setState } from "./store";
-import { samplesPerBar } from "./time";
+import { barFloor } from "./time";
 
 const MIDI_EXT = /\.(mid|midi|smf|kar)$/i;
 
@@ -48,8 +48,7 @@ export async function importMidiDialog() {
   const snap = getState().snap;
   if (!snap) return;
   const p = snap.project;
-  const bar = samplesPerBar(p);
-  const start = Math.floor((currentTick()?.pos ?? 0) / bar) * bar;
+  const start = Math.round(barFloor(p, currentTick()?.pos ?? 0));
   const sel = p.tracks.findIndex((t) => t.id === snap.selected);
   const t = sel >= 0 ? p.tracks[sel] : null;
   if (t?.kind === "instrument") await importMidiFiles(paths, t.id, start, null);

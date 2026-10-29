@@ -1,18 +1,20 @@
 import { pixelRatio } from "../uiScale";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { act, type Id, type Project, type Region, type Track } from "../api";
+import { act, actMade, type Id, type Project, type Region, type Track } from "../api";
 import { getState, liveTakes, onTick, setState, currentTick, useStore } from "../store";
 import { drawWave, ensureWave, waveCache } from "../waveform";
 import { coalesced, framePos, onFrame } from "../frame";
 import { PEAK_BUCKET, samplesPerBeat, snapPos, toBbt } from "../time";
+import { forEachGridLine, tempoMap } from "../tempo";
 import { mix, theme } from "../theme";
-import { indexAt, useLayout, zoomTracks } from "../layout";
+import { indexAt, stepVisible, useLayout, visibleSteps, zoomTracks, type Layout } from "../layout";
 import { onViewport, registerScroller, setViewport, viewport } from "../view";
 import { openMenu } from "./Menu";
 import { laneMenu, linkedRegions, regionMenu } from "../ops";
 import { isLooped, loopEnd, loopPasses, regionEnd } from "../loops";
 import { automationHover, automationLeave, automationMenu, automationMouseDown, drawAutomation } from "../automation";
 import { refuseFrozen } from "../freeze";
+import { getSettings } from "../prefs";
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
 
 // ---- peaks ----------------------------------------------------------------------------------
@@ -30,7 +32,10 @@ interface Drag {
   kind: "move" | "left" | "right" | "fadeIn" | "fadeOut" | "loop";
   ids: Id[];
   dx: number;
+  /** Tracks moved, counted in visible tracks (collapsed and hidden ones are skipped). */
   dTrack: number;
+  /** Alt (Option) is held: the move drops copies, as in Logic. */
+  copy?: boolean;
   /** For trims, the new start/length of the grabbed region. */
   start?: number;
   length?: number;
@@ -39,6 +44,14 @@ interface Drag {
   /** For loop drags, the new loop end. */
   loopEnd?: number;
   grabbed: Id;
+}
+
+/** The track a region on track `i` lands on when a drag moves it `dTrack` visible tracks. A
+ *  region can only go onto a track of its own kind; otherwise it stays on its track, as
+ *  `move_region` does. */
+function dragTarget(layout: Layout, i: number, dTrack: number, tracks: Track[]): number {
+  const ti = stepVisible(layout, i, dTrack);
+  return tracks[ti]?.kind === tracks[i].kind ? ti : i;
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -248,6 +261,8 @@ export function Arrange() {
   const dragRef = useRef<Drag | null>(null);
   // A Quick Swipe Comping drag in progress: the take and take-time range.
   const swipeRef = useRef<{ region: Id; take: Id; start: number; end: number } | null>(null);
+  // A rubber-band selection in progress, in content coordinates.
+  const marqueeRef = useRef<{ left: number; top: number; right: number; bottom: number } | null>(null);
   // Region under the pointer, which shows its fade handles.
   const hoverRef = useRef<Id | null>(null);
   const drawRef = useRef<() => void>(() => {});
@@ -313,22 +328,12 @@ export function Arrange() {
       ctx.globalAlpha = 1;
     });
 
-    // Grid
-    const spb = samplesPerBeat(project);
-    const beatPx = spb * pps;
-    const barPx = beatPx * project.sig_num;
-    const firstBar = Math.floor(vp.left / barPx);
-    const lastBar = Math.ceil((vp.left + W) / barPx);
+    // Grid, through the tempo map: bar lines, and beats when they are far enough apart.
     const gridBottom = Math.min(H, layout.total - vp.top);
-    for (let b = firstBar; b <= lastBar; b++) {
-      const x = Math.round(b * barPx - vp.left) + 0.5;
-      ctx.fillStyle = theme.barLine;
-      ctx.fillRect(x, 0, 1, gridBottom);
-      if (beatPx > 9) {
-        ctx.fillStyle = theme.beatLine;
-        for (let k = 1; k < project.sig_num; k++) ctx.fillRect(Math.round(x + k * beatPx), 0, 1, gridBottom);
-      }
-    }
+    forEachGridLine(tempoMap(project), Math.max(0, vp.left / pps), (vp.left + W) / pps, pps, { beatsMinPx: 9 }, (pos, kind) => {
+      ctx.fillStyle = kind === "bar" ? theme.barLine : theme.beatLine;
+      ctx.fillRect(kind === "bar" ? Math.round(pos * pps - vp.left) + 0.5 : Math.round(pos * pps - vp.left + 0.5), 0, 1, gridBottom);
+    });
     // Cycle range tint, as Logic does when cycle is on.
     if (project.cycle.enabled) {
       const cx = project.cycle.start * pps - vp.left;
@@ -362,19 +367,18 @@ export function Arrange() {
     const drag = dragRef.current;
     const spbSnap = (v: number) => snapPos(project, v, getState().snapMode, getState().pxPerBeat);
     // Where each region draws, with any drag in progress applied.
-    const place = (r: Region, t: Track, i: number) => {
+    const place = (r: Region, i: number, still = false) => {
       let start = r.start;
       let length = r.length;
       let loop = r.loop_end;
       let ti = i;
       let shift = 0;
       let fades: [number, number] | undefined;
-      if (drag && drag.ids.includes(r.id)) {
+      if (drag && !still && drag.ids.includes(r.id)) {
         if (drag.kind === "move") {
           start = Math.max(0, r.id === drag.grabbed ? spbSnap(r.start + drag.dx) : r.start + (spbSnap(getGrabbedStart() + drag.dx) - getGrabbedStart()));
           if (loop != null) loop += start - r.start;
-          ti = Math.min(project.tracks.length - 1, Math.max(0, i + drag.dTrack));
-          if (project.tracks[ti].kind !== t.kind) ti = i;
+          ti = dragTarget(layout, i, drag.dTrack, project.tracks);
         } else if (r.id === drag.grabbed && drag.fade !== undefined && r.content.type === "audio") {
           fades = drag.kind === "fadeIn" ? [drag.fade, r.content.fade_out] : [r.content.fade_in, drag.fade];
         } else if (r.id === drag.grabbed && drag.loopEnd !== undefined) {
@@ -393,10 +397,12 @@ export function Arrange() {
       return { start, length, loop, ti, shift, fades, y, th, hidden: project.tracks[ti].hidden };
     };
     // Loop repetitions first: region bodies cover them, as they do in playback.
+    // A copy drag (Alt) leaves the originals in place and draws the copies where they'll land.
+    const passes = (r: Region) => (drag?.copy && drag.ids.includes(r.id) ? [true, false] : [false]);
     project.tracks.forEach((t, i) => {
-      for (const r of t.regions) {
+      for (const r of t.regions) for (const still of passes(r)) {
         if (!isLooped(r) && !(drag?.kind === "loop" && drag.grabbed === r.id)) continue;
-        const g = place(r, t, i);
+        const g = place(r, i, still);
         const x0 = (g.start + g.length) * pps - vp.left;
         const x1 = loopEnd(g.start, g.length, g.loop) * pps - vp.left;
         if (g.th === 0 || x0 > W || x1 < 0 || g.y > H || g.y + g.th < 0) continue;
@@ -406,8 +412,8 @@ export function Arrange() {
       }
     });
     project.tracks.forEach((t, i) => {
-      for (const r of t.regions) {
-        const { start, length, shift, fades, y, th, hidden } = place(r, t, i);
+      for (const r of t.regions) for (const still of passes(r)) {
+        const { start, length, shift, fades, y, th, hidden } = place(r, i, still);
         const x = start * pps - vp.left;
         const w = Math.max(2, length * pps);
         if (th === 0 || x > W || x + w < 0 || y > H || y + th < 0) continue;
@@ -496,6 +502,24 @@ export function Arrange() {
       ctx.textBaseline = "middle";
       ctx.fillText(label, x + 10, y + 13.5);
     }
+    const mq = marqueeRef.current;
+    if (mq) {
+      const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4c9eff";
+      const x = Math.round(mq.left - vp.left) + 0.5;
+      const y = Math.round(mq.top - vp.top) + 0.5;
+      const w = Math.round(mq.right - mq.left);
+      const h = Math.round(mq.bottom - mq.top);
+      ctx.fillStyle = accent;
+      ctx.globalAlpha = 0.12;
+      ctx.fillRect(x, y, w, h);
+      ctx.globalAlpha = 0.8;
+      ctx.strokeStyle = accent;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.globalAlpha = 1;
+    }
+    // A hoisted function so `place` above can use it: the other dragged regions follow the
+    // grabbed one's snapped move, which keeps their spacing.
     function getGrabbedStart() {
       for (const t of project!.tracks) for (const r of t.regions) if (r.id === drag!.grabbed) return r.start;
       return 0;
@@ -662,7 +686,10 @@ export function Arrange() {
     const { pps } = live.current;
     const rx = r.start * pps;
     const rw = r.length * pps;
+    // Trim zones are 8 px wide, or a quarter of a narrow region so its middle still moves it.
     const edge = Math.min(8, rw / 4);
+    // The name bar (14 px in drawRegion) and the lane margin above it: the loop handle is up
+    // there, trims and fades below.
     const bodyTop = 16;
     const looped = isLooped(r);
     const endX = regionEnd(r) * pps;
@@ -671,6 +698,7 @@ export function Arrange() {
     if (r.content.type === "audio" && h.localY > bodyTop && h.localY < bodyTop + FADE_ZONE) {
       const fiX = rx + r.content.fade_in * pps;
       const foX = rx + rw - r.content.fade_out * pps;
+      // How close to a fade point counts as grabbing it, again shrinking on narrow regions.
       const near = Math.min(7, rw / 4);
       if (Math.abs(h.x - fiX) <= near || (r.content.fade_in === 0 && h.x < rx + edge)) return "fadeIn";
       // A looping region's fade-out is at the loop end; set it from the menu or inspector.
@@ -689,18 +717,13 @@ export function Arrange() {
     // Regions can't be edited while automation is shown, as in Logic.
     if (showAutomation && live.current.project) return automationMouseDown(e, autoInput());
     const h = hit(e);
-    if (!h || !h.track) {
-      setState({ selectedRegions: [] });
-      return;
-    }
+    if (!h) return;
+    if (!h.track) return startMarquee(e, h);
     const { project, pps } = live.current;
     if (!project) return;
     if (h.track.id !== getState().snap?.selected) act("select_track", { id: h.track.id });
     if (h.row) return startSwipe(e, h.row.region, h.row.take.id);
-    if (!h.region) {
-      setState({ selectedRegions: [] });
-      return;
-    }
+    if (!h.region) return startMarquee(e, h);
     const r = h.region;
     // A take folder's triangle opens it; its badge opens the take folder menu.
     if (isFolder(r) && h.localY <= 14 && !h.inLoop) {
@@ -716,12 +739,15 @@ export function Arrange() {
       }
     }
     let sel = getState().selectedRegions;
+    // Shift-clicking a selected region only takes it out of the selection; nothing is dragged.
+    const deselect = e.shiftKey && sel.includes(r.id);
     if (e.shiftKey) {
-      sel = sel.includes(r.id) ? sel.filter((i) => i !== r.id) : [...sel, ...linkedRegions(r.id)];
+      sel = deselect ? sel.filter((i) => i !== r.id) : [...sel, ...linkedRegions(r.id)];
     } else if (!sel.includes(r.id)) {
       sel = linkedRegions(r.id);
     }
     setState({ selectedRegions: sel, focus: "regions" });
+    if (deselect) return;
     // A frozen track's regions can be selected but not moved, trimmed or faded.
     if (h.track.frozen) {
       refuseFrozen([h.track.id]);
@@ -751,7 +777,8 @@ export function Arrange() {
       moved = true;
       const d = dragRef.current!;
       d.dx = dxPx / pps;
-      d.dTrack = indexAt(live.current.layout, startContentY + dyPx) - startIndex;
+      d.dTrack = visibleSteps(live.current.layout, startIndex, indexAt(live.current.layout, startContentY + dyPx));
+      d.copy = kind === "move" && ev.altKey;
       if (kind === "fadeIn" || kind === "fadeOut") {
         const other = r.content.type === "audio" ? (kind === "fadeIn" ? r.content.fade_out : r.content.fade_in) : 0;
         const v = fadeFrom + (kind === "fadeIn" ? d.dx : -d.dx);
@@ -775,6 +802,7 @@ export function Arrange() {
       const d = dragRef.current!;
       dragRef.current = null;
       if (!moved) {
+        clickLocate(e, true);
         requestDraw();
         return;
       }
@@ -782,15 +810,21 @@ export function Arrange() {
         const newStart = Math.max(0, snap(r.start + d.dx));
         const delta = newStart - r.start;
         const tracks = project.tracks;
-        const ops = d.ids.map((id) => {
+        const layout = live.current.layout;
+        const moves = d.ids.flatMap((id) => {
           const ti = tracks.findIndex((t) => t.regions.some((x) => x.id === id));
+          if (ti < 0) return [];
           const reg = tracks[ti].regions.find((x) => x.id === id)!;
-          const target = tracks[Math.min(tracks.length - 1, Math.max(0, ti + d.dTrack))];
-          return { id, start: Math.max(0, Math.round(reg.start + delta)), track: target?.id ?? null };
+          const target = tracks[dragTarget(layout, ti, d.dTrack, tracks)];
+          return [{ reg, id, start: Math.max(0, Math.round(reg.start + delta)), track: target.id }];
         });
-        (async () => {
-          for (const op of ops) await act("move_region", op);
-        })();
+        if (d.copy) {
+          // Option-drag: copies at the drop position in one undo step; the copies get selected.
+          const items = moves.map((m) => [m.track, m.reg]);
+          actMade("paste_regions", { items, offset: Math.round(delta), label: "Copy Regions" }).then((made) => made && setState({ selectedRegions: made }));
+        } else {
+          act("move_regions", { moves: moves.map(({ id, start, track }) => ({ id, start, track })) });
+        }
       } else if (d.loopEnd !== undefined) {
         const end = Math.round(d.loopEnd);
         act("set_region_loop", { id: r.id, loopEnd: end > r.start + r.length ? end : null });
@@ -799,6 +833,59 @@ export function Arrange() {
       } else if (d.start !== undefined && d.length !== undefined) {
         act("resize_region", { id: r.id, start: Math.round(d.start), length: Math.round(d.length) });
       }
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  /** A click without a drag moves the playhead to it, snapped like a region drag would be
+   *  (Settings › Editing › Click Moves Playhead). */
+  const clickLocate = (e: React.MouseEvent, onRegion: boolean) => {
+    const mode = getSettings().ui.click_locates ?? "anywhere";
+    if (mode === "off" || (onRegion && mode === "empty")) return;
+    const { project, pps } = live.current;
+    if (!project) return;
+    const el = scrollRef.current!;
+    const x = e.clientX - el.getBoundingClientRect().left + el.scrollLeft;
+    act("locate", { pos: Math.round(Math.max(0, snapPos(project, x / pps, getState().snapMode, getState().pxPerBeat))) });
+  };
+
+  /** Rubber-band selection, from empty lane space: the regions the marquee touches are selected
+   *  (Shift adds them to the selection). A click without a drag deselects, as before. */
+  const startMarquee = (e: React.MouseEvent, h: NonNullable<ReturnType<typeof hit>>) => {
+    const el = scrollRef.current!;
+    const base = e.shiftKey ? getState().selectedRegions : [];
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let moved = false;
+    const move = (ev: MouseEvent) => {
+      if (!moved && Math.abs(ev.clientX - startX) < 3 && Math.abs(ev.clientY - startY) < 3) return;
+      moved = true;
+      const rect = el.getBoundingClientRect();
+      const x = ev.clientX - rect.left + el.scrollLeft;
+      const y = ev.clientY - rect.top + el.scrollTop;
+      const box = { left: Math.min(h.x, x), right: Math.max(h.x, x), top: Math.min(h.y, y), bottom: Math.max(h.y, y) };
+      marqueeRef.current = box;
+      const { project, pps, layout } = live.current;
+      if (!project) return;
+      const hits = new Set(base);
+      project.tracks.forEach((t, i) => {
+        // The lane itself: hidden and collapsed tracks have none, take rows don't count.
+        const top = layout.tops[i];
+        const lane = layout.heights[i] - layout.takeRows[i];
+        if (lane <= 0 || top > box.bottom || top + lane < box.top) return;
+        for (const r of t.regions) if (r.start * pps <= box.right && regionEnd(r) * pps >= box.left) hits.add(r.id);
+      });
+      setState({ selectedRegions: [...hits], focus: "regions" });
+      requestDraw();
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      marqueeRef.current = null;
+      if (!moved && !e.shiftKey) setState({ selectedRegions: [] });
+      if (!moved) clickLocate(e, false);
+      requestDraw();
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);

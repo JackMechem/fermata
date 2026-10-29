@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { act, BUILTIN_SYNTH, call, type AudioConfig, type DeviceList, type Group, type InputLevel, type InputSel, type Tick, type TrackKind } from "../api";
+import { ask } from "@tauri-apps/plugin-dialog";
+import { act, BUILTIN_SYNTH, call, supportedRates, type AudioConfig, type DeviceList, type Group, type InputLevel, type InputSel, type Tick, type TrackKind } from "../api";
 import { updateGroup } from "../ops";
 import { TRACK_COLORS } from "../view";
 import { Icon } from "../icons";
-import { NumberField, Select } from "./Form";
+import { NumberField, Select, sheetKey } from "./Form";
 import { onTick, setState, useStore } from "../store";
 import { inputLabel } from "../time";
 import { mix } from "../theme";
@@ -12,6 +13,7 @@ import { applyUiScale, UI_SCALES } from "../uiScale";
 import { applyWaveStyle, WAVE_STYLES } from "../waveform";
 import { SettingsWindow } from "./Settings";
 import { PdcSettings } from "./Latency";
+import { fmt } from "../keymap";
 
 export function Sheet({ title, children, onClose, width = 560 }: { title: string; children: React.ReactNode; onClose: () => void; width?: number }) {
   useEffect(() => {
@@ -23,7 +25,7 @@ export function Sheet({ title, children, onClose, width = 560 }: { title: string
   }, [onClose]);
   return (
     <div className="sheet-backdrop" onMouseDown={onClose}>
-      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
         <div className="sheet-title">{title}</div>
         {children}
       </div>
@@ -98,7 +100,8 @@ export function NewTrackDialog() {
         )}
         <div className="form-row">
           <label>Audio Output:</label>
-          <Select value="out" options={[["out", "Output 1 + 2"]]} onChange={() => {}} />
+          {/* New tracks always start on Stereo Out; the strip's Output slot routes them elsewhere. */}
+          <span className="dim">Stereo Out — change it later in the channel strip's Output slot</span>
         </div>
         <div className="form-row checks">
           <label className="check">
@@ -154,7 +157,16 @@ function InputLevelCheck() {
   const [level, setLevel] = useState<InputLevel | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    call<InputLevel | null>("input_level").then(setLevel);
+    // Read again now and then and when the window comes back: the level can be changed in the
+    // system mixer while this pane is open.
+    const read = () => call<InputLevel | null>("input_level").then(setLevel);
+    read();
+    const timer = window.setInterval(read, 5000);
+    window.addEventListener("focus", read);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", read);
+    };
   }, [audio?.input_name, audio?.host]);
   if (!level?.attenuating) return null;
   const pct = Math.round(level.volume * 100);
@@ -175,9 +187,12 @@ function InputLevelCheck() {
         onClick={async () => {
           setBusy(true);
           const l = await call<InputLevel | null>("reset_input_level");
-          setLevel(l);
           setBusy(false);
-          if (l && !l.attenuating) setState({ toast: { text: `${l.device} input set to 100%`, at: Date.now() } });
+          // No answer (the mixer couldn't be set or read back): keep the warning up rather than
+          // hiding it as if it were fixed. Errors were reported by call().
+          if (!l) return;
+          setLevel(l);
+          if (!l.attenuating) setState({ toast: { text: `${l.device} input set to 100%`, at: Date.now() } });
         }}
       >
         {busy ? "Setting…" : "Set to 100%"}
@@ -186,28 +201,59 @@ function InputLevelCheck() {
   );
 }
 
+/** Audio settings changed but not applied yet. Kept while Settings is open, so switching tabs
+ *  doesn't lose them; dropped when it closes (see SettingsDialog). */
+let audioDraft: AudioConfig | null = null;
+
 function AudioPane({ close }: { close: () => void }) {
   const audio = useStore((s) => s.snap?.audio);
+  const project = useStore((s) => s.snap?.project);
   const [devices, setDevices] = useState<DeviceList | null>(null);
-  const [cfg, setCfg] = useState<AudioConfig | null>(null);
+  const [cfg, setCfgState] = useState<AudioConfig | null>(audioDraft);
+  const [applied, setApplied] = useState<AudioConfig | null>(null);
   const [busy, setBusy] = useState(false);
+  const setCfg = (c: AudioConfig) => {
+    audioDraft = c;
+    setCfgState(c);
+  };
   useEffect(() => {
-    call<AudioConfig>("get_audio_config").then(setCfg);
+    call<AudioConfig>("get_audio_config").then((c) => {
+      setApplied(c);
+      if (c && !audioDraft) setCfgState(c);
+    });
   }, []);
   useEffect(() => {
     if (cfg) call<DeviceList>("audio_devices", { host: cfg.host }).then(setDevices);
   }, [cfg?.host]);
   if (!cfg) return null;
-  const outDev = devices?.outputs.find((d) => d.id === cfg.output) ?? devices?.outputs.find((d) => d.is_default);
-  const inDev = devices?.inputs.find((d) => d.id === cfg.input) ?? devices?.inputs.find((d) => d.is_default);
-  const rates = (outDev?.sample_rates ?? [44100, 48000]).filter((r) => !inDev || !cfg.input_enabled || inDev.sample_rates.includes(r));
+  const rates = supportedRates(cfg, devices);
+  const changed = applied !== null && JSON.stringify(cfg) !== JSON.stringify(applied);
   const bufferMs = ((cfg.buffer_size / cfg.sample_rate) * 1000).toFixed(1);
   const hostLabel = (h: { name: string; devices: number }) =>
     h.name === "JACK" && h.devices === 0 ? "JACK (no server running)" : h.name === "ALSA" ? "ALSA (direct hardware)" : h.name;
-  const apply = async () => {
+  const apply = async (): Promise<boolean> => {
+    // The project runs at the device's rate, and its audio files play unconverted: warn as
+    // Project Settings does before a rate change makes recorded audio play at the wrong speed.
+    const sr = project?.sample_rate;
+    if (sr && cfg.sample_rate !== sr && project.tracks.some((t) => t.regions.some((r) => r.content.type === "audio"))) {
+      const ok = await ask(
+        `This project's audio was recorded at ${(sr / 1000).toFixed(1)} kHz. Fermata plays audio files without converting them, so at ${(cfg.sample_rate / 1000).toFixed(1)} kHz they would play ${cfg.sample_rate > sr ? "faster and higher" : "slower and lower"}.`,
+        { title: "Change Sample Rate", kind: "warning", okLabel: "Change Anyway", cancelLabel: "Cancel" },
+      );
+      if (!ok) return false;
+    }
     setBusy(true);
-    await act("set_audio_config", { config: cfg });
+    const snap = await act("set_audio_config", { config: cfg });
     setBusy(false);
+    if (snap) {
+      audioDraft = null;
+      setApplied(cfg);
+    }
+    return !!snap;
+  };
+  // Done applies what's still pending, like OK in a settings dialog.
+  const done = async () => {
+    if (!changed || (await apply())) close();
   };
   return (
     <>
@@ -253,7 +299,7 @@ function AudioPane({ close }: { close: () => void }) {
         </span>
         <label>Recording Delay:</label>
         <div className="row-inline">
-          <NumberField value={cfg.recording_delay_ms} step={0.5} min={-500} max={500} onChange={(v) => setCfg({ ...cfg, recording_delay_ms: v })} />
+          <NumberField value={cfg.recording_delay_ms} step={0.5} resolution={0.1} min={-500} max={500} onChange={(v) => setCfg({ ...cfg, recording_delay_ms: v })} />
           <span className="dim">ms, added to the measured latency</span>
         </div>
         <PdcSettings />
@@ -290,10 +336,10 @@ function AudioPane({ close }: { close: () => void }) {
           >
             Reset Audio Engine
           </button>
-          <button className="push" onClick={close}>
+          <button className="push" disabled={busy} onClick={done} title={changed ? "Apply the changes and close" : undefined}>
             Done
           </button>
-          <button className="push default" disabled={busy} onClick={apply}>
+          <button className="push default" disabled={busy || !changed} onClick={apply}>
             {busy ? "Applying…" : "Apply Changes"}
           </button>
         </div>
@@ -351,7 +397,7 @@ function AppearancePane({ close }: { close: () => void }) {
             </button>
           ))}
         </div>
-        <div className="pref-hint">Also in View › Larger / Smaller Interface (⌘= / ⌘−, ⌘0 for actual size).</div>
+        <div className="pref-hint">Also in View › Larger / Smaller Interface ({fmt("Mod+=")} / {fmt("Mod+-")}, {fmt("Mod+0")} for actual size).</div>
       </div>
       <div className="pref-section">
         <div className="pref-title">Waveforms</div>
@@ -387,6 +433,13 @@ function AppearancePane({ close }: { close: () => void }) {
 }
 
 export function SettingsDialog() {
+  // Unapplied audio settings last as long as the window.
+  useEffect(
+    () => () => {
+      audioDraft = null;
+    },
+    [],
+  );
   return <SettingsWindow audio={AudioPane} appearance={AppearancePane} />;
 }
 
@@ -400,6 +453,13 @@ export function GroupSheet() {
   useEffect(() => setName(group?.name ?? ""), [id]);
   if (!group) return null;
   const set = (patch: Partial<Group>) => updateGroup({ ...group, ...patch });
+  const commitName = () => name.trim() && name !== group.name && set({ name: name.trim() });
+  // Closing (Done, Esc or a click outside) keeps a name still being typed: the field may not
+  // get its blur before the sheet goes.
+  const done = () => {
+    commitName();
+    close();
+  };
   const links: [keyof Group, string, string][] = [
     ["volume", "Volume", "Moving one fader moves the others by the same amount"],
     ["pan", "Pan", "Pan moves together, by the same amount"],
@@ -410,14 +470,14 @@ export function GroupSheet() {
     ["editing", "Editing (Selection)", "Selecting a region selects the regions at the same place on the other tracks"],
   ];
   return (
-    <Sheet title="Group Settings" onClose={close} width={460}>
+    <Sheet title="Group Settings" onClose={done} width={460}>
       <div className="group-sheet">
         <div className="group-row">
           <input
             className="group-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            onBlur={() => name.trim() && name !== group.name && set({ name: name.trim() })}
+            onBlur={commitName}
             onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
           />
           <label className="check">
@@ -449,7 +509,7 @@ export function GroupSheet() {
           Delete Group
         </button>
         <div className="sheet-buttons">
-          <button className="push default" onClick={close}>
+          <button className="push default" onClick={done}>
             Done
           </button>
         </div>

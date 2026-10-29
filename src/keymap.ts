@@ -7,6 +7,7 @@
 // "Shift". Letters are upper case ("Shift+K"); other keys use their KeyboardEvent.key name
 // ("Space", "ArrowUp", "Enter", ",").
 import { getSettings } from "./prefs";
+import { formatKeyFor, IS_MAC } from "./keyFormat";
 
 export interface KeyCommand {
   id: string;
@@ -42,6 +43,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "editor", label: "Show/Hide Editors", group: "View", keys: ["E", "P"] },
   { id: "browser", label: "Show/Hide Browsers", group: "View", keys: ["F"] },
   { id: "automation", label: "Show/Hide Automation", group: "View", keys: ["A"] },
+  { id: "global-tracks", label: "Show/Hide Global Tracks", group: "View", keys: ["G"] },
   { id: "show-hidden", label: "Show Hidden Tracks", group: "View", keys: ["H"] },
   { id: "zoom-in", label: "Zoom In Horizontally", group: "View", keys: ["Mod+ArrowRight"] },
   { id: "zoom-out", label: "Zoom Out Horizontally", group: "View", keys: ["Mod+ArrowLeft"] },
@@ -81,7 +83,8 @@ export const MENU_SHORTCUTS: { label: string; menu: string; key: string }[] = [
   { label: "Import Audio File…", menu: "File", key: "Mod+Shift+I" },
   { label: "Bounce Project or Section…", menu: "File", key: "Mod+B" },
   { label: "Export All Tracks as Audio Files…", menu: "File", key: "Mod+Shift+E" },
-  { label: "Bounce in Place…", menu: "Track", key: "Mod+Alt+B" },
+  // BOUNCE_IN_PLACE_KEY in menu.rs: Logic's ⌃B on macOS; elsewhere Ctrl+B is Bounce Project.
+  { label: "Bounce in Place…", menu: "Track", key: IS_MAC ? "Ctrl+B" : "Ctrl+Alt+B" },
   { label: "Undo", menu: "Edit", key: "Mod+Z" },
   { label: "Redo", menu: "Edit", key: "Mod+Shift+Z" },
   { label: "Duplicate", menu: "Edit", key: "Mod+D" },
@@ -97,8 +100,6 @@ export const MENU_SHORTCUTS: { label: string; menu: string; key: string }[] = [
   { label: "Smaller Interface", menu: "View", key: "Mod+-" },
   { label: "Actual Size", menu: "View", key: "Mod+0" },
 ];
-
-const IS_MAC = typeof navigator !== "undefined" && /Mac/.test(navigator.platform);
 
 /** Puts a key string into canonical form (modifier order, and Ctrl = Mod outside macOS). */
 export function normalizeKey(k: string): string {
@@ -137,32 +138,17 @@ export function eventKey(e: KeyboardEvent): string | null {
   return parts.join("+");
 }
 
-const GLYPHS: Record<string, string> = {
-  Space: "Space",
-  Enter: "↩",
-  Backspace: "⌫",
-  Delete: "⌦",
-  Escape: "Esc",
-  Tab: "⇥",
-  ArrowUp: "↑",
-  ArrowDown: "↓",
-  ArrowLeft: "←",
-  ArrowRight: "→",
-  Home: "↖",
-  End: "↘",
-  PageUp: "⇞",
-  PageDown: "⇟",
-  "-": "−",
-};
-
-/** Logic-style display: ⌃⌥⇧⌘ then the key. */
+/** Display form of a key, as the platform writes it: "⇧⌘Z" on macOS, "Ctrl+Shift+Z" elsewhere. */
 export function formatKey(k: string): string {
-  const parts = normalizeKey(k).split("+");
-  const key = parts.pop() ?? "";
-  const has = (m: string) => parts.includes(m);
-  const mods = (has("Ctrl") ? "⌃" : "") + (has("Alt") ? "⌥" : "") + (has("Shift") ? "⇧" : "") + (has("Mod") ? "⌘" : "");
-  return mods + (GLYPHS[key] ?? key);
+  return formatKeyFor(normalizeKey(k), IS_MAC);
 }
+
+/**
+ * A fixed shortcut (one that isn't in KEY_COMMANDS) for menu hints, tooltips and help text:
+ * `fmt("Mod+T")`, or a bare modifier for gestures, `${fmt("Alt")}-drag`. Commands that can be
+ * rebound use `keyHint(id)` instead so their hints follow the user's keymap.
+ */
+export const fmt = formatKey;
 
 /** The keys currently assigned to a command (defaults unless overridden in Settings). */
 export function keysFor(id: string, overrides = getSettings().ui.keymap): string[] {

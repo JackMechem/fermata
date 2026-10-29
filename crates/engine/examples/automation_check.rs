@@ -30,7 +30,11 @@ fn db(g: f32) -> f32 {
     20.0 * g.max(1e-9).log10()
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
 }
 
@@ -186,7 +190,7 @@ fn main() {
     check(&format!("a loaded project plays its lane ({:.1} dB)", db(e)), (db(e) - (db(flat) - 40.0)).abs() < 1.5);
 
     // A plug-in parameter, through the processor's parameter queue.
-    let (Some(name), Some(pname)) = (args.next(), args.next()) else { return };
+    let (Some(name), Some(pname)) = (args.next(), args.next()) else { std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32) };
     s.clear_automation(a, None);
     s.set_auto_mode(a, AutoMode::Read);
     let list = daw_engine::plugin_db::load_cache().unwrap_or_default();
@@ -205,4 +209,5 @@ fn main() {
     s.set_auto_mode(a, AutoMode::Off);
     let (off, _) = levels_at(&mut s, a, early.0, early.1);
     println!("with automation off: {:.1} dB (the plug-in keeps the last value it was sent)", db(off));
+    std::process::exit(FAILED.load(std::sync::atomic::Ordering::Relaxed) as i32);
 }

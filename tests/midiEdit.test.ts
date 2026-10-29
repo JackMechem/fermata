@@ -128,8 +128,26 @@ test("controller lines and erasing", () => {
   assert.equal(mods.length, 11);
   assert.equal(m.ccValueAt(cc, mod, 55), 64);
   assert.equal(m.ccValueAt(cc, bend, 49), null);
+  // Limited to a region, the eraser leaves other regions' events alone.
+  const other: m.PCc = { region: 2, start: 60, kind: mod, value: 5, sel: false };
+  assert.deepEqual(m.eraseCc([...cc, other], mod, 0, 100, 1).filter((c) => m.sameKind(c.kind, mod)), [other]);
   cc = m.eraseCc(cc, mod, 0, 100);
   assert.deepEqual(cc.map((c) => c.kind.type), ["pitch_bend"]);
+});
+
+test("controller events copy and paste relative to the earliest", () => {
+  const mod = { type: "controller", cc: 1 } as const;
+  const cc: m.PCc[] = [
+    { region: 1, start: 300, kind: mod, value: 10, sel: true },
+    { region: 1, start: 100, kind: mod, value: 20, sel: true },
+    { region: 1, start: 200, kind: mod, value: 30, sel: false },
+  ];
+  const clip = m.copyCc(cc);
+  assert.deepEqual(clip.map((c) => [c.offset, c.value]), [[200, 10], [0, 20]]);
+  assert.deepEqual(m.copyCc(cc.map((c) => ({ ...c, sel: false }))), []);
+  const pasted = m.pasteCc(cc, clip, 1000, 2);
+  // Sorted by time; only the pasted events are selected, in the target region.
+  assert.deepEqual(pasted.map((c) => [c.start, c.region, c.sel]), [[100, 1, false], [200, 1, false], [300, 1, false], [1000, 2, true], [1200, 2, true]]);
 });
 
 test("round trip through region content keeps selection keys in engine order", () => {
@@ -158,7 +176,7 @@ test("round trip through region content keeps selection keys in engine order", (
   assert.equal(edits[0].start, undefined);
   assert.deepEqual(edits[0].notes.map((x) => x.start), [0, BAR + Q]);
   assert.deepEqual([...selNotes], ["1:1"]);
-  // Nothing changed: no edit.
+  // An unsorted region comes back sorted, which is an edit; a sorted one, unchanged, makes none.
   const same = m.fromRegions([region]);
   assert.equal(m.toEdits(same.notes, same.cc, [region], BAR).edits.length, 1, "unsorted input is re-sorted, which counts as a change");
   const sorted: Region = { ...region, content: { ...region.content, notes: [...(region.content as { notes: [] }).notes].reverse() } as Region["content"] };

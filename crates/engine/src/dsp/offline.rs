@@ -20,6 +20,9 @@ pub struct Isolate {
     pub fader: bool,
     /// Run the tap track's Channel EQ and Audio FX plug-ins. Its instrument always plays.
     pub effects: bool,
+    /// Tracks outside the render that key a side-chain inside it (and whatever feeds them):
+    /// they play so the key is right, but only into each other, never into the capture.
+    pub keys: Vec<Id>,
 }
 
 /// What a track does in an isolated render.
@@ -28,6 +31,8 @@ pub(super) enum Role {
     Skip,
     Member { heard: bool },
     Tap,
+    /// Plays only to feed a side-chain key (see `Isolate::keys`).
+    Key,
 }
 
 impl Isolate {
@@ -38,8 +43,16 @@ impl Isolate {
         }
         match self.tracks.iter().find(|(t, _)| *t == id) {
             Some(&(_, heard)) => Role::Member { heard },
+            None if self.keys.contains(&id) => Role::Key,
             None => Role::Skip,
         }
+    }
+
+    /// Whether a track playing in role `from` may feed `dst` (through its output or a send):
+    /// anything that plays may, except that key-only tracks stay among themselves.
+    pub(super) fn feeds(&self, from: Option<Role>, dst: Id) -> bool {
+        let to = self.role(dst);
+        to != Role::Skip && (from != Some(Role::Key) || to == Role::Key)
     }
 }
 
@@ -106,9 +119,11 @@ impl Engine {
         self.midi_target = None;
         self.analyzer_target = None;
         self.isolate = isolate;
+        self.offline = true;
         self.snap_gains = true;
         // Nothing is live in a render, and no audio from before it leaks in.
         self.pdc.low_latency = false;
+        self.reset_effects();
         for t in &mut self.tracks {
             if let Some(d) = &mut t.delay {
                 d.clear();
@@ -145,7 +160,10 @@ impl Engine {
         }
 
         self.flush_all_notes();
+        // Live playback starts clean too, not with the render's ringing tail.
+        self.reset_effects();
         self.isolate = None;
+        self.offline = false;
         self.pos = saved.pos;
         self.playing = saved.playing;
         self.recording = saved.recording;

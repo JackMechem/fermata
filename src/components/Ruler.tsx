@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { act } from "../api";
 import { getState, useStore } from "../store";
 import { coalesced, framePos, onFrame } from "../frame";
-import { samplesPerBar, samplesPerBeat, snapPos } from "../time";
+import { samplesPerBeat, snapPos } from "../time";
+import { tempoMap } from "../tempo";
 import { pixelRatio } from "../uiScale";
 import { mix, theme } from "../theme";
 import { onViewport, RULER_H, viewport } from "../view";
@@ -53,10 +54,7 @@ export function Ruler() {
     ctx.fillRect(0, MARKERS_Y, W, 1);
 
     const pps = pxPerBeat / samplesPerBeat(project);
-    const beatPx = pxPerBeat;
-    const barPx = beatPx * project.sig_num;
-    // Skip bar labels when they would collide.
-    const every = barPx >= 34 ? 1 : barPx >= 16 ? 2 : barPx >= 8 ? 4 : 8;
+    const map = tempoMap(project);
 
     // Cycle and Autopunch strips, dimmed while they're off.
     for (const strip of ["cycle", "punch"] as Strip[]) {
@@ -77,23 +75,25 @@ export function Ruler() {
 
     ctx.font = "500 11px Inter, 'SF Pro Text', system-ui, sans-serif";
     ctx.textBaseline = "alphabetic";
-    const first = Math.floor(vp.left / barPx);
-    const last = Math.ceil((vp.left + W) / barPx);
-    for (let b = first; b <= last; b++) {
-      const x = Math.round(b * barPx - vp.left) + 0.5;
-      if (b % every === 0) {
+    // Bars through the tempo map, so their numbers follow tempo and signature changes.
+    for (const b of map.bars(Math.max(0, vp.left / pps), (vp.left + W) / pps)) {
+      const x = Math.round(b.start * pps - vp.left) + 0.5;
+      const barPx = (b.end - b.start) * pps;
+      // Skip bar labels when they would collide.
+      const every = barPx >= 34 ? 1 : barPx >= 16 ? 2 : barPx >= 8 ? 4 : 8;
+      if ((b.bar - 1) % every === 0) {
         ctx.fillStyle = theme.rulerTick;
         ctx.fillRect(x, CYCLE_H + 1, 1, BARS_H - CYCLE_H - 2);
         ctx.fillStyle = theme.rulerText;
-        ctx.fillText(String(b + 1), x + 3, BARS_H - 6);
+        ctx.fillText(String(b.bar), x + 3, BARS_H - 6);
       } else {
         ctx.fillStyle = theme.rulerMinor;
         ctx.fillRect(x, BARS_H - 8, 1, 7);
       }
-      if (beatPx >= 10) {
+      if (barPx / b.num >= 10) {
         ctx.fillStyle = theme.rulerMinor;
-        for (let k = 1; k < project.sig_num; k++) {
-          ctx.fillRect(Math.round(x + k * beatPx), BARS_H - 5, 1, 4);
+        for (let k = 1; k < b.num; k++) {
+          ctx.fillRect(Math.round(map.sampleAt(b.startQ + (k * 4) / b.den) * pps - vp.left + 0.5), BARS_H - 5, 1, 4);
         }
       }
     }
@@ -136,6 +136,8 @@ export function Ruler() {
     const pps = pxPerBeat / samplesPerBeat(project);
     const toSample = (cx: number) => (cx - rect.left + viewport().left) / pps;
     const y = e.clientY - rect.top;
+    // The ruler always snaps, to beats at least, even with Snap off: locators and markers set
+    // between beats are hardly ever wanted.
     const snap = (v: number) => Math.max(0, snapPos(project, v, getState().snapMode === "off" ? "beat" : getState().snapMode, pxPerBeat));
     const at = toSample(e.clientX);
 
@@ -177,7 +179,7 @@ export function Ruler() {
     else if (has && ax > sx && ax < ex) mode = "move";
     const startX = e.clientX;
     let moved = false;
-    const bar = samplesPerBar(project);
+    const map = tempoMap(project);
 
     const move = (ev: MouseEvent) => {
       if (!moved && Math.abs(ev.clientX - startX) < 3) return;
@@ -188,15 +190,15 @@ export function Ruler() {
       if (mode === "new") {
         s = snap(Math.min(at, cur));
         en = snap(Math.max(at, cur));
-        if (en <= s) en = s + bar;
+        if (en <= s) en = s + map.samplesPerBarAt(s);
       } else if (mode === "move") {
         const d = snap(c.start + (cur - at)) - c.start;
         s = c.start + d;
         en = c.end + d;
       } else if (mode === "start") {
-        s = Math.min(snap(cur), c.end - samplesPerBeat(project));
+        s = Math.min(snap(cur), c.end - map.samplesPerBeatAt(c.end));
       } else {
-        en = Math.max(snap(cur), c.start + samplesPerBeat(project));
+        en = Math.max(snap(cur), c.start + map.samplesPerBeatAt(c.start));
       }
       preview.current = { strip, start: Math.max(0, s), end: Math.max(0, en) };
       draw();

@@ -38,7 +38,7 @@ impl Session {
         if target == track {
             return Err(anyhow!("{} can't feed itself", t.name));
         }
-        if p.reaches(target, track) {
+        if p.depends(target, track) {
             return Err(anyhow!("{} already feeds {}, so this would make a feedback loop", aux.name, t.name));
         }
         Ok(())

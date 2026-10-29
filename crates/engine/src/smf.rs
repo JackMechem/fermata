@@ -1,7 +1,7 @@
 //! Standard MIDI File reading and writing, written by hand (formats 0 and 1).
 //!
-//! Times here are in ticks; the session converts them to and from project samples in musical
-//! time (quarter notes at the project tempo), the way Logic keeps bars and beats on import.
+//! Times here are in ticks; the session converts them to and from project samples through
+//! the file's tempo map (on import) or the project's (on export).
 
 use anyhow::{anyhow, bail, Result};
 
@@ -44,6 +44,11 @@ pub struct SmfFile {
     /// The first time signature (numerator, denominator).
     pub signature: Option<(u32, u32)>,
     pub tracks: Vec<SmfTrack>,
+    /// Every tempo change as (tick, BPM), sorted. Written instead of `tempo` when not empty.
+    pub tempos: Vec<(u64, f64)>,
+    /// Every time signature as (tick, numerator, denominator), sorted. Written instead of
+    /// `signature` when not empty.
+    pub signatures: Vec<(u64, u32, u32)>,
 }
 
 struct Reader<'a> {
@@ -119,7 +124,7 @@ pub fn read(bytes: &[u8]) -> Result<SmfFile> {
         (division.max(1), None)
     };
 
-    let mut file = SmfFile { ppq, tempo: smpte_tempo, signature: None, tracks: Vec::new() };
+    let mut file = SmfFile { ppq, tempo: smpte_tempo, signature: None, tracks: Vec::new(), tempos: Vec::new(), signatures: Vec::new() };
     while r.i + 8 <= bytes.len() {
         let id = r.take(4)?;
         let len = r.u32()? as usize;
@@ -129,6 +134,16 @@ pub fn read(bytes: &[u8]) -> Result<SmfFile> {
             read_track(body, &mut file)?;
         }
     }
+    // A tempo track comes first, but changes can sit in any track; the first one at a tick wins.
+    file.tempos.sort_by_key(|t| t.0);
+    file.tempos.dedup_by_key(|t| t.0);
+    file.signatures.sort_by_key(|t| t.0);
+    file.signatures.dedup_by_key(|t| t.0);
+    if smpte_tempo.is_some() {
+        file.tempos.clear();
+    }
+    file.tempo = file.tempos.first().map(|t| t.1).or(file.tempo);
+    file.signature = file.signatures.first().map(|s| (s.1, s.2));
     Ok(file)
 }
 
@@ -159,12 +174,12 @@ fn read_track(body: &[u8], file: &mut SmfFile) -> Result<()> {
                 let data = r.take(len)?;
                 match kind {
                     0x03 if name.is_empty() => name = String::from_utf8_lossy(data).trim().to_string(),
-                    0x51 if data.len() >= 3 && file.tempo.is_none() => {
+                    0x51 if data.len() >= 3 => {
                         let us = ((data[0] as u32) << 16 | (data[1] as u32) << 8 | data[2] as u32).max(1);
-                        file.tempo = Some(60_000_000.0 / us as f64);
+                        file.tempos.push((tick, 60_000_000.0 / us as f64));
                     }
-                    0x58 if data.len() >= 2 && file.signature.is_none() => {
-                        file.signature = Some((data[0].max(1) as u32, 1u32 << data[1].min(5)));
+                    0x58 if data.len() >= 2 => {
+                        file.signatures.push((tick, data[0].max(1) as u32, 1u32 << data[1].min(5)));
                     }
                     0x2F => break,
                     _ => {}
@@ -279,13 +294,15 @@ pub fn write(file: &SmfFile) -> Vec<u8> {
     chunk(&mut out, b"MThd", &header);
 
     let mut conductor = Vec::new();
-    if let Some(bpm) = file.tempo {
-        let us = (60_000_000.0 / bpm.max(1.0)).round() as u32;
-        conductor.push((0, 0, meta(0x51, &us.to_be_bytes()[1..])));
+    let tempos = if file.tempos.is_empty() { file.tempo.map(|t| vec![(0, t)]).unwrap_or_default() } else { file.tempos.clone() };
+    for (tick, bpm) in tempos {
+        let us = (60_000_000.0 / bpm.max(1.0)).round().clamp(1.0, 0xFF_FFFF as f64) as u32;
+        conductor.push((tick, 0, meta(0x51, &us.to_be_bytes()[1..])));
     }
-    if let Some((num, den)) = file.signature {
+    let sigs = if file.signatures.is_empty() { file.signature.map(|(n, d)| vec![(0, n, d)]).unwrap_or_default() } else { file.signatures.clone() };
+    for (tick, num, den) in sigs {
         let pow = (den.max(1) as f64).log2().round() as u8;
-        conductor.push((0, 0, meta(0x58, &[num.clamp(1, 255) as u8, pow, 24, 8])));
+        conductor.push((tick, 0, meta(0x58, &[num.clamp(1, 255) as u8, pow, 24, 8])));
     }
     chunk(&mut out, b"MTrk", &track_body(conductor));
 
@@ -343,6 +360,8 @@ mod tests {
                     cc: vec![],
                 },
             ],
+            tempos: Vec::new(),
+            signatures: Vec::new(),
         }
     }
 
@@ -359,6 +378,22 @@ mod tests {
             t.notes.sort_by_key(|n| (n.start, n.pitch));
         }
         assert_eq!(back.tracks, want);
+    }
+
+    #[test]
+    fn tempo_and_signature_changes_round_trip() {
+        let mut f = sample();
+        f.tempos = vec![(0, 97.5), (3840, 140.0), (7680, 60.0)];
+        f.signatures = vec![(0, 3, 4), (2880, 7, 8)];
+        let back = read(&write(&f)).unwrap();
+        assert_eq!(back.tempos.len(), 3);
+        for (a, b) in back.tempos.iter().zip(&f.tempos) {
+            assert_eq!(a.0, b.0);
+            assert!((a.1 - b.1).abs() < 0.01, "{a:?} {b:?}");
+        }
+        assert_eq!(back.signatures, f.signatures);
+        assert!((back.tempo.unwrap() - 97.5).abs() < 0.01);
+        assert_eq!(back.signature, Some((3, 4)));
     }
 
     #[test]

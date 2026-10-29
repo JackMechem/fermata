@@ -7,10 +7,11 @@ import type { MenuItem } from "./components/Menu";
 import { currentLayout, setTrackHeight, stepVisible } from "./layout";
 import { isLooped, regionEnd } from "./loops";
 import { BOUNCE_IN_PLACE_HINT, openBounce, openBounceInPlace } from "./bounce";
+import { fmt, keyHint } from "./keymap";
 import { exportMidi, exportTrackMidi, importMidiFiles } from "./midiFiles";
 import { canFreeze, freezeTracks, unfreezeTracks } from "./freeze";
 import { currentTick, getState, setState } from "./store";
-import { samplesPerBar, samplesPerBeat } from "./time";
+import { tempoMap } from "./tempo";
 import { TRACK_COLORS } from "./view";
 import { isFolder, packTakeFolder, takeFolderMenu } from "./takes";
 
@@ -276,8 +277,10 @@ export function selectAllRegions() {
 async function createMidiRegion(track: Id, pos: number) {
   const p = project();
   if (!p) return;
-  const bar = samplesPerBar(p);
-  select(await actMade("create_midi_region", { track, start: Math.floor(pos / bar) * bar, length: Math.round(bar) }));
+  const m = tempoMap(p);
+  const bar = m.barAt(pos);
+  const start = Math.round(m.barStart(bar));
+  select(await actMade("create_midi_region", { track, start, length: Math.round(m.barStart(bar + 1)) - start, key: null }));
 }
 
 async function importAt(track: Track, pos: number) {
@@ -314,8 +317,9 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
   const regs = ids.map(regionById).filter((x): x is Region => !!x);
   const audio = regs.filter((x) => x.content.type === "audio").map((x) => x.id);
   const midi = regs.filter((x) => x.content.type === "midi").map((x) => x.id);
-  const beat = samplesPerBeat(p);
-  const bar = samplesPerBar(p);
+  // A beat and a bar at the tempo where the (first) region starts.
+  const beat = tempoMap(p).samplesPerBeatAt(r.start);
+  const bar = tempoMap(p).samplesPerBarAt(r.start);
   const fades = (which: "fade_in" | "fade_out"): MenuItem[] =>
     (
       [
@@ -330,20 +334,20 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
   const muted = regs.every((x) => x.muted);
   const looped = regs.filter(isLooped);
   const items: MenuItem[] = [
-    { label: "Cut", hint: "⌘X", onClick: () => cutRegions(ids) },
-    { label: "Copy", hint: "⌘C", onClick: () => copyRegions(ids) },
-    { label: "Paste", hint: "⌘V", disabled: !getState().clipboard.length, onClick: () => pasteRegions() },
-    { label: "Duplicate", hint: "⌘D", onClick: () => repeatRegions(1, ids) },
+    { label: "Cut", hint: keyHint("cut"), onClick: () => cutRegions(ids) },
+    { label: "Copy", hint: keyHint("copy"), onClick: () => copyRegions(ids) },
+    { label: "Paste", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => pasteRegions() },
+    { label: "Duplicate", hint: fmt("Mod+D"), onClick: () => repeatRegions(1, ids) },
     {
       label: "Repeat",
       children: [2, 3, 4, 8, 16].map((n) => ({ label: `${n} Times`, onClick: () => repeatRegions(n, ids) })),
     },
     { separator: true },
-    { label: "Split at Playhead", hint: "⌘T", onClick: () => splitAtPlayhead(ids) },
-    { label: "Join", hint: "⌘J", disabled: ids.length < 2, onClick: () => joinRegions(ids) },
-    { label: "Loop", hint: "L", checked: looped.length === regs.length, onClick: () => toggleLoop(ids) },
+    { label: "Split at Playhead", hint: fmt("Mod+T"), onClick: () => splitAtPlayhead(ids) },
+    { label: "Join", hint: fmt("Mod+J"), disabled: ids.length < 2, onClick: () => joinRegions(ids) },
+    { label: "Loop", hint: keyHint("loop"), checked: looped.length === regs.length, onClick: () => toggleLoop(ids) },
     { label: "Convert Loops to Real Copies", disabled: !looped.length, onClick: () => convertLoops(ids) },
-    { label: muted ? "Unmute" : "Mute", hint: "⌃M", onClick: () => toggleRegionMute(ids) },
+    { label: muted ? "Unmute" : "Mute", hint: keyHint("mute-regions"), onClick: () => toggleRegionMute(ids) },
     { label: "Rename…", disabled: ids.length > 1, onClick: rename },
     { label: "Color", children: colorMenu(regs.length === 1 ? r.color : undefined, (c) => act("set_region_color", { ids, color: c }), "Track Color") },
   ];
@@ -401,17 +405,17 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
   items.push(
     { separator: true },
     { label: "Move to New Track", onClick: () => actMade("regions_to_new_track", { ids }).then(select) },
-    { label: "Set Locators by Regions", hint: "U", onClick: () => setLocatorsByRegions(ids) },
+    { label: "Set Locators by Regions", hint: keyHint("set-locators"), onClick: () => setLocatorsByRegions(ids) },
     {
       label: "Select",
       children: [
         { label: "All on Track", disabled: !track, onClick: () => track && selectOnTrack(track.id) },
         { label: "All Following on Track", disabled: !track, onClick: () => track && selectOnTrack(track.id, r.start) },
-        { label: "All", hint: "⌘A", onClick: selectAllRegions },
+        { label: "All", hint: fmt("Mod+A"), onClick: selectAllRegions },
       ],
     },
     { separator: true },
-    { label: "Delete", hint: "⌫", onClick: () => deleteRegions(ids) },
+    { label: "Delete", hint: keyHint("delete-regions"), onClick: () => deleteRegions(ids) },
   );
   return items;
 }
@@ -419,13 +423,13 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
 /** Right-clicking empty space in a track's lane (or below the tracks). */
 export function laneMenu(track: Track | null, pos: number): MenuItem[] {
   const items: MenuItem[] = [];
-  if (track) items.push({ label: "Paste Here", hint: "⌘V", disabled: !getState().clipboard.length, onClick: () => pasteRegions({ track: track.id, pos }) });
+  if (track) items.push({ label: "Paste Here", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => pasteRegions({ track: track.id, pos }) });
   if (track?.kind === "instrument") items.push({ label: "Create MIDI Region", onClick: () => createMidiRegion(track.id, pos) });
   if (track?.kind === "audio") items.push({ label: "Import Audio File Here…", onClick: () => importAt(track, pos) });
   if (track?.kind === "instrument") items.push({ label: "Import MIDI File Here…", onClick: () => importMidiAt(track, pos) });
   if (track) items.push({ label: "Select All on Track", onClick: () => selectOnTrack(track.id) });
   if (items.length) items.push({ separator: true });
-  items.push({ label: "Select All", hint: "⌘A", onClick: selectAllRegions }, { label: "New Tracks…", hint: "⌥⌘N", onClick: () => setState({ dialog: "new-tracks" }) });
+  items.push({ label: "Select All", hint: fmt("Mod+A"), onClick: selectAllRegions }, { label: "New Tracks…", hint: fmt("Mod+Alt+N"), onClick: () => setState({ dialog: "new-tracks" }) });
   return items;
 }
 
@@ -439,9 +443,9 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
   const inStack = sel.some((x) => x.parent !== null);
   const s = (one: string, more: string) => (many ? more : one);
   const items: MenuItem[] = [
-    { label: s("Duplicate Track", "Duplicate Tracks"), hint: "⌘D", onClick: () => duplicateTracks(true) },
+    { label: s("Duplicate Track", "Duplicate Tracks"), hint: fmt("Mod+D"), onClick: () => duplicateTracks(true) },
     { label: "New Track with Same Settings", disabled: many, onClick: () => duplicateTracks(false) },
-    { label: "New Tracks…", hint: "⌥⌘N", onClick: () => setState({ dialog: "new-tracks" }) },
+    { label: "New Tracks…", hint: fmt("Mod+Alt+N"), onClick: () => setState({ dialog: "new-tracks" }) },
     { label: "New Aux", onClick: () => newAux() },
     { label: s("Bounce in Place…", "Bounce Tracks in Place…"), hint: BOUNCE_IN_PLACE_HINT, onClick: () => bounceInPlace(ids) },
     ...(sel.some(canFreeze)
@@ -458,7 +462,7 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
     {
       label: "Create Track Stack",
       children: [
-        { label: "Folder Stack", hint: "⇧⌘D", onClick: () => createStack(false, ids) },
+        { label: "Folder Stack", hint: fmt("Mod+Shift+D"), onClick: () => createStack(false, ids) },
         { label: "Summing Stack", onClick: () => createStack(true, ids) },
       ],
     },
@@ -475,7 +479,7 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
     {
       label: "Group",
       children: [
-        { label: s("New Group from Track", "New Group from Selected Tracks"), hint: "⌘G", onClick: () => groupTracks(ids) },
+        { label: s("New Group from Track", "New Group from Selected Tracks"), hint: fmt("Mod+G"), onClick: () => groupTracks(ids) },
         ...(p.groups.length ? [{ separator: true } as MenuItem, { label: "Assign to", header: true } as MenuItem] : []),
         ...p.groups.map((g) => ({ label: g.name, checked: sel.every((x) => x.group === g.id), onClick: () => setGroup(ids, g.id) })),
         { separator: true },
@@ -485,23 +489,24 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
       ],
     },
     { separator: true },
-    { label: many ? "Mute Tracks" : "Mute", hint: "M", checked: sel.every((x) => x.mute), onClick: () => switchAll("mute", ids) },
-    { label: many ? "Solo Tracks" : "Solo", hint: "S", checked: sel.every((x) => x.solo), onClick: () => switchAll("solo", ids) },
+    { label: many ? "Mute Tracks" : "Mute", hint: keyHint("track-mute"), checked: sel.every((x) => x.mute), onClick: () => switchAll("mute", ids) },
+    { label: many ? "Solo Tracks" : "Solo", hint: keyHint("track-solo"), checked: sel.every((x) => x.solo), onClick: () => switchAll("solo", ids) },
   );
-  if (sel.some((x) => canRecord(x.kind))) items.push({ label: "Record Enable", hint: "⌃R", checked: sel.every((x) => x.armed || !canRecord(x.kind)), onClick: () => switchAll("armed", ids.filter((id) => canRecord(p.tracks.find((x) => x.id === id)!.kind))) });
+  if (sel.some((x) => canRecord(x.kind))) items.push({ label: "Record Enable", hint: keyHint("track-arm"), checked: sel.every((x) => x.armed || !canRecord(x.kind)), onClick: () => switchAll("armed", ids.filter((id) => canRecord(p.tracks.find((x) => x.id === id)!.kind))) });
   items.push(
     { separator: true },
     { label: "Select All Regions on Track", disabled: many, onClick: () => selectOnTrack(t.id) },
     ...(t.kind === "instrument" && !many ? [{ label: "Export Track as MIDI File…", disabled: !t.regions.length, onClick: () => exportTrackMidi(t.id) }] : []),
     { label: "Reset Track Height", onClick: () => ids.forEach((id) => setTrackHeight(id, null)) },
     { separator: true },
+    // One key for both: hideTracks (⌃H) shows the tracks again when they're all hidden.
     sel.every((x) => x.hidden)
-      ? { label: s("Unhide Track", "Unhide Tracks"), hint: "⌃H", onClick: () => setHidden(ids, false) }
-      : { label: s("Hide Track", "Hide Tracks"), hint: "⌃H", onClick: () => hideTracks(ids) },
+      ? { label: s("Unhide Track", "Unhide Tracks"), hint: keyHint("hide-tracks"), onClick: () => setHidden(ids, false) }
+      : { label: s("Hide Track", "Hide Tracks"), hint: keyHint("hide-tracks"), onClick: () => hideTracks(ids) },
     { label: "Unhide All Tracks", disabled: !p.tracks.some((x) => x.hidden), onClick: unhideAllTracks },
-    { label: "Show Hidden Tracks", hint: "H", checked: getState().showHidden, onClick: toggleShowHidden },
+    { label: "Show Hidden Tracks", hint: keyHint("show-hidden"), checked: getState().showHidden, onClick: toggleShowHidden },
     { separator: true },
-    { label: s("Delete Track", "Delete Tracks"), hint: "⌘⌫", onClick: () => deleteTracks(ids) },
+    { label: s("Delete Track", "Delete Tracks"), hint: fmt("Mod+Backspace"), onClick: () => deleteTracks(ids) },
     { label: "Delete Unused Tracks", onClick: deleteUnusedTracks },
   );
   return items;

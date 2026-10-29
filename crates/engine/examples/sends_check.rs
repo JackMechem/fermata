@@ -22,7 +22,11 @@ fn levels(s: &mut Session, ids: &[u64]) -> (Vec<f32>, f32) {
     (lv, t.master.0.max(t.master.1))
 }
 
+/// Set by any failed check: the example then exits with status 1, so scripts notice.
+static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn check(name: &str, ok: bool) -> bool {
+    FAILED.fetch_or(!ok, std::sync::atomic::Ordering::Relaxed);
     println!("{} {name}", if ok { "PASS" } else { "FAIL" });
     ok
 }
@@ -165,5 +169,5 @@ fn main() {
     ok &= check("undo of an output change", s.project.track(b).unwrap().output == Some(x));
 
     println!("{}", if ok { "ALL PASS" } else { "SOME FAILED" });
-    std::process::exit(if ok { 0 } else { 1 });
+    std::process::exit(if ok && !FAILED.load(std::sync::atomic::Ordering::Relaxed) { 0 } else { 1 });
 }

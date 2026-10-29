@@ -7,8 +7,11 @@ import { useStore } from "../store";
 import { dbToFader, faderToDb, formatDb } from "../time";
 import { openMenuAt } from "./Menu";
 
-/** A small unipolar level knob, on the fader's taper. Shift-drag is fine; double-click is 0 dB. */
+/** A small unipolar level knob, on the fader's taper. Shift-drag adjusts finely; double-click
+ *  is 0 dB. */
 function SendKnob({ db, pre, onChange, onDrag }: { db: number; pre: boolean; onChange: (db: number) => void; onDrag: (on: boolean) => void }) {
+  // The unrounded knob position. A drag adds to it rather than to the rounded dB it reports,
+  // so slow movements still add up.
   const pos = useRef(dbToFader(db));
   pos.current = dbToFader(db);
   const size = 16;
@@ -78,7 +81,8 @@ function SendSlot({ track, slot, send }: { track: Track; slot: number; send: Sen
       <SendKnob db={send.level_db} pre={send.pre_fader} onChange={(db) => setSendLevel(track.id, slot, db)}
         onDrag={(on) => {
           setDragging(on);
-          // Lets Touch/Latch automation know the send is held.
+          // Lets Touch/Latch automation know the send is held. Plain invoke, not call(): a
+          // failure only costs the touch hint and isn't worth an error toast mid-drag.
           invoke("automation_touch", { track: track.id, param: { type: "send", value: slot }, touching: on }).catch(() => {});
         }}
       />
