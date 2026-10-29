@@ -16,7 +16,7 @@ All notable changes to Fermata are recorded here. The format follows
   project (regions, playhead, cycle, markers, project end) with a box for the visible area:
   drag it to scroll, drag its edges to zoom, click elsewhere to jump there (View › Show
   Overview).
-- **Scroll to Playhead** button beside Catch; a second Stop also brings the playhead into view.
+- **Scroll to Playhead** button beside Catch (Alt+\`); a second Stop also brings the playhead into view.
 - **Settings › Editing › Mouse Wheel Scrolls:** Horizontally (time) makes a mouse's vertical
   wheel scroll through time in the Tracks area and Piano Roll, with Shift for vertical.
 - **Autosave after recording** (Settings › General › After Recording, on by default): the

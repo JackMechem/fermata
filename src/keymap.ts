@@ -29,7 +29,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "rewind", label: "Rewind One Bar", group: "Transport", keys: [","] },
   { id: "forward", label: "Forward One Bar", group: "Transport", keys: ["."] },
   { id: "catch-playhead", label: "Catch Playhead", group: "Transport", keys: ["`"] },
-  { id: "show-playhead", label: "Scroll to Playhead", group: "Transport", keys: [] },
+  { id: "show-playhead", label: "Scroll to Playhead", group: "Transport", keys: ["Alt+`"] },
   { id: "autopunch", label: "Autopunch Mode", group: "Transport", keys: ["Mod+Ctrl+P"] },
 
   { id: "create-marker", label: "Create Marker", group: "Navigation", keys: ["Alt+'"] },
@@ -117,7 +117,7 @@ export function normalizeKey(k: string): string {
   return out.join("+");
 }
 
-const PUNCTUATION: Record<string, string> = { Quote: "'", Comma: ",", Period: ".", Semicolon: ";", Slash: "/", BracketLeft: "[", BracketRight: "]" };
+const PUNCTUATION: Record<string, string> = { Quote: "'", Comma: ",", Period: ".", Semicolon: ";", Slash: "/", BracketLeft: "[", BracketRight: "]", Backquote: "`" };
 
 /** The key string for a key press, or null for a bare modifier. */
 export function eventKey(e: KeyboardEvent): string | null {

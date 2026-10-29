@@ -119,7 +119,7 @@ From left to right:
   Stop, Play (Space), Record (R). Stop while stopped returns to the left locator when Cycle is
   on, otherwise to the start, and the Tracks area and the open editor scroll sideways to show
   it if it's off screen. Other jumps (Go to Beginning, Rewind, Forward, markers) leave the view
-  where it is; **Scroll to Playhead** (the button beside Catch) brings the playhead into view.
+  where it is; **Scroll to Playhead** (the button beside Catch, or Alt+\`) brings the playhead into view.
 - **The LCD:**
   - **BAR / BEAT:** the playhead position. Drag vertically to move the playhead by bars.
   - **TEMPO:** drag vertically to change it, or double-click to type a value (Enter applies,
@@ -1605,6 +1605,7 @@ shown.
 | , | Rewind one bar |
 | . | Forward one bar |
 | \` | Catch Playhead |
+| Alt+\` (⌥\` on macOS) | Scroll to Playhead |
 | Ctrl+P (Control+⌘P on macOS) | Autopunch Mode |
 
 ### Navigation
