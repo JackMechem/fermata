@@ -1,14 +1,14 @@
 //! Checks reordering Audio FX inserts (silent ALSA null output): a move changes what the
 //! engine runs, not just the project; the instances keep running (same ids, nothing reloaded);
-//! undo and redo put them back the same way; and moving or copying onto another strip makes
-//! room there.
+//! undo and redo put them back the same way; moving or copying onto another strip makes
+//! room there; and a plug-in moved to another track takes its automation along.
 //! usage: insert_order_check <audio file> <scratch dir>
 use std::path::PathBuf;
 use std::time::Duration;
 
 use daw_engine::audio_io::AudioConfig;
 use daw_engine::fx;
-use daw_engine::model::{Id, InputSel, TrackKind, MASTER_ID};
+use daw_engine::model::{AutoLane, AutoParam, AutoPoint, Id, InputSel, TrackKind, MASTER_ID};
 use daw_engine::Session;
 
 static FAILED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -168,7 +168,90 @@ fn main() {
     let same_order = names(&t, a) == names(&s, a);
     check(&format!("a reloaded project plays the same as the reordered one ({:?}, diff {d:.2e})", &names(&t, a)[..3]), same_order && d < 1e-5);
 
+    // One reloaded session at a time: each holds an ALSA sequencer queue.
+    drop(t);
+    automation_follows(&mut s, &tone, len, &scratch);
+
     if FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);
     }
+}
+
+/// The plug-in lanes of a track, as (instance, parameter, points).
+fn plugin_lanes(s: &Session, track: Id) -> Vec<(Id, u32, Vec<AutoPoint>)> {
+    let lanes: &[AutoLane] = &s.project.track(track).unwrap().automation;
+    lanes.iter().filter_map(|l| match l.param {
+        AutoParam::Plugin { uid, param, .. } => Some((uid, param, l.points.clone())),
+        _ => None,
+    }).collect()
+}
+
+/// A compressor's Make Up automated on one track, then the compressor dragged to another.
+fn automation_follows(s: &mut Session, tone: &str, len: i64, scratch: &std::path::Path) {
+    let d = s.add_track(TrackKind::Audio, InputSel::None, None, None).unwrap();
+    let e = s.add_track(TrackKind::Audio, InputSel::None, None, None).unwrap();
+    for t in [d, e] {
+        s.import_audio(std::path::Path::new(tone), t, 0).unwrap();
+    }
+    let comp = s.set_plugin(d, 0, "builtin:compressor").unwrap();
+    let makeup = fx::find("builtin:compressor").unwrap().params.iter().find(|p| p.name == "Make Up").unwrap().id;
+    // Make Up all the way down (-20 dB), well away from its 0 dB default.
+    let points = vec![AutoPoint { pos: 0, value: 0.0 }, AutoPoint { pos: len, value: 0.0 }];
+    s.set_automation_lane(d, AutoParam::Plugin { uid: comp, param: makeup, name: "Compressor: Make Up".into() }, points.clone());
+    // A lane of the track's own, at pan's centre so the two tracks still sound alike.
+    s.set_automation_lane(d, AutoParam::Pan, vec![AutoPoint { pos: 0, value: 0.0 }]);
+    settle(s);
+    let dry = render(s, len, e);
+    let driven = render(s, len, d);
+    check(&format!("the Make Up lane is audible (diff {:.2e})", diff(&driven, &dry)), diff(&driven, &dry) > 1e-2);
+
+    s.checkpoint("Move Plug-in", None, true);
+    s.move_plugin(d, 0, e, 0, false).unwrap();
+    settle(s);
+    let new_uid = uids(s, e)[0].unwrap();
+    let on_e = plugin_lanes(s, e);
+    check(&format!("a move to another track takes its lane along ({on_e:?})"), on_e == vec![(new_uid, makeup, points.clone())] && new_uid != comp);
+    let left = &s.project.track(d).unwrap().automation;
+    check("and leaves the track's own lanes behind", left.len() == 1 && left[0].param.same(&AutoParam::Pan));
+    let moved = render(s, len, e);
+    s.checkpoint("Delete Automation", None, false);
+    s.clear_automation(e, None);
+    settle(s);
+    let unautomated = render(s, len, e);
+    s.undo();
+    settle(s);
+    let ok = diff(&moved, &driven) < 1e-4 && diff(&unautomated, &driven) > 1e-2;
+    check(&format!("the lane drives the compressor on its new track (diff {:.2e}, {:.2e} without it)", diff(&moved, &driven), diff(&unautomated, &driven)), ok);
+
+    s.undo();
+    settle(s);
+    check("undo puts the lane back on the old track, on the old instance", plugin_lanes(s, d) == vec![(comp, makeup, points.clone())] && plugin_lanes(s, e).is_empty());
+    check("where it drives the compressor again", diff(&render(s, len, d), &driven) < 1e-4 && diff(&render(s, len, e), &dry) < 1e-5);
+    s.redo();
+    settle(s);
+    check("redo moves it again", plugin_lanes(s, e) == vec![(new_uid, makeup, points.clone())] && plugin_lanes(s, d).is_empty());
+    check("and it drives the compressor there", diff(&render(s, len, e), &driven) < 1e-4);
+
+    // A copy leaves the lanes with the original; the copy starts with none.
+    s.move_plugin(e, 0, d, 0, true).unwrap();
+    settle(s);
+    check("a copy leaves the lane with the original", plugin_lanes(s, e) == vec![(new_uid, makeup, points.clone())] && plugin_lanes(s, d).is_empty());
+    s.remove_plugin(d, 0);
+
+    // Stereo Out has no automation: the lane stays behind there, as when a plug-in is deleted.
+    s.checkpoint("Move Plug-in", None, true);
+    s.move_plugin(e, 0, MASTER_ID, 2, false).unwrap();
+    check("a move to Stereo Out leaves the lane on the track", plugin_lanes(s, e).len() == 1 && uids(s, e)[0].is_none());
+    s.undo();
+    settle(s);
+
+    // A save and reload keeps the moved lane on its new instance.
+    let path = s.save(None).unwrap();
+    let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
+    let mut t = Session::new(cfg, Vec::new());
+    t.dir = scratch.join("InsertOrder.fermata");
+    t.open(&path).unwrap();
+    settle(&mut t);
+    let reloaded = render(&mut t, len, e);
+    check(&format!("a reloaded project keeps the moved lane and plays it (diff {:.2e})", diff(&reloaded, &driven)), plugin_lanes(&t, e) == vec![(uids(&t, e)[0].unwrap(), makeup, points)] && diff(&reloaded, &driven) < 1e-4);
 }

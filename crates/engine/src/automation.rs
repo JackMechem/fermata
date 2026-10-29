@@ -165,6 +165,16 @@ pub fn remap_plugins(lanes: &mut [AutoLane], map: &[(Id, Id)]) {
     }
 }
 
+/// Takes a plug-in instance's lanes (`old`) out of a track's list, re-keyed to `new`: the
+/// lanes of a plug-in moved to another track, as that track's instance. The rest keep their
+/// order.
+pub fn take_plugin_lanes(lanes: &mut Vec<AutoLane>, old: Id, new: Id) -> Vec<AutoLane> {
+    let (mut taken, kept): (Vec<AutoLane>, Vec<AutoLane>) = std::mem::take(lanes).into_iter().partition(|l| matches!(l.param, AutoParam::Plugin { uid, .. } if uid == old));
+    *lanes = kept;
+    remap_plugins(&mut taken, &[(old, new)]);
+    taken
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -289,5 +299,21 @@ mod tests {
         let rec = pts(&[(200, 1.0), (400, 1.0)]);
         let out = splice(&lane, &rec, 200, 400, 0.0, true, 10, 0.0);
         assert!(!out.iter().any(|p| p.pos == 300));
+    }
+
+    #[test]
+    fn taking_a_plugins_lanes_rekeys_them() {
+        let lane = |param: AutoParam, v: f32| AutoLane { param, points: pts(&[(0, v)]) };
+        let plug = |uid: Id, param: u32| AutoParam::Plugin { uid, param, name: format!("P{param}") };
+        let mut lanes = vec![lane(AutoParam::Volume, -3.0), lane(plug(7, 1), 0.2), lane(plug(8, 1), 0.4), lane(plug(7, 2), 0.6)];
+        let taken = take_plugin_lanes(&mut lanes, 7, 30);
+        assert_eq!(taken.len(), 2);
+        assert!(taken[0].param.same(&plug(30, 1)) && taken[0].points == pts(&[(0, 0.2)]));
+        assert!(taken[1].param.same(&plug(30, 2)) && taken[1].points == pts(&[(0, 0.6)]));
+        assert!(matches!(&taken[1].param, AutoParam::Plugin { name, .. } if name == "P2"));
+        assert_eq!(lanes.len(), 2);
+        assert!(lanes[0].param.same(&AutoParam::Volume) && lanes[1].param.same(&plug(8, 1)));
+        assert!(take_plugin_lanes(&mut lanes, 7, 31).is_empty());
+        assert_eq!(lanes.len(), 2);
     }
 }

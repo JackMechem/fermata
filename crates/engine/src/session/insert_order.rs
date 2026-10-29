@@ -2,7 +2,7 @@
 //!
 //! Within a strip the running instances are moved, not reloaded, so a plug-in keeps its state,
 //! its open editor and any tail it is ringing out. A move to another strip goes through copy
-//! and paste, so it gets a new instance there.
+//! and paste, so it gets a new instance there, and its automation lanes go along onto it.
 
 use super::*;
 
@@ -45,6 +45,8 @@ impl Session {
 
     /// Puts the plug-in in `from_slot` of strip `from` into `to_slot` of strip `to`, moving it
     /// (or copying it when `copy`). Whatever is in `to_slot` shifts down a slot to make room.
+    /// A moved plug-in takes its automation lanes along; a copy starts without any, as one
+    /// made with Copy and Paste does.
     pub fn move_plugin(&mut self, from: Id, from_slot: usize, to: Id, to_slot: usize, copy: bool) -> Result<()> {
         if from == to && !copy {
             return self.move_insert(from, from_slot, to_slot);
@@ -59,8 +61,31 @@ impl Session {
             if let Some(at) = at {
                 self.remove_plugin(from, at);
             }
+            let new_uid = self.inserts_mut(to).and_then(|s| s.get(to_slot)?.as_ref().map(|p| p.uid));
+            if let Some(new_uid) = new_uid {
+                self.carry_automation(from, slot.uid, to, new_uid);
+            }
         }
         Ok(())
+    }
+
+    /// Moves the lanes of plug-in `old` on track `from` to track `to`, where the plug-in is now
+    /// instance `new`, so they keep driving the same parameters. Stereo Out has no automation,
+    /// so a plug-in moved there leaves its lanes behind, as a deleted one does.
+    fn carry_automation(&mut self, from: Id, old: Id, to: Id, new: Id) {
+        if self.project.track(to).is_none() {
+            return;
+        }
+        let Some(src) = self.project.track_mut(from) else { return };
+        let lanes = crate::automation::take_plugin_lanes(&mut src.automation, old, new);
+        if lanes.is_empty() {
+            return;
+        }
+        if let Some(dst) = self.project.track_mut(to) {
+            dst.automation.extend(lanes);
+        }
+        self.push_automation(from);
+        self.push_automation(to);
     }
 
     /// Empties `slot` by moving the nearest free slot there, below it if there is one.

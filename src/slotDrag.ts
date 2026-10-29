@@ -2,6 +2,8 @@
 // moves it there (the plug-ins between shift over), onto another strip's slot moves it to that
 // strip, and with Alt held copies it instead. Insert slots carry data-track and data-slot.
 import { act, type Id } from "./api";
+import { followMovedPlugin } from "./laneFollow";
+import { getState, setState } from "./store";
 
 function slotAt(x: number, y: number): HTMLElement | null {
   return (document.elementFromPoint(x, y)?.closest(".slot[data-slot]") as HTMLElement | null) ?? null;
@@ -55,7 +57,16 @@ export function startSlotDrag(e: React.MouseEvent, track: Id, slot: number, labe
     end();
     if (!dragged) return click();
     if (drop) {
-      act("move_plugin", { from: track, fromSlot: slot, to: Number(drop.dataset.track), toSlot: Number(drop.dataset.slot), copy: ev.altKey });
+      const to = Number(drop.dataset.track);
+      const toSlot = Number(drop.dataset.slot);
+      const copy = ev.altKey;
+      const oldUid = getState().snap?.project.tracks.find((t) => t.id === track)?.inserts[slot]?.uid;
+      act("move_plugin", { from: track, fromSlot: slot, to, toSlot, copy }).then((snap) => {
+        // A move to another track brings the plug-in's lanes along: the view follows them.
+        const newUid = snap?.project.tracks.find((t) => t.id === to)?.inserts[toSlot]?.uid;
+        if (copy || oldUid == null || newUid == null) return;
+        setState({ autoLane: followMovedPlugin(getState().autoLane, track, oldUid, to, newUid) });
+      });
     }
   };
   const key = (ev: KeyboardEvent) => {

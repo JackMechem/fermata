@@ -919,8 +919,9 @@ It processes before the Audio FX inserts and costs nothing while flat.
 - **Reordering:** drag a plug-in's name onto another Audio FX slot. On the same strip it moves
   there and the plug-ins in between shift over; it keeps running, so nothing reloads and a
   reverb tail carries on. Dropped on another strip's slot, it moves to that strip (whatever is
-  in that slot shifts down). Hold Alt as you let go to copy it instead. Esc cancels the drag;
-  each move is one undo step.
+  in that slot shifts down) as a new instance with the same settings, and its automation lanes
+  go with it (see [Automation](#13-automation)). Hold Alt as you let go to copy it instead.
+  Esc cancels the drag; each move is one undo step, plug-in and lanes together.
 - **Removing:** "No Plug-in" in the slot's menu.
 - **Copy and paste:** right-click a slot for **Copy Plug-in**, and any slot (empty ones too) for
   **Paste Plug-in**, which loads a new instance with exactly the copied settings: a VST3's whole
@@ -1213,6 +1214,13 @@ strip.
   parameters are ramped across each block. With plug-in delay compensation, automation follows the
   delayed audio.
 - Lanes don't move with regions.
+- **Lanes follow their plug-in.** Moving a plug-in within its strip keeps its lanes; dragging it
+  to another track's strip moves its lanes to that track, with their points, so they keep
+  driving the same parameters there (the track showing one of them shows it on the new track).
+  They play in the new track's automation mode. A copy (Alt-drag, or Copy and Paste Plug-in)
+  starts without automation, and the original keeps its lanes. Stereo Out has no automation,
+  so a plug-in moved there leaves its lanes on the old track, where they no longer drive
+  anything (as when a plug-in is deleted).
 
 ---
 
@@ -1765,9 +1773,6 @@ blank, because WebKit then draws on the CPU.
   plug-ins on the live track itself, not on the auxes or stacks it plays through. Fader
   automation written live is stored at the playhead, not compensated. Delay changes while
   playing (bypass, a plug-in reporting new latency) can click.
-- **Moving plug-ins:** a plug-in dragged to another strip arrives as a new instance there, and
-  its automation lane stays on the old track (it no longer drives anything). Moves within a
-  strip keep their automation.
 - **Built-in effects:** the side-chain key is always post-fader (no pre-fader option yet).
   Changing a Lookahead while playing can click as the delay compensation moves. Bounces keep
   the tail length set in the Bounce dialog whatever an effect's own tail; Freeze stretches its
@@ -1782,8 +1787,8 @@ blank, because WebKit then draws on the CPU.
   latency makes each take that much shorter.
 - **Markers** have no length editing (a marker reaches the next one); there is no Arrangement
   track.
-- **Automation:** folder stacks and Stereo Out have no automation of their own, and lanes don't
-  move with regions.
+- **Automation:** folder stacks and Stereo Out have no automation of their own (a plug-in moved
+  to Stereo Out leaves its lanes behind), and lanes don't move with regions.
 - **Piano Roll:** no Step Input, Event List or Score, and controllers have no curve shapes.
 - **Undo:** the metronome and count-in switches and the project sample rate are not undoable,
   and switching the metronome doesn't mark the project as edited.

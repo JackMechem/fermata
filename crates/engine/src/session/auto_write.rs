@@ -91,7 +91,7 @@ impl Session {
         value_at(&lane.points, pos)
     }
 
-    fn push_automation(&mut self, track: Id) {
+    pub(super) fn push_automation(&mut self, track: Id) {
         if let Some(t) = self.project.track(track) {
             let lanes = lanes_dsp(&t.automation);
             self.send(Cmd::Automation(track, lanes));

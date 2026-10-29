@@ -984,7 +984,12 @@ impl Engine {
                 let old = if track == MASTER_ID {
                     self.master_inserts.get_mut(slot).and_then(|s| std::mem::replace(s, insert))
                 } else {
-                    self.track_mut(track).and_then(|t| t.inserts.get_mut(slot).and_then(|s| std::mem::replace(s, insert)))
+                    // A new instance starts at its own values: automation is sent to it afresh,
+                    // even if its lanes came before it (an undo restores lanes first).
+                    self.track_mut(track).and_then(|t| {
+                        t.auto_sent = [f32::NAN; MAX_AUTO_SENT];
+                        t.inserts.get_mut(slot).and_then(|s| std::mem::replace(s, insert))
+                    })
                 };
                 if let Some(o) = old {
                     self.discard(Garbage::Insert(o));
@@ -1005,7 +1010,10 @@ impl Engine {
                 self.resolve_keys();
             }
             Cmd::Instrument { track, insert } => {
-                let old = self.track_mut(track).and_then(|t| std::mem::replace(&mut t.instrument, insert));
+                let old = self.track_mut(track).and_then(|t| {
+                    t.auto_sent = [f32::NAN; MAX_AUTO_SENT];
+                    std::mem::replace(&mut t.instrument, insert)
+                });
                 if let Some(o) = old {
                     self.discard(Garbage::Insert(o));
                 }
