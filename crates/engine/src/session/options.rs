@@ -11,7 +11,7 @@ use serde::Serialize;
 use super::{default_projects_root, untitled_dir, Session, AUDIO_DIR, AUTOSAVE_FILE, PROJECT_FILE};
 use crate::dsp::{ClickParams, Cmd};
 use crate::midi_io::{MidiLogEntry, MidiPort};
-use crate::model::{Id, Note, Region, RegionContent};
+use crate::model::{Id, Note, Project, Region, RegionContent};
 use crate::prefs::{AudioOverlap, BitDepth, ClickSettings, Prefs};
 
 /// An autosave waiting to be written. Taking it (on the main thread, where plug-in states can
@@ -19,30 +19,37 @@ use crate::prefs::{AudioOverlap, BitDepth, ClickSettings, Prefs};
 pub struct AutosaveJob {
     path: PathBuf,
     text: String,
+    /// Recording journals whose takes this autosave holds: deleted once it is written.
+    journals: Vec<PathBuf>,
 }
 
 impl AutosaveJob {
-    /// Writes the autosave atomically (temporary file, then rename).
+    /// Writes the autosave atomically (temporary file, synced, then renamed over the old one),
+    /// then deletes the recording journals it supersedes.
     pub fn write(self) -> Result<PathBuf> {
-        if let Some(dir) = self.path.parent() {
-            std::fs::create_dir_all(dir)?;
+        super::recovery::write_atomic(&self.path, self.text.as_bytes(), true)?;
+        for j in &self.journals {
+            let _ = std::fs::remove_file(j);
         }
-        let tmp = self.path.with_extension("json.tmp");
-        std::fs::write(&tmp, self.text)?;
-        std::fs::rename(&tmp, &self.path)?;
         Ok(self.path)
     }
 }
 
-/// A project folder holding an autosave newer than its saved document.
+/// A project folder holding unsaved work: an autosave newer than its saved document, or audio
+/// from a recording that never finished.
 #[derive(Debug, Clone, Serialize)]
 pub struct Recovery {
     pub path: String,
     pub name: String,
-    /// Seconds since the Unix epoch.
+    /// When the work was autosaved (or, with only a recording to recover, when that started),
+    /// in seconds since the Unix epoch.
     pub autosaved: u64,
     /// When project.json was last saved; None if the project was never saved.
     pub saved: Option<u64>,
+    /// Whether there is a readable autosave newer than project.json.
+    pub has_autosave: bool,
+    /// Audio recorded when Fermata quit, recovered along with the project.
+    pub recording: Option<super::RecordingRecovery>,
 }
 
 fn modified(p: &Path) -> Option<SystemTime> {
@@ -53,24 +60,37 @@ fn secs(t: SystemTime) -> u64 {
     t.duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
 }
 
-/// Whether `dir` has unsaved work to recover: an autosave newer than project.json.
+/// Whether `dir` has unsaved work to recover: a readable autosave newer than project.json, or
+/// audio left by an interrupted recording.
 pub fn recovery_info(dir: &Path) -> Option<Recovery> {
-    let auto = modified(&dir.join(AUTOSAVE_FILE))?;
     let saved = modified(&dir.join(PROJECT_FILE));
-    if saved.map(|s| s >= auto).unwrap_or(false) {
+    let auto = modified(&dir.join(AUTOSAVE_FILE)).filter(|a| saved.map(|s| s < *a).unwrap_or(true)).filter(|_| {
+        // A damaged autosave can't be recovered; opening the project falls back past it.
+        let ok = std::fs::read(dir.join(AUTOSAVE_FILE)).ok().map(|b| serde_json::from_slice::<Project>(&b).is_ok()).unwrap_or(false);
+        if !ok {
+            log::warn!("the autosave in {} is damaged; not offering it", dir.display());
+        }
+        ok
+    });
+    let recording = super::recovery::recording_info(dir);
+    if auto.is_none() && recording.is_none() {
         return None;
     }
     Some(Recovery {
         path: dir.to_string_lossy().to_string(),
         name: dir.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default(),
-        autosaved: secs(auto),
+        autosaved: auto.map(secs).unwrap_or(0).max(recording.as_ref().map(|r| r.started).unwrap_or(0)),
         saved: saved.map(secs),
+        has_autosave: auto.is_some(),
+        recording,
     })
 }
 
-/// Deletes the autosave in `dir`, if any.
+/// Deletes the autosave in `dir`, if any, and the journals of interrupted recordings (their
+/// audio files stay, repaired).
 pub fn discard_autosave(dir: &Path) {
     let _ = std::fs::remove_file(dir.join(AUTOSAVE_FILE));
+    super::recovery::discard_journals(dir, None);
 }
 
 impl Session {
@@ -262,13 +282,16 @@ impl Session {
 
     // ---- autosave ---------------------------------------------------------------------------
 
-    /// The next autosave, once Settings › General's interval has passed with unsaved changes.
-    /// Call it from the main thread now and then and hand the job to a worker thread.
+    /// The next autosave, once Settings › General's interval has passed with unsaved changes,
+    /// or right after a recording, bounce or freeze (`request_autosave`). Call it from the
+    /// main thread now and then and hand the job to a worker thread.
     pub fn autosave_job(&mut self) -> Option<AutosaveJob> {
         let mins = self.prefs.general.autosave_minutes;
-        if mins == 0 || !self.dirty || self.rec_punch.is_some() || self.autosaved_at.elapsed() < Duration::from_secs(mins as u64 * 60) {
+        let due = mins > 0 && self.autosaved_at.elapsed() >= Duration::from_secs(mins as u64 * 60);
+        if !self.dirty || self.rec_punch.is_some() || !(due || self.autosave_requested()) {
             return None;
         }
+        self.autosave_soon = false;
         self.autosaved_at = Instant::now();
         self.autosave_doc()
     }
@@ -281,30 +304,56 @@ impl Session {
         }
     }
 
-    fn autosave_doc(&mut self) -> Option<AutosaveJob> {
-        let text = serde_json::to_string(&self.capture_plugin_states()).ok()?;
+    pub(super) fn autosave_doc(&mut self) -> Option<AutosaveJob> {
+        let doc = self.capture_plugin_states();
+        let text = serde_json::to_string(&doc).ok()?;
         let mut h = std::collections::hash_map::DefaultHasher::new();
         (&self.dir, &text).hash(&mut h);
         let hash = h.finish();
         if hash == self.autosave_hash {
+            // The autosave on disk already holds these takes.
+            for j in std::mem::take(&mut self.unsaved_journals) {
+                let _ = std::fs::remove_file(j);
+            }
             return None;
         }
         self.autosave_hash = hash;
-        Some(AutosaveJob { path: self.dir.join(AUTOSAVE_FILE), text })
+        self.remember_states(&doc);
+        Some(AutosaveJob { path: self.dir.join(AUTOSAVE_FILE), text, journals: std::mem::take(&mut self.unsaved_journals) })
     }
 
-    /// Opens a project from its autosave. It counts as edited, so saving writes it back.
+    /// Opens a project from its autosave (or, with only an interrupted recording to recover,
+    /// from project.json), then puts back any takes recordings left unfinished. It counts as
+    /// edited, so saving writes it back.
     pub fn open_recovered(&mut self, dir: &Path) -> Result<()> {
-        self.open_from(dir, AUTOSAVE_FILE)?;
+        let dir = if dir.is_file() { dir.parent().unwrap_or(dir).to_path_buf() } else { dir.to_path_buf() };
+        let autosave = recovery_info(&dir).map(|r| r.has_autosave).unwrap_or(false);
+        if autosave {
+            self.open_first(&dir, &[AUTOSAVE_FILE, PROJECT_FILE, super::BACKUP_FILE])?;
+        } else if [PROJECT_FILE, AUTOSAVE_FILE, super::BACKUP_FILE].iter().any(|f| dir.join(f).exists()) {
+            self.open_checked(&dir)?;
+        } else {
+            // A recording in a project that was never saved or autosaved.
+            self.new_project();
+            self.project.name = dir.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());
+            self.dir = dir.clone();
+        }
         self.saved = self.dir.join(PROJECT_FILE).exists();
+        self.recover_recordings();
         self.dirty = true;
         Ok(())
     }
 
-    /// Deletes the current project's autosave (the user chose not to keep the changes).
+    /// Deletes the current project's autosave and recording journals (the user chose not to
+    /// keep the changes).
     pub fn discard_autosave(&mut self) {
-        discard_autosave(&self.dir);
+        let _ = std::fs::remove_file(self.dir.join(AUTOSAVE_FILE));
+        for j in std::mem::take(&mut self.unsaved_journals) {
+            let _ = std::fs::remove_file(j);
+        }
+        super::recovery::discard_journals(&self.dir, self.rec_journal.as_deref());
         self.autosave_hash = 0;
+        self.autosave_soon = false;
     }
 }
 

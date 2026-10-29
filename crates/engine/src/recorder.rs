@@ -1,12 +1,16 @@
 //! Disk writer for audio recordings. The audio thread pushes samples into one ring buffer per
 //! armed track; this thread drains them into WAV files and keeps a copy plus waveform peaks.
+//!
+//! So a crash mid-take leaves a usable file, the writer updates the WAV header and asks the OS
+//! to put the data on disk every [`CHECKPOINT`]; `session/recovery.rs` repairs whatever came
+//! after the last checkpoint from the file's length.
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 
@@ -32,16 +36,27 @@ struct Take {
     /// in memory. `reported` once [`Recorder::take_errors`] has passed it on.
     error: Option<String>,
     reported: bool,
+    /// A second handle on the file, for `sync_data` (hound owns the writer's).
+    sync: Option<File>,
+    /// When the header was last brought up to date and the data synced.
+    checkpoint: Instant,
+    bits: u16,
 }
 
+/// How often a take in progress is made safe on disk: header sizes updated, data synced.
+pub const CHECKPOINT: Duration = Duration::from_secs(2);
+
 impl Take {
-    fn drain(&mut self) {
+    /// Writes what the audio thread has captured. Every [`CHECKPOINT`] it also returns a
+    /// handle to sync, for the caller to do once it has let go of the takes' lock (`tick`
+    /// waits on that lock, and a sync can take a while on a slow disk).
+    fn drain(&mut self) -> Option<File> {
         let ch = self.channels.max(1);
         let n = self.consumer.slots() / ch * ch;
         if n == 0 {
-            return;
+            return None;
         }
-        let Ok(chunk) = self.consumer.read_chunk(n) else { return };
+        let Ok(chunk) = self.consumer.read_chunk(n) else { return None };
         let (a, b) = chunk.as_slices();
         for (i, &s) in a.iter().chain(b.iter()).enumerate() {
             let c = i % ch;
@@ -66,7 +81,41 @@ impl Take {
             }
         }
         chunk.commit_all();
+        if self.checkpoint.elapsed() >= CHECKPOINT {
+            return self.checkpoint();
+        }
+        None
     }
+
+    /// Updates the header to cover what's written so far and hands back the file to sync, so
+    /// a crash loses at most the last [`CHECKPOINT`] (and even that is usually still in the
+    /// file).
+    fn checkpoint(&mut self) -> Option<File> {
+        self.checkpoint = Instant::now();
+        let w = self.writer.as_mut()?;
+        if let Err(e) = w.flush() {
+            log::warn!("updating the header of {}: {e}", self.path.display());
+            return None;
+        }
+        self.sync.as_ref()?.try_clone().ok()
+    }
+}
+
+fn sync(f: File) {
+    if let Err(e) = f.sync_data() {
+        log::warn!("syncing a recording: {e}");
+    }
+}
+
+/// A take being recorded, as the crash-recovery journal describes it.
+#[derive(Debug, Clone)]
+pub struct ActiveTake {
+    pub track: Id,
+    pub path: PathBuf,
+    pub channels: usize,
+    /// Engine position of the first frame.
+    pub start: i64,
+    pub bits: u16,
 }
 
 pub struct FinishedTake {
@@ -101,9 +150,8 @@ impl Recorder {
             .spawn(move || loop {
                 std::thread::sleep(Duration::from_millis(10));
                 let Some(t) = weak.upgrade() else { break };
-                for take in t.lock().values_mut() {
-                    take.drain();
-                }
+                let due: Vec<File> = t.lock().values_mut().filter_map(|take| take.drain()).collect();
+                due.into_iter().for_each(sync);
             })
             .expect("spawn recorder");
         Recorder { takes }
@@ -121,6 +169,7 @@ impl Recorder {
             sample_format: if int24 { hound::SampleFormat::Int } else { hound::SampleFormat::Float },
         };
         let writer = hound::WavWriter::create(&path, spec)?;
+        let sync = std::fs::OpenOptions::new().write(true).open(&path).ok();
         let (tx, rx) = rtrb::RingBuffer::new(sample_rate as usize * channels * 4);
         let take = Take {
             consumer: rx,
@@ -136,6 +185,9 @@ impl Recorder {
             start,
             error: None,
             reported: false,
+            sync,
+            checkpoint: Instant::now(),
+            bits: spec.bits_per_sample,
         };
         self.takes.lock().insert(track, take);
         Ok(tx)
@@ -154,6 +206,15 @@ impl Recorder {
             .collect()
     }
 
+    /// The takes being recorded.
+    pub fn active(&self) -> Vec<ActiveTake> {
+        self.takes
+            .lock()
+            .iter()
+            .map(|(&track, t)| ActiveTake { track, path: t.path.clone(), channels: t.channels, start: t.start, bits: t.bits })
+            .collect()
+    }
+
     /// Write errors not reported yet, for the UI.
     pub fn take_errors(&self) -> Option<String> {
         let mut msgs = Vec::new();
@@ -168,6 +229,7 @@ impl Recorder {
 
     pub fn finish_all(&self) -> Vec<(Id, FinishedTake)> {
         let mut out = Vec::new();
+        let mut finished = Vec::new();
         for (id, mut t) in self.takes.lock().drain() {
             t.drain();
             if let Some(w) = t.writer.take() {
@@ -176,9 +238,14 @@ impl Recorder {
                     t.error.get_or_insert(format!("Couldn't finish the recording {}: {e}", t.path.display()));
                 }
             }
+            finished.extend(t.sync.take());
             // Already reported while recording: don't say it twice.
             let error = if t.reported { None } else { t.error };
             out.push((id, FinishedTake { path: t.path, start: t.start, channels: t.data, error }));
+        }
+        // On disk before the autosave that follows refers to them, without holding up Stop.
+        if !finished.is_empty() {
+            std::thread::spawn(move || finished.into_iter().for_each(sync));
         }
         out
     }

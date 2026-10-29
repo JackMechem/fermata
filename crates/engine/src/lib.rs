@@ -24,6 +24,7 @@ pub mod sysvol;
 pub mod takes;
 pub mod tempo;
 pub mod transients;
+pub mod wav_repair;
 
 pub use session::Session;
 pub use vst3_host;

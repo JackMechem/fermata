@@ -1389,10 +1389,30 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 - While a project has unsaved changes, Fermata writes `project.autosave.json` into its folder
   every 2 minutes (Settings › General › Autosave: Off, or every 1, 2, 5, 10 or 15 minutes). It
   isn't written while recording. Saving removes it.
+- **Every take is autosaved the moment you stop recording**, as is the result of Bounce in
+  Place, Freeze and importing audio files (Settings › General › After Recording, on by default;
+  it works with the interval autosave off too). This writes the autosave, not your project:
+  `project.json` only changes when you save, so **Don't Save** still returns to the last saved
+  version. Starting to record also autosaves unsaved changes, so new tracks are recoverable along
+  with their takes.
+- **Crashes while recording:** while you record, Fermata keeps each take's file valid on disk
+  every 2 seconds and keeps a small journal (`recording-….journal.json`) in the project folder.
+  If Fermata crashes, is killed or the computer loses power mid-take, the audio recorded up to
+  that moment is recovered: the file is repaired and the take goes back on its track where it
+  was recorded (cycle recordings as a take folder). If the track itself was never saved, it is
+  recreated. The journal goes away once the take is in the autosave or the project is saved.
 - At launch, Fermata looks in the recent projects and the projects folder for autosaves newer
-  than their `project.json` and offers to **Recover** them (or Discard, or decide Later; projects
-  you don't recover are offered again next time). Opening such a project asks the same.
+  than their `project.json`, and for interrupted recordings, and offers to **Recover** them (or
+  Discard, or decide Later; projects you don't recover are offered again next time). The sheet
+  says which takes on which tracks were being recorded. Opening such a project asks the same.
+  Recovering puts the takes back as one undo step (Undo: Recover Recording). Discarding keeps the
+  recorded files in Audio Files, repaired, so you can still import them by hand.
 - A recovered project counts as edited; save it to keep the changes.
+- **Damaged files:** saves are written to a temporary file and then renamed into place, so a
+  crash during a save leaves the previous version intact, and each save keeps the previous
+  `project.json` as `project.json.bak`. If `project.json` is missing, cut short or damaged when
+  you open a project, Fermata opens the autosave instead, or failing that the backup, and says
+  so; save to repair it. A damaged autosave isn't offered for recovery.
 
 ### Project Settings
 
@@ -1426,6 +1446,7 @@ Metronome tab (saved with the project).
 | At Launch | Show the Project Chooser; Open the most recent project; Start with an empty project | Project Chooser |
 | Project Folder | Any folder (Choose…, Default) | `~/Music/Fermata` |
 | Autosave | Off; every 1, 2, 5, 10 or 15 minutes | Every 2 minutes |
+| After Recording | Autosave as soon as a recording, Bounce in Place, Freeze or import finishes | On |
 | Undo Steps | 10 to 1000 | 100 |
 | Unsaved Changes | Ask before quitting or closing a project with unsaved changes | On |
 

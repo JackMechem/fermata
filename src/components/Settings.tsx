@@ -17,6 +17,7 @@ import {
   type Nudge,
   type Prefs,
   type Recovery,
+  type RecordingRecovery,
   type UiPrefs,
   type VelocityCurve,
 } from "../prefs";
@@ -207,7 +208,7 @@ function GeneralPane({ close }: { close: () => void }) {
         </Row>
         <Row
           label="Autosave:"
-          note="Unsaved changes are written to project.autosave.json inside the project folder, never over your saved project. If Fermata quits unexpectedly, it offers to recover them at the next launch."
+          note="Unsaved changes are written to project.autosave.json inside the project folder, never over your saved project. If Fermata quits unexpectedly, it offers to recover them at the next launch, along with anything that was being recorded."
         >
           <Select
             value={g.autosave_minutes}
@@ -221,6 +222,14 @@ function GeneralPane({ close }: { close: () => void }) {
             ]}
             onChange={(v) => setPrefs("general", { autosave_minutes: v })}
           />
+        </Row>
+        <Row
+          label="After Recording:"
+          note="Takes are protected the moment you stop: if Fermata quits before you save, they come back at the next launch. Works with the interval autosave off too. Your saved project only changes when you save."
+        >
+          <Check checked={g.autosave_after_recording} onChange={(v) => setPrefs("general", { autosave_after_recording: v })}>
+            Autosave as soon as a recording, Bounce in Place, Freeze or import finishes
+          </Check>
         </Row>
         <Row label="Undo Steps:" note="How many edits Undo can step back through. More steps use more memory on large projects.">
           <NumberField value={g.undo_limit} min={10} max={1000} step={10} resolution={1} onChange={(v) => setPrefs("general", { undo_limit: Math.round(v) })} />
@@ -1217,7 +1226,30 @@ function when(secs: number): string {
   return today ? `today at ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
 }
 
-/** Offers unsaved work found in autosaves (after a crash, or when opening such a project). */
+/** "2 takes (up to 1:05) on Vocal and Guitar": what an interrupted recording left. */
+function recordingSummary(r: RecordingRecovery): string {
+  const m = Math.floor(r.seconds / 60);
+  const sec = String(Math.floor(r.seconds % 60)).padStart(2, "0");
+  const tracks = r.tracks.length > 1 ? `${r.tracks.slice(0, -1).join(", ")} and ${r.tracks[r.tracks.length - 1]}` : r.tracks[0];
+  return `${r.takes} ${r.takes === 1 ? "take" : "takes"} (${r.takes === 1 ? "" : "up to "}${m}:${sec})${tracks ? ` on ${tracks}` : ""}`;
+}
+
+function recoveryIntro(list: Recovery[]): string {
+  const single = list.length === 1;
+  const recording = list.some((r) => r.recording);
+  if (single && recording && !list[0].has_autosave)
+    return "Fermata quit while this project was recording. The audio recorded up to that moment can be put back on its tracks, where it was recorded.";
+  if (single)
+    return recording
+      ? "This project has autosaved changes that were never saved, and audio that was still being recorded when Fermata quit."
+      : "This project has changes that were autosaved but never saved — most likely Fermata quit before you could save them.";
+  return recording
+    ? "These projects have unsaved work — autosaved changes, or audio that was still being recorded — most likely because Fermata quit."
+    : "These projects have autosaved changes that were never saved — most likely Fermata quit before you could save them.";
+}
+
+/** Offers unsaved work found in autosaves and interrupted recordings (after a crash, or when
+ * opening such a project). */
 export function RecoverySheet() {
   const list = useRecoveries();
   const [busy, setBusy] = useState<string | null>(null);
@@ -1235,13 +1267,16 @@ export function RecoverySheet() {
     setBusy(null);
     if (snap) {
       setState({ selectedRegions: [] });
-      toast(`Recovered “${r.name}”. Save it to keep the changes.`, 6000);
+      const takes = r.recording ? `, with ${r.recording.takes === 1 ? "the interrupted take" : `${r.recording.takes} interrupted takes`}` : "";
+      toast(`Recovered “${r.name}”${takes}. Save it to keep the changes.`, 6000);
       recoveryDone(true);
     }
   };
   const discard = async (r: Recovery) => {
-    const ok = await ask(`Delete the autosaved changes to “${r.name}”? ${r.saved ? "The last saved version stays as it is." : "The project was never saved, so nothing of it will remain."}`, {
-      title: "Discard Autosave",
+    const what = r.has_autosave ? `the autosaved changes to “${r.name}”` : `the interrupted recording in “${r.name}”`;
+    const audio = r.recording ? " The recorded audio files stay in its Audio Files folder, where you can import them." : "";
+    const ok = await ask(`Delete ${what}? ${r.saved ? "The last saved version stays as it is." : "The project was never saved, so nothing of it will remain."}${audio}`, {
+      title: r.has_autosave ? "Discard Autosave" : "Discard Recording",
       kind: "warning",
       okLabel: "Discard",
       cancelLabel: "Cancel",
@@ -1260,9 +1295,7 @@ export function RecoverySheet() {
   return (
     <SheetFrame title={single ? "Recover Unsaved Changes?" : "Recover Unsaved Work"} onClose={later} width={560}>
       <div className="pref-note recovery-intro">
-        {single
-          ? "This project has changes that were autosaved but never saved — most likely Fermata quit before you could save them."
-          : "These projects have autosaved changes that were never saved — most likely Fermata quit before you could save them."}
+        {recoveryIntro(list)}
       </div>
       <div className="recovery-list">
         {items.map((r) => (
@@ -1271,8 +1304,14 @@ export function RecoverySheet() {
               <span className="recent-name">{r.name}</span>
               <span className="recent-path">{r.path}</span>
               <span className="dim">
-                Autosaved {when(r.autosaved)} · {r.saved ? `last saved ${when(r.saved)}` : "never saved"}
+                {r.has_autosave && `Autosaved ${when(r.autosaved)} · `}
+                {r.saved ? `last saved ${when(r.saved)}` : "never saved"}
               </span>
+              {r.recording && (
+                <span className="dim">
+                  Recording interrupted {when(r.recording.started)}: {recordingSummary(r.recording)}
+                </span>
+              )}
             </div>
             <div className="sheet-buttons">
               <button className="push" disabled={busy !== null} onClick={() => discard(r)}>

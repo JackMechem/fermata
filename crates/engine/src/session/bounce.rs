@@ -343,6 +343,7 @@ impl Session {
         }
         self.sync_tracks();
         self.dirty = true;
+        self.request_autosave();
         Ok(made)
     }
 

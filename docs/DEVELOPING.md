@@ -112,8 +112,10 @@ PDC solver; take folder comping, crossfades and recording plans (`takes.rs`); fa
 crossfade gain sums and placement (`fades.rs`, `session/crossfades.rs`); automation
 evaluation and thinning; Channel EQ filters; resampling; transient detection; Standard MIDI
 Files; bounce trimming, normalizing and 16-bit dither; range edits; autosave and recovery,
-undo limits and recording placement (`session/options.rs`); preferences parsing; the
-recorder's bit depths; the tempo map; `contain()`; preset files and names (`presets.rs`);
+undo limits and recording placement (`session/options.rs`); crash-recovery journals,
+recovering interrupted takes, atomic saves with a backup and falling back from a damaged
+project.json (`session/recovery.rs`); repairing the WAV headers a crash leaves, for every format
+the recorder writes (`wav_repair.rs`); preferences parsing; the recorder's bit depths; the tempo map; `contain()`; preset files and names (`presets.rs`);
 parameter normalization (`dsp/builtin.rs`); and each built-in effect's DSP (`fx/*.rs`: the
 Limiter's ceiling and latency, the Reverb's stability, the Tuner's accuracy, the Loudness
 Meter's BS.1770 weighting and true peak, and more).
@@ -171,6 +173,7 @@ folder is kept when anything failed.
 | `pdc_check` | audio file, scratch dir | Plug-in delay compensation with a real latent plug-in, measured by cross-correlating offline renders. Needs **ZaMaximX2** (zam-plugins) in the plug-in cache. |
 | `freeze_check` | audio file, scratch dir | Freeze: a frozen instrument track with a latent plug-in sounds as it did live, plug-ins are unloaded, edits are refused, undo, redo, unfreeze and reopening restore the right state. Needs **ZaMaximX2**. |
 | `takes_check` | audio file, scratch dir | Take folders, comping, cycle and Autopunch recording layout (the null device has no input, so takes are silent), and markers. |
+| `recovery_check` | audio file (unused), scratch dir | Crash recovery: a child process records (24-bit plain with two tracks, then 32-bit cycle) and is killed with SIGKILL mid-take; reopening offers and restores the takes at the right position and length (a take folder for the cycle), repairs the WAVs and clears the journal. A normal stop autosaves at once without touching project.json. |
 | `countin_check` | scratch dir | Recording with a count-in from bar 1, where the transport runs at negative positions, three times without an engine error. |
 | `tempo_check` | scratch dir | The tempo map and signature changes: the click across changes, plug-in transport positions, bar numbering, Move MIDI Regions with Tempo, quantize, a MIDI file round trip, undo, and that a project without changes keeps the old timing exactly. |
 | `midi_check` | scratch dir | Piano Roll edits, muted notes, controller playback and chasing, split/join/trim with controllers, MIDI file export and import. |

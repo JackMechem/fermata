@@ -17,7 +17,7 @@ export type ClickLocates = "anywhere" | "empty" | "off";
 
 /** Session behaviour (crates/engine/src/prefs.rs). */
 export interface Prefs {
-  general: { project_folder: string | null; autosave_minutes: number; undo_limit: number };
+  general: { project_folder: string | null; autosave_minutes: number; undo_limit: number; autosave_after_recording: boolean };
   recording: {
     bit_depth: BitDepth;
     count_in_bars: number;
@@ -78,7 +78,7 @@ export const DEFAULT_CLICK: ClickSettings = {
 /** Used until the real settings arrive (and if they can't be read). */
 const DEFAULTS: AppSettings = {
   prefs: {
-    general: { project_folder: null, autosave_minutes: 2, undo_limit: 100 },
+    general: { project_folder: null, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true },
     recording: {
       bit_depth: "float32",
       count_in_bars: 1,
@@ -150,12 +150,25 @@ export function nudgeSamples(p: Project, pos = 0): number {
 
 // ---- launch and crash recovery ------------------------------------------------------------
 
-/** A project folder with an autosave newer than its saved document. */
+/** Audio a recording left behind when Fermata quit mid-take. */
+export interface RecordingRecovery {
+  started: number;
+  takes: number;
+  /** The longest take, in seconds. */
+  seconds: number;
+  tracks: string[];
+}
+
+/** A project folder with unsaved work: an autosave newer than its saved document, or audio
+ * from a recording that never finished. */
 export interface Recovery {
   path: string;
   name: string;
+  /** The autosave's time, or the interrupted recording's start when there's only that. */
   autosaved: number;
   saved: number | null;
+  has_autosave: boolean;
+  recording: RecordingRecovery | null;
 }
 
 let recoveries: Recovery[] = [];

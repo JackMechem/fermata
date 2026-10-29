@@ -129,6 +129,7 @@ impl Session {
         self.push_all_params();
         self.update_midi_target();
         self.dirty = true;
+        self.request_autosave();
         Ok(())
     }
 

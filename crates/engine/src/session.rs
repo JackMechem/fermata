@@ -24,7 +24,7 @@ use crate::fades::{DragMode, FadeInType, FadeLaw, FadeOutType, FadeShape};
 use crate::midi_io::MidiIo;
 use crate::model::*;
 use crate::prefs::*;
-use crate::recorder::{Recorder, TakePreview};
+use crate::recorder::{FinishedTake, Recorder, TakePreview};
 use crate::synth::BasicSynth;
 
 mod routing;
@@ -60,6 +60,8 @@ const AUDIO_DIR: &str = "Audio Files";
 pub const AUTOSAVE_FILE: &str = "project.autosave.json";
 
 mod auto_write;
+mod recovery;
+pub use recovery::{discard_journals, read_journal, recording_journals, JournalTake, RecJournal, RecordingRecovery, BACKUP_FILE};
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -170,6 +172,17 @@ pub struct Session {
     /// The last transport jump sent (locate, or record from a pre-roll): the `cmds_sent` count
     /// that includes it and the position it moves to (see [`Session::position`]).
     pending_pos: Option<(u64, i64)>,
+    /// Autosave at the next chance rather than after the interval: a recording, bounce or
+    /// freeze just finished (see `session/recovery.rs`).
+    autosave_soon: bool,
+    /// The crash-recovery journal of the recording in progress.
+    rec_journal: Option<PathBuf>,
+    /// Journals of finished recordings whose takes aren't in a file on disk yet; the next
+    /// autosave or save deletes them.
+    unsaved_journals: Vec<PathBuf>,
+    /// Plug-in states as of the last autosave or save, by instance id, for an emergency
+    /// autosave that mustn't call into plug-ins.
+    captured_states: HashMap<Id, String>,
 }
 
 /// A project snapshot taken before an edit.
@@ -295,6 +308,10 @@ impl Session {
             fx: HashMap::new(),
             fx_watch: Default::default(),
             pending_pos: None,
+            autosave_soon: false,
+            rec_journal: None,
+            unsaved_journals: Vec::new(),
+            captured_states: HashMap::new(),
         };
         s.restart_audio();
         s.sync_globals();
@@ -998,6 +1015,7 @@ impl Session {
         }
         self.rec_punch = Some(punch);
         self.rec_plan = Some(plan);
+        self.start_journal();
         self.last_play_from = punch;
         self.send(Cmd::Autopunch { range: quiet, capture });
         self.send(Cmd::Record { from, punch });
@@ -1025,11 +1043,22 @@ impl Session {
     }
 
     fn finish_recording(&mut self) {
+        if self.rec_punch.is_none() {
+            return;
+        }
+        let takes = self.recorder.finish_all();
+        let comp = self.record_latency_frames();
+        self.place_recording(takes, comp);
+        self.recording_finished();
+    }
+
+    /// Turns what the recording in progress (`rec_punch`, `rec_plan`) captured into regions:
+    /// the audio `takes`, moved `comp` frames earlier, and the MIDI. Crash recovery replays an
+    /// interrupted recording through here too (`session/recovery.rs`).
+    fn place_recording(&mut self, takes: Vec<(Id, FinishedTake)>, comp: i64) {
         let Some(punch) = self.rec_punch.take() else { return };
         let plan = self.rec_plan.take();
         let stop_pos = self.position();
-        let takes = self.recorder.finish_all();
-        let comp = self.record_latency_frames();
         // MIDI only travels one way: the performer reacts to audio that left late.
         let midi_comp = (self.status.output_latency_us.load(Ordering::Relaxed) as f64 * self.sample_rate() / 1e6).round() as i64 + self.pdc_global.total as i64;
         let mut touched = Vec::new();
@@ -2283,6 +2312,7 @@ impl Session {
             }
         }
         self.dirty = true;
+        self.request_autosave();
         errors
     }
 
@@ -2538,6 +2568,7 @@ impl Session {
         self.dir = untitled_dir(&self.projects_root());
         self.saved = false;
         self.dirty = false;
+        self.forget_unsaved();
         self.clips.clear();
         self.selected = None;
         self.locate(0);
@@ -2588,7 +2619,8 @@ impl Session {
         }
         self.project.name = target.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());
         let doc = self.capture_plugin_states();
-        std::fs::write(target.join(PROJECT_FILE), serde_json::to_string_pretty(&doc)?)?;
+        recovery::write_project_file(&target, serde_json::to_string_pretty(&doc)?.as_bytes())?;
+        self.saved_doc(&doc);
         // The saved file supersedes any autosave, here and where the project used to be.
         let _ = std::fs::remove_file(target.join(AUTOSAVE_FILE));
         let _ = std::fs::remove_file(self.dir.join(AUTOSAVE_FILE));
@@ -2599,8 +2631,10 @@ impl Session {
         Ok(target)
     }
 
+    /// Opens a project. A missing or damaged project.json falls back to the autosave, then to
+    /// the backup of the previous save, with a warning (see `session/recovery.rs`).
     pub fn open(&mut self, dir: &Path) -> Result<()> {
-        self.open_from(dir, PROJECT_FILE)
+        self.open_checked(dir)
     }
 
     /// Opens the project document `file` inside the project folder `dir`.
@@ -2618,6 +2652,7 @@ impl Session {
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.auto = Default::default();
+        self.forget_unsaved();
         let mut clips = HashMap::new();
         for c in &project.clips {
             let p = if Path::new(&c.path).is_absolute() { PathBuf::from(&c.path) } else { dir.join(&c.path) };

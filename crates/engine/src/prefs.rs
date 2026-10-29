@@ -162,11 +162,14 @@ pub struct GeneralPrefs {
     pub autosave_minutes: u32,
     /// How many edits Undo can step back through.
     pub undo_limit: usize,
+    /// Autosave as soon as a recording, Bounce in Place, Freeze or import finishes, instead of
+    /// waiting for the interval.
+    pub autosave_after_recording: bool,
 }
 
 impl Default for GeneralPrefs {
     fn default() -> Self {
-        GeneralPrefs { project_folder: None, autosave_minutes: 2, undo_limit: 100 }
+        GeneralPrefs { project_folder: None, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true }
     }
 }
 

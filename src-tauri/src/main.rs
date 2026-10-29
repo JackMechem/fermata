@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod commands;
+mod crash;
 mod menu;
 mod recent;
 #[cfg(target_os = "linux")]
@@ -65,6 +66,7 @@ fn main() {
         }
     }
     let session = Arc::new(Mutex::new(session));
+    crash::install(session.clone());
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

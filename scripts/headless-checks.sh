@@ -26,6 +26,7 @@ CHECKS=(
   "insert_order_check tone dir"
   "fx_check tone dir"
   "takes_check tone dir"
+  "recovery_check tone dir"
   "crossfade_check tone dir"
   "midi_check dir"
   "countin_check dir"
