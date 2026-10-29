@@ -57,7 +57,8 @@ Fermata already has.
 Prebuilt binaries are on the [GitHub Releases page](https://github.com/JackMechem/fermata/releases):
 
 - **Linux** (x86_64 and aarch64): `.AppImage` (any distribution), `.deb` (Debian, Ubuntu) and
-  `.rpm` (Fedora, openSUSE). They're built on Ubuntu 24.04, so they need glibc 2.39 and
+  `.rpm` (Fedora, openSUSE; stable releases only, since RPM can't version a prerelease).
+  They're built on Ubuntu 24.04, so they need glibc 2.39 and
   PipeWire 1.0 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and later).
 - **Windows** (x64): the NSIS installer, `_x64-setup.exe`.
 - **macOS:** `_aarch64.dmg` for Apple Silicon, `_x64.dmg` for Intel.
@@ -75,7 +76,7 @@ On NixOS or with Nix, use the flake instead (below).
 | | Linux | Windows | macOS |
 |---|---|---|---|
 | Status | Main platform, tested | Early, less tested | Early, less tested |
-| Packages | AppImage, .deb, .rpm (x86_64, aarch64); Nix flake | NSIS installer (x64) | .dmg (Apple Silicon, Intel) |
+| Packages | AppImage, .deb, .rpm from stable releases (x86_64, aarch64); Nix flake | NSIS installer (x64) | .dmg (Apple Silicon, Intel) |
 | Audio drivers | PipeWire, PulseAudio, JACK, ALSA | WASAPI | Core Audio |
 | MIDI input | Yes | Yes | Yes |
 | VST3 instruments and effects | Yes | Yes | Yes |

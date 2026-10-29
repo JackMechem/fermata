@@ -33,7 +33,7 @@ jobs:
             echo
             echo "### Downloads"
             echo
-            echo "- **Linux:** \`.AppImage\` (any distribution), \`.deb\` (Debian, Ubuntu), \`.rpm\` (Fedora, openSUSE); x86_64 and aarch64, glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40)"
+            echo "- **Linux:** \`.AppImage\` (any distribution), \`.deb\` (Debian, Ubuntu), \`.rpm\` (Fedora, openSUSE; not in prereleases); x86_64 and aarch64, glibc 2.39 or newer (Ubuntu 24.04, Debian 13, Fedora 40)"
             echo "- **Windows:** \`_x64-setup.exe\`"
             echo "- **macOS:** \`_aarch64.dmg\` (Apple Silicon) or \`_x64.dmg\` (Intel)"
             echo
@@ -64,10 +64,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # The Linux bundles are picked below, by version.
           - os: ubuntu-24.04
-            args: --bundles deb,rpm,appimage
           - os: ubuntu-24.04-arm
-            args: --bundles deb,rpm,appimage
           - os: windows-latest
             args: --bundles nsis
           - os: macos-latest
@@ -100,6 +99,17 @@ jobs:
 
       - run: npm ci
 
+      # RPM versions can't hold a semver prerelease suffix ("0.1.0-alpha.1"), so prereleases
+      # ship .deb and AppImage only.
+      - name: Pick the Linux bundles
+        if: runner.os == 'Linux'
+        run: |
+          version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          case "$version" in
+            *-*) echo "LINUX_BUNDLES=--bundles deb,appimage" >> "$GITHUB_ENV" ;;
+            *) echo "LINUX_BUNDLES=--bundles deb,rpm,appimage" >> "$GITHUB_ENV" ;;
+          esac
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -107,7 +117,7 @@ jobs:
           releaseId: ${{ needs.create-release.outputs.id }}
           # The repo also has a pnpm lockfile; CI installs with npm.
           tauriScript: npm run tauri
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }}${{ env.LINUX_BUNDLES }}
 
       # Job logs need admin rights to read through the API; the tail of a failed build as an
       # annotation is visible to anyone looking at the run.
@@ -115,7 +125,7 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          npm run tauri build -- ${{ matrix.args }} > build.log 2>&1 || true
+          npm run tauri build -- ${{ matrix.args }}${{ env.LINUX_BUNDLES }} > build.log 2>&1 || true
           tail -n 80 build.log | sed 's/%/%25/g; s/\r//g' | awk '{ printf "%s%%0A", $0 }' > tail.txt
           echo "::error title=Build output::$(cat tail.txt)"
 

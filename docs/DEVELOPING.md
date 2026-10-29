@@ -452,8 +452,8 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
    CHANGELOG section plus download and unsigned-build notes. A version with a `-` suffix is
    marked as a prerelease.
 2. `build` runs `tauri-action` on five runners and uploads the bundles to the draft:
-   Linux x86_64 (`ubuntu-24.04`) and aarch64 (`ubuntu-24.04-arm`): `.deb`, `.rpm` and
-   `.AppImage`; Windows (`windows-latest`): the NSIS installer (`_x64-setup.exe`); macOS
+   Linux x86_64 (`ubuntu-24.04`) and aarch64 (`ubuntu-24.04-arm`): `.deb` and `.AppImage`,
+   plus `.rpm` for versions without a prerelease suffix (RPM versions can't contain `-`); Windows (`windows-latest`): the NSIS installer (`_x64-setup.exe`); macOS
    (`macos-latest`): `.app` and `.dmg` for `aarch64-apple-darwin` and `x86_64-apple-darwin`.
 3. `publish` takes the release out of draft once every build has finished.
 

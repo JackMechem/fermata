@@ -63,7 +63,8 @@ The first prerelease. Everything below is new.
 - **Tuner:** gates on its DC-blocked level, so an interface's DC offset doesn't run the
   detector.
 - **About Fermata** in the Fermata menu, with the version.
-- **Platforms and packaging:** Linux x86_64 and aarch64 (AppImage, .deb, .rpm) and a Nix
+- **Platforms and packaging:** Linux x86_64 and aarch64 (AppImage and .deb; .rpm from the first
+  stable release, since RPM versions can't carry a prerelease suffix) and a Nix
   flake, Windows (NSIS installer, x64) and macOS (.dmg for Apple Silicon and Intel), built and
   published by GitHub Actions; CI on all three; `scripts/set-version.sh` sets the version
   everywhere.
