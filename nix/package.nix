@@ -3,8 +3,7 @@
 {
   lib,
   rustPlatform,
-  fetchNpmDeps,
-  npmHooks,
+  importNpmLock,
   nodejs,
   cargo-tauri,
   pkg-config,
@@ -45,16 +44,14 @@ rustPlatform.buildRustPackage (finalAttrs: {
 
   cargoLock.lockFile = ../Cargo.lock;
 
-  npmDeps = fetchNpmDeps {
-    name = "${finalAttrs.pname}-${finalAttrs.version}-npm-deps";
-    inherit (finalAttrs) src;
-    hash = "sha256-P8PZGLN8rc0E1o+uktLG67/4lnJ8GPJ04+SY08LNpnQ=";
-  };
+  # Read straight from package-lock.json (each package is fetched by its integrity hash), so
+  # there's no npmDepsHash to update whenever the lockfile or the version changes.
+  npmDeps = importNpmLock { npmRoot = finalAttrs.src; };
 
   nativeBuildInputs = [
     cargo-tauri.hook
     nodejs
-    npmHooks.npmConfigHook
+    importNpmLock.npmConfigHook
     pkg-config
     wrapGAppsHook3
     # libclang for the PipeWire bindings (pipewire-sys runs bindgen)

@@ -57,7 +57,8 @@ Fermata already has.
 Prebuilt binaries are on the [GitHub Releases page](https://github.com/JackMechem/fermata/releases):
 
 - **Linux** (x86_64 and aarch64): `.AppImage` (any distribution), `.deb` (Debian, Ubuntu) and
-  `.rpm` (Fedora, openSUSE).
+  `.rpm` (Fedora, openSUSE). They're built on Ubuntu 24.04, so they need glibc 2.39 and
+  PipeWire 1.0 or newer (Ubuntu 24.04, Debian 13, Fedora 40 and later).
 - **Windows** (x64): the NSIS installer, `_x64-setup.exe`.
 - **macOS:** `_aarch64.dmg` for Apple Silicon, `_x64.dmg` for Intel.
 

@@ -416,11 +416,9 @@ pnpm tauri build          # native bundles for the current platform (deb, rpm, A
   Rust crates from `Cargo.lock`, runs `cargo tauri build`, runs the engine unit tests
   (`cargo test -p daw-engine --lib`), and installs the result with a `fermata` symlink to the
   `daw` binary and a desktop entry in the audio categories.
-- After changing npm dependencies, refresh `npmDeps.hash` in `nix/package.nix`:
-
-  ```sh
-  nix run nixpkgs#prefetch-npm-deps -- package-lock.json
-  ```
+- npm dependencies come straight from `package-lock.json` through nixpkgs' `importNpmLock`,
+  so there's no npm hash to refresh. Keep `package-lock.json` in step with `package.json`
+  (`npm install --package-lock-only` after changing dependencies with pnpm).
 
 - The package source is a file set (Cargo files, `crates`, `src-tauri`, `src`, `index.html`,
   the npm and TypeScript configs), so editing docs doesn't trigger a rebuild.
@@ -454,7 +452,7 @@ Pushing a `v*` tag runs `.github/workflows/release.yml`:
    CHANGELOG section plus download and unsigned-build notes. A version with a `-` suffix is
    marked as a prerelease.
 2. `build` runs `tauri-action` on five runners and uploads the bundles to the draft:
-   Linux x86_64 (`ubuntu-22.04`) and aarch64 (`ubuntu-22.04-arm`): `.deb`, `.rpm` and
+   Linux x86_64 (`ubuntu-24.04`) and aarch64 (`ubuntu-24.04-arm`): `.deb`, `.rpm` and
    `.AppImage`; Windows (`windows-latest`): the NSIS installer (`_x64-setup.exe`); macOS
    (`macos-latest`): `.app` and `.dmg` for `aarch64-apple-darwin` and `x86_64-apple-darwin`.
 3. `publish` takes the release out of draft once every build has finished.
@@ -464,9 +462,10 @@ branch: the same builds run, and nothing is created or published. The bundles ar
 or notarized yet.
 
 `.github/workflows/ci.yml` runs on pushes to `main`, on pull requests and on demand, on
-`ubuntu-22.04`, `windows-latest` and `macos-latest`: `npm ci`, `npm run build` (type check and
+`ubuntu-24.04`, `windows-latest` and `macos-latest`: `npm ci`, `npm run build` (type check and
 frontend build), `npm test`, `cargo test -p daw-engine --lib`, `cargo test -p daw` and
-`cargo check --workspace --all-targets` (so the examples must compile). The headless examples
+`cargo check --workspace --all-targets` (so the examples must compile). A separate `nix` job
+runs `nix flake check`, which builds the Nix package. The headless examples
 need the ALSA null device and some need real plug-ins, so they don't run in CI; run them
 locally.
 
