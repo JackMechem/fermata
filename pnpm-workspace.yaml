@@ -1,4 +1,4 @@
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
 minimumReleaseAgeExclude:
   - '@tauri-apps/plugin-dialog@2.8.4'
