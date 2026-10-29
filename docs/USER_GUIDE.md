@@ -1052,8 +1052,9 @@ It processes before the Audio FX inserts and costs nothing while flat.
   load them). It also takes extra VST3 folders and shows the last scan's report, including each
   bundle that failed and why.
 
-Fermata hosts **VST3** plug-ins only. Plug-in editor windows are available on Linux (X11);
-see [Troubleshooting](#plug-in-windows-dont-open-on-wayland).
+Fermata hosts **VST3** plug-ins only. Plug-in editor windows are available on Linux (X11;
+see [Troubleshooting](#plug-in-windows-dont-open-on-wayland)) and macOS, where they float
+above Fermata's windows like Logic's and hide while another app is in front.
 
 ### Built-in effects
 
@@ -1916,8 +1917,9 @@ blank, because WebKit then draws on the CPU.
 
 ## 19. Known limitations
 
-- **Platforms:** plug-in editor windows are Linux/X11 only; Windows (HWND) and macOS (NSView)
-  embedding are planned. The input level check is Linux only. On Windows and macOS only the
+- **Platforms:** plug-in editor windows open on Linux (X11) and macOS; Windows (HWND)
+  embedding is planned. Keys pressed while a plug-in's window is in front go to the plug-in, so
+  Space doesn't start playback there (menu shortcuts still work). The input level check is Linux only. On Windows and macOS only the
   system's default audio driver is available (no ASIO).
 - **Plug-in formats:** VST3 only; no CLAP, AU or VST2.
 - **Tempo:** moving regions in the tracks area is in samples, not bars, across tempo changes;

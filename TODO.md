@@ -22,7 +22,7 @@ Goal: prereleases that install cleanly and that people can trust with their proj
 Goal: a VST3 user on Windows or macOS gets the same workflow as on Linux.
 
 - [ ] VST3 editor windows on Windows (HWND embedding)
-- [ ] VST3 editor windows on macOS (NSView embedding)
+- [x] VST3 editor windows on macOS (NSView embedding)
 - [ ] VST3 editors under native Wayland (they run through XWayland now)
 - [ ] HiDPI scaling for plug-in editors (`IPlugViewContentScaleSupport`)
 - [ ] ASIO on Windows

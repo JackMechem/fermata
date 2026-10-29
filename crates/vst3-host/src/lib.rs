@@ -11,7 +11,10 @@ mod util;
 #[cfg(target_os = "linux")]
 #[path = "editor_linux.rs"]
 pub mod editor;
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+#[path = "editor_macos.rs"]
+pub mod editor;
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 #[path = "editor_other.rs"]
 pub mod editor;
 

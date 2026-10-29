@@ -77,8 +77,8 @@ The audio engine (cpal: WASAPI on Windows, Core Audio on macOS), MIDI (midir), V
 loading, the built-in effects and the UI are cross-platform, and `pnpm tauri build` produces
 native bundles. Install Rust, Node.js and the Tauri 2 prerequisites for the platform (the
 WebView2 runtime and the MSVC build tools on Windows, the Xcode command line tools on macOS).
-Plug-in editor windows are implemented only for Linux/X11 so far
-(`crates/vst3-host/src/editor_other.rs` is a placeholder), and the input level check
+Plug-in editor windows are implemented for Linux/X11 and macOS so far
+(`crates/vst3-host/src/editor_other.rs` is the Windows placeholder), and the input level check
 (`sysvol.rs`) is Linux-only. The Nix package is Linux-only. CI runs the unit tests on all
 three platforms and the release workflow builds bundles for them (see
 [Versioning and releases](#versioning-and-releases)), but the app gets far less hands-on testing

@@ -651,7 +651,7 @@ session and processors come back as `Garbage`). `PluginProcessor` moves into the
 `host.rs` implements `IHostApplication` (name "Fermata", creating `IMessage` and
 `IAttributeList` objects), `IPlugInterfaceSupport`, and `IComponentHandler`
 (`beginEdit`/`performEdit`/`endEdit`/`restartComponent`). `stream.rs` is an in-memory
-`IBStream` for state. On Linux the editor's `IPlugFrame` also implements `IRunLoop`.
+`IBStream` for state. On Linux the editor's `IPlugFrame` also implements `IRunLoop`; on macOS it is a plain frame.
 Not implemented: `IComponentHandler2/3`, `IUnitHandler`, `IPlugViewContentScaleSupport` (no
 HiDPI scaling), `IProcessContextRequirements`, context menus.
 
@@ -716,10 +716,21 @@ stores the pair as base64 in `PluginSlot::state` and restores it straight after 
   X connection's own fd is registered the same way.
 - **GDK_BACKEND:** GLX-based editors fail when GTK runs natively on Wayland in the same
   process, so `main.rs` sets `GDK_BACKEND=x11` unless the user set it.
-- **Windows and macOS:** `editor_other.rs` returns an error ("not implemented on this platform
-  yet"). Plug-ins load and process normally.
-- `crates/vst3-host/examples/editor.rs` opens one editor with a small `poll()` loop, without
-  GTK, for debugging.
+- **macOS (`editor_macos.rs`):** the plug-in must support `kPlatformTypeNSView`. Each editor is
+  an NSWindow (sized from `getSize` in points, resizable only if `canResize`) whose content view
+  the plug-in attaches to. The windows float (`NSFloatingWindowLevel`, `FullScreenAuxiliary`)
+  and hide while another app is active (`hidesOnDeactivate`), like Logic's; several cascade. An
+  NSWindowDelegate reports the close button (`windowWillClose:`, read by `pump`) and applies
+  `checkSizeConstraint` during live resizes, then `onSize`. `IPlugFrame::resizeView` resizes the
+  content keeping the top-left corner. There is no IRunLoop: plug-ins use the main run loop.
+  `open` fails off the main thread; `close` and `raise` called from another thread (an async
+  command, a controller dropped elsewhere) are queued on the main queue, and `close` keeps the
+  plug-in's `Shared` alive until the view is removed. `set_hide_on_deactivate(false)` is for the
+  editor example, which macOS may never make the active app when it's started from a terminal.
+- **Windows:** `editor_other.rs` returns an error ("not implemented on this platform yet").
+  Plug-ins load and process normally.
+- `crates/vst3-host/examples/editor.rs` opens one editor for debugging: on Linux with a small
+  `poll()` loop, without GTK; on macOS with an NSApplication event loop.
 
 ## 10. Audio I/O and latency
 
@@ -1103,7 +1114,8 @@ it like any plug-in.
 | `host.rs` | Host-side COM objects: IHostApplication, IComponentHandler, messages and attribute lists. |
 | `stream.rs` | In-memory IBStream for state save and restore. |
 | `editor_linux.rs` | X11 editor windows and the IRunLoop bridge. |
-| `editor_other.rs` | Placeholder editor for Windows and macOS. |
+| `editor_macos.rs` | macOS editor windows (NSWindow, its delegate, main-queue hops). |
+| `editor_other.rs` | Placeholder editor for Windows. |
 | `macos.rs` | CFBundle handling for loading bundles on macOS. |
 | `util.rs` | String helpers. |
 

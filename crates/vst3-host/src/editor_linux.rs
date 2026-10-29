@@ -285,7 +285,8 @@ impl Editor {
         let _ = self.window.conn.flush();
     }
 
-    pub fn close(self) {
+    /// `keep_alive` (the plug-in) is dropped after the view is removed.
+    pub fn close<K: Send + 'static>(self, keep_alive: K) {
         unsafe {
             self.view.removed();
             self.view.setFrame(std::ptr::null_mut());
@@ -297,6 +298,7 @@ impl Editor {
         }
         let _ = self.window.conn.destroy_window(self.window.id);
         let _ = self.window.conn.flush();
+        drop(keep_alive);
     }
 }
 

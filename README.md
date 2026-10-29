@@ -82,12 +82,12 @@ On NixOS or with Nix, use the flake instead (below).
 | Audio drivers | PipeWire, PulseAudio, JACK, ALSA | WASAPI | Core Audio |
 | MIDI input | Yes | Yes | Yes |
 | VST3 instruments and effects | Yes | Yes | Yes |
-| VST3 editor windows | Yes (X11; through XWayland on Wayland) | Not yet | Not yet |
+| VST3 editor windows | Yes (X11; through XWayland on Wayland) | Not yet | Yes |
 | Built-in effects, Fermata Synth | Yes | Yes | Yes |
 | Input level check | Yes (PipeWire, PulseAudio) | No | No |
 
-On Windows and macOS, VST3 plug-ins still load, play, save their state and can be automated;
-only their own editor window is missing.
+On Windows, VST3 plug-ins still load, play, save their state and can be automated; only their
+own editor window is missing.
 
 ## Build from source
 
@@ -136,8 +136,9 @@ for Windows and macOS, tests and packaging.
 Fermata is alpha software under active development; keep backups of projects that matter. The
 main limitations:
 
-- Plug-in editor windows are Linux/X11 only. On Linux the interface runs through XWayland by
-  default, because GLX-based plug-in GUIs fail when GTK runs natively on Wayland.
+- Plug-in editor windows open on Linux (X11) and macOS, not yet on Windows. On Linux the
+  interface runs through XWayland by default, because GLX-based plug-in GUIs fail when GTK runs
+  natively on Wayland.
 - VST3 only (no CLAP, AU or VST2). On Windows and macOS only the system's default audio driver
   is available (no ASIO).
 - The release builds are unsigned (see [Install](#install)).

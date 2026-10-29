@@ -622,7 +622,7 @@ impl PluginController {
 
     pub fn close_editor(&mut self) {
         if let Some(e) = self.editor.take() {
-            e.close();
+            e.close(self.shared.clone());
         }
     }
 

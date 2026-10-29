@@ -75,11 +75,9 @@ pub fn main() {
     let name = std::env::args().nth(1).unwrap_or_else(|| "ZamComp".into());
     let secs: u64 = std::env::args().nth(2).and_then(|s| s.parse().ok()).unwrap_or(4);
     set_event_loop(Box::new(PollLoop));
-    let desc = find_bundles(&default_search_paths())
-        .iter()
-        .flat_map(|b| scan_bundle(b).unwrap_or_default())
-        .find(|d| d.name == name || d.name.contains(&name))
-        .expect("plugin not found");
+    // An exact name wins over a substring ("Surge XT" vs "Surge XT Effects").
+    let all: Vec<_> = find_bundles(&default_search_paths()).iter().flat_map(|b| scan_bundle(b).unwrap_or_default()).collect();
+    let desc = all.iter().find(|d| d.name == name).or_else(|| all.iter().find(|d| d.name.contains(&name))).expect("plugin not found").clone();
     println!("opening {}", desc.name);
     let (_p, mut c) = vst3_host::instantiate(&desc, 48000.0, 512).unwrap();
     c.open_editor(&desc.name).unwrap();

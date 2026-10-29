@@ -302,7 +302,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Instrument slot (p. 561)
 - [~] Search for plug-ins (p. 563). *The Library has search; slot menus are grouped by vendor and category, without search.*
 - [x] Channel EQ on every strip: 8 bands, 12/24/48 dB/oct cuts, analyzer, output gain, thumbnail on the strip (p. 566)
-- [~] Plug-in windows (p. 567). *Built-in effect panels everywhere; a VST3's own editor on Linux/X11 only so far.*
+- [~] Plug-in windows (p. 567). *Built-in effect panels everywhere; a VST3's own editor on Linux/X11 and macOS so far.*
 - [x] Sends: eight per strip, pre or post fader, mute, level knob (p. 583–589)
 - [x] Aux channel strips fed by buses; new aux from any send or output menu (p. 590)
 - [x] Subgroups through auxes (p. 591)
@@ -1030,8 +1030,8 @@ this stage is about doing the equivalent on Linux, Windows and macOS.
 ### Operating systems and plug-in formats
 
 - [x] Linux build with desktop entry and icons (Nix flake and other distributions)
-- [~] Windows and macOS builds. *Released as an NSIS installer and .dmg bundles, but early and less tested; plug-in editor windows are Linux/X11 only.*
-- [ ] Plug-in editor windows on Windows (HWND) and macOS (NSView)
+- [~] Windows and macOS builds. *Released as an NSIS installer and .dmg bundles, but early and less tested; plug-in editor windows are not on Windows yet.*
+- [~] Plug-in editor windows on Windows (HWND) and macOS (NSView) *macOS done.*
 - [ ] Plug-in editors under native Wayland (they currently run through XWayland)
 - [ ] CLAP plug-in hosting
 - [ ] Audio Units hosting on macOS
@@ -1086,7 +1086,7 @@ side-chains for the built-in dynamics and the bundled effects core are done; ite
 partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 
 1. **Plug-in editor windows on Windows and macOS.** Without them, Fermata is effectively a
-   Linux-only DAW for anyone using plug-ins.
+   Linux-only DAW for anyone using plug-ins. *macOS is done; Windows is not.*
 2. **Crossfades, fade curves and drag modes** (X-Fade and Shuffle). These are the basis of
    clean audio editing and comping. *Fades, crossfades and the X-Fade mode are done; Shuffle
    and No Overlap are not.*

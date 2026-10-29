@@ -13,5 +13,5 @@ impl Editor {
         true
     }
     pub fn raise(&self) {}
-    pub fn close(self) {}
+    pub fn close<K: Send + 'static>(self, _keep_alive: K) {}
 }

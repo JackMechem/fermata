@@ -4819,9 +4819,13 @@ name = "vst3-host"
 version = "0.1.0-alpha.1"
 dependencies = [
  "core-foundation",
+ "dispatch2",
  "libc",
  "libloading 0.9.0",
  "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-foundation",
  "parking_lot",
  "rtrb",
  "serde",

@@ -37,6 +37,8 @@ All notable changes to Fermata are recorded here. The format follows
   section, with a tab for each, or float (Settings › General › Open Effect Panels; Floating by
   default), or open in separate OS windows. Floating panels resize from their sides and bottom corners, their graphs and meters
   grow with them, and each effect type remembers its last size.
+- **VST3 editor windows on macOS:** a plug-in's own interface opens in a window that floats
+  above Fermata's, resizes within the plug-in's limits and hides while another app is in front.
 - A LICENSE file (MIT), shipped in every bundle.
 - CI runs the headless checks that need no third-party plug-ins on Linux
   (`scripts/headless-checks.sh`).
