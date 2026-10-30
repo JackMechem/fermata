@@ -37,9 +37,10 @@ import {
   type Grid,
   type PrView,
 } from "../pianoRollDraw";
-import { currentTick, getState, setState, useStore } from "../store";
+import { currentTick, getState, setState, useStore, type MidiSelection } from "../store";
 import { detachMenuItems } from "../detach";
 import { DetachButton } from "./DetachButton";
+import { EditorTabs } from "./EventList";
 import { lengthBbt, samplesPerBeat, toBbt } from "../time";
 import { barLines, musicalWarp, tempoMap, type Warp } from "../tempo";
 import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu";
@@ -285,6 +286,16 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     const w = me.fromRegions(regions, work.current.selNotes, work.current.selCc);
     work.current = { ...work.current, source: track.regions, regions, notes: w.notes, cc: w.cc };
   }
+  // The note selection is shared with the Event List (the store's midiSelection).
+  const sharedSel = useStore((s) => s.midiSelection);
+  const seenSel = useRef<MidiSelection | null>(null);
+  if (sharedSel !== seenSel.current) {
+    seenSel.current = sharedSel;
+    const selNotes = new Set(sharedSel.notes);
+    const selCc = new Set(sharedSel.cc);
+    const w = me.fromRegions(work.current.regions, selNotes, selCc);
+    work.current = { ...work.current, notes: w.notes, cc: w.cc, selNotes, selCc };
+  }
   const regions = work.current.regions;
   const focus = region && regions.some((r) => r.id === region.id) ? region.id : null;
 
@@ -512,8 +523,18 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
 
   // ---- committing edits -------------------------------------------------------------------
 
+  /** Shares the selection with the Event List. */
+  const publishSelection = () => {
+    const { selNotes, selCc } = work.current;
+    const prev = getState().midiSelection;
+    if (prev.notes.length === selNotes.size && prev.cc.length === selCc.size && prev.notes.every((k) => selNotes.has(k)) && prev.cc.every((k) => selCc.has(k))) return;
+    seenSel.current = { notes: [...selNotes], cc: [...selCc] };
+    setState({ midiSelection: seenSel.current });
+  };
+
   const setSelection = (notes: PNote[], cc: PCc[] = work.current.cc) => {
     work.current = { ...work.current, notes, cc, selNotes: me.selectionKeys(notes), selCc: me.selectionKeys(cc) };
+    publishSelection();
     preview.current = null;
     requestDraw();
     bump();
@@ -531,6 +552,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     const next = me.applyEdits(work.current.regions, edits);
     const w = me.fromRegions(next, selNotes, selCc);
     work.current = { ...work.current, regions: next, notes: w.notes, cc: w.cc, selNotes, selCc };
+    publishSelection();
     requestDraw();
     bump();
     inflight.current++;
@@ -1832,6 +1854,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   return (
     <div className="editor piano-roll" ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown}>
       <div className="local-bar">
+        <EditorTabs current="editor" />
         <div className="local-menus">
           <button className="local-menu" onMouseDown={(e) => openMenuAt(e.currentTarget, editItems())}>
             Edit
@@ -1842,7 +1865,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           <button className="local-menu" onMouseDown={(e) => openMenuAt(e.currentTarget, viewItems())}>
             View
           </button>
-          <span className="local-title">Piano Roll: {title}</span>
+          <span className="local-title">{title}</span>
         </div>
         <div className="local-right">
           <button ref={toolBtn} className="popup pr-tool" title="Tool (T)" onMouseDown={(e) => openMenuAt(e.currentTarget, toolItems())}>

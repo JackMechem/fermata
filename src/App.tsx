@@ -13,6 +13,7 @@ import { installPluginKeys } from "./pluginKeys";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
 import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
+import { EventList, eventListMenu } from "./components/EventList";
 import { FxWindows } from "./components/fx/FxWindow";
 import { FxDock } from "./components/fx/FxDock";
 import { loadFxList } from "./fxHost";
@@ -71,6 +72,7 @@ function handleMenu(id: string) {
   if (isBouncing()) return;
   // Edit commands act on the notes while the Piano Roll has focus.
   if (pianoRollMenu(id)) return;
+  if (eventListMenu(id)) return;
   switch (id) {
     case "new":
       setState({ dialog: "chooser", chooserTab: "new" });
@@ -267,6 +269,9 @@ function handleMenu(id: string) {
     case "editor":
       setState({ bottom: s.bottom === "editor" ? "none" : "editor" });
       break;
+    case "list-editors":
+      setState({ bottom: s.bottom === "list" ? "none" : "list" });
+      break;
     case "browser":
       setState({ showBrowser: !s.showBrowser });
       break;
@@ -317,6 +322,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   inspector: () => handleMenu("inspector"),
   library: () => handleMenu("library"),
   editor: () => handleMenu("editor"),
+  "list-editors": () => handleMenu("list-editors"),
   browser: () => handleMenu("browser"),
   "zoom-in": () => handleMenu("zoom-in"),
   "zoom-out": () => handleMenu("zoom-out"),
@@ -537,9 +543,11 @@ export default function App() {
         {s.showInspector && <Splitter pane="inspector" dir="x" sign={1} />}
         <div className="center">
           <TracksArea />
-          {s.bottom !== "none" && <Splitter pane={s.bottom} dir="y" sign={-1} />}
+          {/* The Event List takes the Editors' height, so switching between them doesn't jump. */}
+          {s.bottom !== "none" && <Splitter pane={s.bottom === "list" ? "editor" : s.bottom} dir="y" sign={-1} />}
           {s.bottom === "mixer" && <Mixer />}
           {s.bottom === "editor" && <Editor />}
+          {s.bottom === "list" && <EventList />}
           {s.bottom === "fx" && <FxDock />}
         </div>
         {s.showBrowser && <Splitter pane="browser" dir="x" sign={-1} />}

@@ -293,6 +293,9 @@ export function ControlBar() {
             <path d="M4 3v5.5h2V3M8 3v5.5h2V3M12 3v5.5h2V3" fill="currentColor" strokeWidth="0" />
           </svg>
         </ViewButton>
+        <ViewButton on={s.bottom === "list"} title={`List Editors (${keyHint("list-editors")})`} onClick={() => setState({ bottom: s.bottom === "list" ? "none" : "list" })}>
+          <Icon.lists />
+        </ViewButton>
         <ViewButton on={s.showBrowser} title={`Browsers (${keyHint("browser")})`} onClick={() => setState({ showBrowser: !s.showBrowser })}>
           <Icon.browser />
         </ViewButton>

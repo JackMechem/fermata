@@ -84,7 +84,7 @@ Goal: clean, fast audio editing and comping without workarounds.
 Goal: precise MIDI editing and hands-on control from hardware.
 
 - [ ] MIDI learn and controller assignments for plug-in and mixer parameters
-- [ ] Event List
+- [x] Event List
 - [ ] Step Input (Musical Typing, MIDI keyboard, rests)
 - [x] Region playback parameters: non-destructive quantize, transpose, velocity, delay
 - [ ] Record MIDI in Replace mode

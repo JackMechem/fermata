@@ -6553,3 +6553,186 @@ canvas.pr-cursor-line {
   align-items: center;
   gap: 4px;
 }
+
+/* ==== Event List (eventlist) ==== */
+
+/* Piano Roll / Event List, at the start of the MIDI editors' bars. */
+.editor-tabs {
+  display: flex;
+  gap: 2px;
+  flex: none;
+}
+
+/* The + button, what it adds, and the event type filters, under the local bar. */
+.el-tools {
+  height: 26px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--local-bar);
+  border-bottom: 1px solid var(--edge);
+}
+
+.el-tools .lb-btn:disabled {
+  opacity: 0.5;
+}
+
+.el-filters {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.el-filters .filter {
+  white-space: nowrap;
+}
+
+.el-count {
+  margin-left: auto;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.el-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 18px;
+  display: grid;
+  grid-template-columns: 134px 78px 30px 54px 42px minmax(0, 1fr);
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.el-row.odd {
+  background: var(--panel);
+}
+
+.el-row.el-head {
+  position: relative;
+  flex: none;
+  height: 20px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--edge);
+  color: var(--dim);
+  font-weight: 600;
+}
+
+.el-row.muted {
+  color: var(--faint);
+}
+
+/* The event at the playhead. */
+.el-row.playing {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.el-row.sel {
+  background: var(--select);
+  color: #fff;
+}
+
+.el-cell {
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.el-status,
+.el-ch,
+.el-info {
+  color: var(--dim);
+}
+
+.el-row.sel .el-cell {
+  color: inherit;
+}
+
+.el-ch,
+.el-num,
+.el-val {
+  justify-content: flex-end;
+}
+
+.el-head .el-cell {
+  justify-content: flex-start;
+}
+
+/* Bars, beats, divisions and ticks, each dragged on its own. */
+.el-pos,
+.el-len {
+  gap: 2px;
+}
+
+.el-part {
+  display: inline-block;
+  text-align: right;
+  padding: 0 1px;
+  border-radius: 3px;
+  cursor: ns-resize;
+}
+
+.el-part.p0 {
+  min-width: 4ch;
+}
+
+.el-part.p1,
+.el-part.p2 {
+  min-width: 2.4ch;
+}
+
+.el-part.p3 {
+  min-width: 4ch;
+}
+
+.el-edit:not(.el-pos):not(.el-len) {
+  cursor: ns-resize;
+}
+
+.el-part:hover,
+.el-edit:not(.el-pos):not(.el-len):hover {
+  background: var(--panel-3);
+}
+
+.el-row.sel .el-part:hover,
+.el-row.sel .el-edit:not(.el-pos):not(.el-len):hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.el-input {
+  width: 100%;
+  height: 16px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 3px;
+  outline: none;
+  background: var(--field);
+  box-shadow: var(--field-shadow), 0 0 0 1.5px var(--accent);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.el-scroll {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.el-space {
+  position: relative;
+}

@@ -12,6 +12,7 @@ import type { BottomPane, State } from "./store";
 import { getState } from "./store";
 import { DetachButton } from "./components/DetachButton";
 import { Editor } from "./components/Editor";
+import { EventList, eventListTitle } from "./components/EventList";
 import { FxWindows } from "./components/fx/FxWindow";
 import { PanelContent, PanelLead, PanelTools, panelExists, usePanelTitle } from "./components/fx/FxPanel";
 import { Mixer } from "./components/Panels";
@@ -72,6 +73,16 @@ registerPanelKind(
     render: () => <Editor />,
     size: { w: 1100, h: 520 },
     own: ownBottom("editor"),
+  }),
+);
+
+registerPanelKind(
+  "list",
+  bottomPanel("list", {
+    title: (_, s) => eventListTitle(s),
+    render: () => <EventList />,
+    size: { w: 640, h: 520 },
+    own: ownBottom("list"),
   }),
 );
 

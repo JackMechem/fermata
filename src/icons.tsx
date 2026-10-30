@@ -43,6 +43,12 @@ export const Icon = {
       <path d="M5.8 10 11.5 2.5M10.2 10 4.5 2.5" />
     </S>
   ),
+  /** Logic's List Editors button: lines of a list. */
+  lists: () => (
+    <S>
+      <path d="M2.5 4h1M2.5 8h1M2.5 12h1M6 4h7.5M6 8h7.5M6 12h7.5" />
+    </S>
+  ),
   browser: () => (
     <S>
       <path d="M2.5 4.5h4l1.2 1.4h5.8v6.6h-11z" />

@@ -6,8 +6,9 @@ import type { DockPanels } from "./fxDock";
 import type { WaveStyle } from "./waveform";
 
 export type Snap = "smart" | "bar" | "beat" | "off";
-/** What the bottom section shows; "fx" is the docked plug-in panels (fxDock.ts). */
-export type BottomPane = "none" | "mixer" | "editor" | "fx";
+/** What the bottom section shows; "fx" is the docked plug-in panels (fxDock.ts), "list" the
+ *  Event List (D). */
+export type BottomPane = "none" | "mixer" | "editor" | "fx" | "list";
 export type SettingsTab = "general" | "audio" | "recording" | "metronome" | "midi" | "editing" | "plugins" | "keys" | "appearance";
 
 /** Resizable pane sizes in CSS pixels (widths, except the bottom panes' heights). */
@@ -86,6 +87,14 @@ export interface State {
   fxDock: DockPanels;
   /** Panels shown in their own windows, by panel key ("mixer", "eq:12"; see detach.ts). */
   detached: string[];
+  /** Selected notes and controller events, as "region:index" keys into each MIDI region's
+   *  content: the Piano Roll and the Event List share it (midiEdit.ts `selectionKeys`). */
+  midiSelection: MidiSelection;
+}
+
+export interface MidiSelection {
+  notes: string[];
+  cc: string[];
 }
 
 let state: State = {
@@ -129,6 +138,7 @@ let state: State = {
   showOverview: true,
   fxDock: { open: [], floating: [], active: null, ret: "none" },
   detached: [],
+  midiSelection: { notes: [], cc: [] },
 };
 
 const listeners = new Set<() => void>();

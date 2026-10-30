@@ -56,9 +56,10 @@ export function bottomAfterHide(kind: string, before: string, detached: string[]
 /**
  * The UI-store fields every window keeps the same, so a detached panel behaves as it would in
  * the main window: the selection (the editor follows it, the keys act on it), the region
- * clipboard, the snap mode, what is shown of the tracks, the plug-in lists, the appearance, and
- * which panels are detached. Window layout (the bottom section, pane sizes, open sheets and
- * floating editors, zoom) stays per window. The snapshot and the settings travel separately.
+ * clipboard, the snap mode, what is shown of the tracks, the plug-in lists, the appearance,
+ * which panels are detached, and the notes selected in the Piano Roll and Event List. Window
+ * layout (the bottom section, pane sizes, open sheets and floating editors, zoom) stays per
+ * window. The snapshot and the settings travel separately.
  */
 export const SYNCED_FIELDS = [
   "selectedRegions",
@@ -76,6 +77,7 @@ export const SYNCED_FIELDS = [
   "uiScale",
   "waveStyle",
   "detached",
+  "midiSelection",
 ] as const;
 
 export type SyncedField = (typeof SYNCED_FIELDS)[number];

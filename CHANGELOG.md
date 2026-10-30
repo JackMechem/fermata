@@ -18,6 +18,12 @@ All notable changes to Fermata are recorded here. The format follows
   Delay (ticks or ms) for MIDI regions, and Delay for audio regions. They apply at playback
   and in every render, the Tracks area draws notes as they play, and region menu › Apply
   Region Parameters writes them into the regions.
+- **Event List** (D, View › List Editors, or the Event List tab beside the Piano Roll): the
+  notes, controllers, pitch bend and channel pressure of the selected MIDI regions as a list,
+  with Position and Length in bars, beats, divisions and ticks through the tempo map. Drag any
+  value or double-click to type it, filter by event type, add events at the playhead with +,
+  delete with Backspace; the event at the playhead is highlighted and Catch follows it. The
+  note selection is shared with the Piano Roll, and the list can have a window of its own.
 - **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
   and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
   Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps

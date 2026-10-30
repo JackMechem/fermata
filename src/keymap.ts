@@ -42,6 +42,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "inspector", label: "Show/Hide Inspector", group: "View", keys: ["I"] },
   { id: "library", label: "Show/Hide Library", group: "View", keys: ["Y"] },
   { id: "editor", label: "Show/Hide Editors", group: "View", keys: ["E", "P"] },
+  { id: "list-editors", label: "Show/Hide List Editors", group: "View", keys: ["D"] },
   { id: "browser", label: "Show/Hide Browsers", group: "View", keys: ["F"] },
   { id: "automation", label: "Show/Hide Automation", group: "View", keys: ["A"] },
   { id: "global-tracks", label: "Show/Hide Global Tracks", group: "View", keys: ["G"] },

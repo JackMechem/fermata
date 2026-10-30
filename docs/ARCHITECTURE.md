@@ -617,6 +617,7 @@ Interface-only state lives in the webview's `localStorage`:
 | `fermata.bounce` | `components/Bounce.tsx` | Tail, resolution, sample rate and normalize of the bounce and export dialogs. |
 | `fermata.bounce-in-place` | `components/Bounce.tsx` | Bounce in Place options. |
 | `fermata.pianoRoll` | `components/PianoRoll.tsx` | Piano Roll view and Time Quantize settings. |
+| `fermata.eventList` | `components/EventList.tsx` | Event List filters, the type + adds, Catch and MIDI Out. |
 
 Appearance settings (theme, size, waveforms) are saved in `settings.json` by `appearance.ts`;
 the `localStorage` copies only let the window open in the right theme and size before the
@@ -1209,6 +1210,7 @@ it like any plug-in.
 | `bounce.ts` | Bounce and export option types; opening the dialogs. |
 | `midiEdit.ts` | The Piano Roll's editing functions, pure and unit-tested. |
 | `pianoRollDraw.ts` | Piano Roll canvas drawing. |
+| `eventList.ts` | The Event List's positions, lengths, typed values and edits; pure, tested. |
 | `midiFiles.ts` | MIDI file import and export entry points. |
 | `audioEdit.ts` | Audio Track Editor state and operations: range selection, zoom, transients, keys. |
 | `audioRange.ts` | The Audio Track Editor's range arithmetic; pure, tested. |
@@ -1250,6 +1252,7 @@ it like any plug-in.
 | `Splitter.tsx` | Pane dividers and saved pane sizes. |
 | `Editor.tsx` | Bottom editor pane: picks the Piano Roll or the Audio Track Editor. |
 | `PianoRoll.tsx` | The Piano Roll. |
+| `EventList.tsx` | The Event List (bottom pane "list", D), a virtualised table; the Piano Roll / Event List tabs. Shares the note selection with the Piano Roll through the store's `midiSelection`. |
 | `AudioEditor.tsx` | The Audio Track Editor. |
 | `AutomationHeader.tsx` | The automation mode pop-up. |
 | `MusicalTyping.tsx` | Musical Typing window. |
@@ -1271,7 +1274,7 @@ it like any plug-in.
 
 | Path | Contents |
 |---|---|
-| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`. |
+| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`. |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
 | `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |

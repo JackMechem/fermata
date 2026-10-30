@@ -12,6 +12,7 @@ import { BounceDialog, BounceInPlaceDialog } from "./Bounce";
 import { GroupSheet, NewTrackDialog, SettingsDialog } from "./Dialogs";
 import { MenuHost } from "./Menu";
 import { pianoRollMenu } from "./PianoRoll";
+import { eventListMenu } from "./EventList";
 import { ProjectSettingsSheet } from "./Settings";
 
 export function DetachedWindow() {
@@ -22,8 +23,9 @@ export function DetachedWindow() {
   const dialog = useStore((s) => s.dialog);
   const groupSheet = useStore((s) => s.groupSheet);
 
-  // Edit commands from the menu bar act on this window's Piano Roll or Audio Track editor.
-  useEffect(() => installPanelWindow({ menu: (id) => editorMenuCommand(id) || pianoRollMenu(id) }), []);
+  // Edit commands from the menu bar act on this window's Piano Roll, Event List or Audio Track
+  // editor.
+  useEffect(() => installPanelWindow({ menu: (id) => editorMenuCommand(id) || pianoRollMenu(id) || eventListMenu(id) }), []);
 
   useEffect(() => {
     document.title = title;

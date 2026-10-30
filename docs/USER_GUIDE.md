@@ -103,7 +103,7 @@ The window is laid out like Logic Pro 11:
 | Library | far left | Y |
 | Inspector | left of the track headers | I |
 | Tracks area | centre | always |
-| Mixer or Editors | bottom (one at a time) | X (Mixer), E or P (Editors) |
+| Mixer, Editors or Event List | bottom (one at a time) | X (Mixer), E or P (Editors), D (List Editors) |
 | Browser (All Files) | right | F |
 | Status line | bottom edge | always |
 
@@ -131,7 +131,7 @@ From left to right:
 - **Mode buttons:** Cycle (C), Autopunch, Count-in (the "1234" button, Shift+K), Metronome (K).
 - **Master volume** slider and the **CPU** meter (the audio thread's load; amber above 50%, red
   above 80%).
-- **Musical Typing** (Ctrl+K) and **Browsers** (F) buttons.
+- **Musical Typing** (Ctrl+K), **List Editors** (D, the Event List) and **Browsers** (F) buttons.
 
 ### Tracks area
 
@@ -233,7 +233,7 @@ status, the audio devices, and the number of MIDI inputs.
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
-| View | Library, Inspector, Mixer, Editors, Mixer in Separate Window, Editor in Separate Window, Browsers, Show Automation, Musical Typing, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
+| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Musical Typing, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
 
 When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
 All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
@@ -242,8 +242,8 @@ While a bounce is rendering, menu commands are ignored.
 
 ### Separate windows
 
-The Mixer, the Editors, the Channel EQ and the built-in effect panels can each be opened in a
-window of their own, for example to put the Mixer on a second monitor.
+The Mixer, the Editors, the Event List, the Channel EQ and the built-in effect panels can each
+be opened in a window of their own, for example to put the Mixer on a second monitor.
 
 - **Open in Separate Window:** click the pop-out button at the right end of the panel's bar
   (the Mixer's, the Piano Roll's or the Audio Track Editor's), or in an effect panel's or
@@ -947,8 +947,46 @@ The lane below the notes shows velocity or a controller. Drag the bar above it t
 - A region's playback parameters (Quantize, Transpose and the rest; see
   [Region playback parameters](#region-playback-parameters)) apply as it plays. The Piano Roll
   shows the notes as stored; region menu › Apply Region Parameters writes them in.
-- The Piano Roll has no Step Input, Event List or Score yet, and controller points have no
-  curve shapes.
+- The Piano Roll has no Step Input or Score yet, and controller points have no curve shapes.
+
+### Event List
+
+Logic's Event List, for exact MIDI editing: every note and controller event of the selected
+MIDI regions as a line of numbers. Open it with **D** (View › List Editors, or the List Editors
+button at the right of the control bar), or with the **Event List** tab at the left of the
+Piano Roll's bar (the **Piano Roll** tab goes back). It shares the Editors' height, and the
+note selection is shared with the Piano Roll: notes selected in one are selected in the other.
+
+- **What it lists:** the regions selected in the Tracks area (on the first one's track), or
+  every MIDI region of the selected software instrument track when none is selected.
+- **Columns:** **Position** (bar, beat, division and tick, 240 ticks a division, following
+  tempo and signature changes), **Status** (Note, Control, Pitch Bend, C-Press), **Ch**
+  (always 1), **Num** (the note, as C3 = middle C, or the controller number; for pitch bend the
+  low 7 bits), **Val** (velocity, or the value; for pitch bend the high 7 bits, so 0 64 is the
+  centre) and **Length/Info** (a note's length, counted from 0 as in Logic: "0 1 0 0" is one
+  beat; a controller's name; a pitch bend's offset from the centre).
+- **Filter buttons** under the bar show or hide Notes, Pitch Bend, Controller and Chnl
+  Pressure events (also in the View menu).
+- **Selecting:** click an event; Shift+click selects a range, Ctrl+click adds or removes one;
+  Up and Down move through the list. With MIDI Out on, clicking a note plays it.
+- **Editing:** drag any value up or down; a position or length changes by the part you drag
+  (bars, beats, divisions or ticks), and every selected event of that type changes by the same
+  amount. Or double-click a value and type it: a position as "5 2 1 1", "5.2.1.1" or just "5"
+  (missing parts are 1), a length as "0 1" (missing parts are 0), a note as "C3", "F#2", "Bb1"
+  or a MIDI number. Enter applies, Esc cancels, and values are kept in range. A moved event
+  takes its place in the list when you let go, and a moved note keeps its length in beats.
+  Each edit is one undo step.
+- **Adding:** the **+** button adds an event of the type shown beside it at the playhead (in
+  the region there, or the nearest listed one; a one-bar region is made when the track has
+  none nearby). It copies the selected event of that type, if there is one, as Logic's Create
+  does; otherwise a note is C3, velocity 100, a beat long, and a pitch bend is centred.
+- **Backspace** deletes the selected events.
+- **The playhead:** the event at the playhead is highlighted, and with **Catch** (the button
+  and View menu) the list scrolls to keep it in view during playback.
+- **Separate window:** the pop-out button at the right of the bar, the View menu, or View ›
+  Event List in Separate Window; it can then sit beside the Piano Roll on another screen.
+
+Only the lines in view are drawn, so regions with thousands of events stay quick.
 
 ---
 
@@ -1751,6 +1789,7 @@ shown.
 | I | Show/Hide Inspector |
 | Y | Show/Hide Library |
 | E, P | Show/Hide Editors |
+| D | Show/Hide List Editors (the Event List) |
 | F | Show/Hide Browsers |
 | A | Show/Hide Automation |
 | H | Show Hidden Tracks |
@@ -1859,6 +1898,24 @@ both Ctrl and ⌘ work on macOS.
 | Ctrl during a move | Move without snapping |
 | Alt or Ctrl while resizing | Resize without snapping |
 | Ctrl+wheel / Alt+wheel | Zoom horizontally / change row height |
+
+### Event List keys
+
+These apply after you click in the Event List.
+
+| Key | Action |
+|---|---|
+| Up / Down | Select the previous / next event (Shift: add it to the selection) |
+| Enter | Type the selected event's position |
+| Backspace, Delete | Delete the selected events |
+| Esc | Deselect all (or cancel typing) |
+| Ctrl+A | Select all the events shown |
+
+| Mouse | Action |
+|---|---|
+| Drag a value up or down | Change it (every selected event of that type by the same amount) |
+| Double-click a value | Type it (Enter applies, Esc cancels) |
+| Shift+click / Ctrl+click | Select a range / add or remove one event |
 
 ### Audio Track Editor keys
 
@@ -2043,6 +2100,9 @@ blank, because WebKit then draws on the CPU.
 - **Automation:** folder stacks and Stereo Out have no automation of their own (a plug-in moved
   to Stereo Out leaves its lanes behind). Move Automation with Regions works along a track, not
   for regions moved onto another track or copied.
-- **Piano Roll:** no Step Input, Event List or Score, and controllers have no curve shapes.
+- **Piano Roll:** no Step Input or Score, and controllers have no curve shapes.
+- **Event List:** lists MIDI regions only (not the regions of the project, or audio), on one
+  track at a time. Fermata stores no MIDI channel, program changes, polyphonic aftertouch,
+  release velocity or SysEx, so the Ch column always reads 1 and those types have no filter.
 - **Undo:** the metronome and count-in switches and the project sample rate are not undoable,
   and switching the metronome doesn't mark the project as edited.

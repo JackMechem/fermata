@@ -120,9 +120,11 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("inspector", "Inspector", None)?)
         .item(&item("mixer", "Mixer", None)?)
         .item(&item("editor", "Editors", None)?)
+        .item(&item("list-editors", "List Editors", None)?)
         // Toggles: a detached panel's own window, or back into the main window.
         .item(&item("detach:mixer", "Mixer in Separate Window", None)?)
         .item(&item("detach:editor", "Editor in Separate Window", None)?)
+        .item(&item("detach:list", "Event List in Separate Window", None)?)
         .item(&item("browser", "Browsers", None)?)
         .item(&item("automation", "Show Automation", None)?)
         .item(&item("global-tracks", "Show Global Tracks", None)?)

@@ -527,12 +527,12 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 ### Advanced editors (p. 460–538)
 
 Event List (p. 460–480)
-- [ ] Event List as a pane or window (p. 461)
-- [ ] View the events in a region, or the regions in a project (p. 462)
-- [ ] Filter by event type (p. 463)
-- [ ] Create, duplicate and edit events numerically (p. 467–472)
-- [ ] Note events, including release velocity (p. 474–475)
-- [ ] Controller, pitch bend, program change, aftertouch and poly aftertouch events (p. 475–478)
+- [x] Event List as a pane or window (p. 461)
+- [~] View the events in a region, or the regions in a project (p. 462). *Events of the selected MIDI regions on one track; no region list.*
+- [x] Filter by event type (p. 463). *For the types Fermata stores.*
+- [~] Create, duplicate and edit events numerically (p. 467–472). *Create at the playhead and edit by dragging or typing; no Duplicate, Copy or Paste in the list.*
+- [~] Note events, including release velocity (p. 474–475). *No release velocity.*
+- [~] Controller, pitch bend, program change, aftertouch and poly aftertouch events (p. 475–478). *Controllers, pitch bend and channel aftertouch; no program change or poly aftertouch.*
 - [ ] SysEx and meta events (p. 478–479)
 - [ ] Event Float window (p. 480)
 

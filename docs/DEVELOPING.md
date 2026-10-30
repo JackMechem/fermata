@@ -209,8 +209,10 @@ npx tsc --noEmit -p .     # type check (strict, no unused locals or parameters)
 
 The tests use the built-in `node:test` runner on the pure frontend modules:
 `tests/midiEdit.test.ts` (the Piano Roll functions in `src/midiEdit.ts`: grid lengths, snapping,
-quantize with strength, swing and ends, and the rest), `audioEdit.test.ts` (`src/audioRange.ts`),
-`fxFormat.test.ts` (built-in effect readouts and control mapping), `keyFormat.test.ts`
+quantize with strength, swing and ends, and the rest), `eventList.test.ts` (the Event List's
+positions across tempo and signature changes, typed values and edits), `audioEdit.test.ts`
+(`src/audioRange.ts`), `fxFormat.test.ts` (built-in effect readouts and control mapping),
+`keyFormat.test.ts`
 (shortcuts on each platform) and `tempo.test.ts` (`src/tempo.ts`). Node 23.6 or newer runs
 TypeScript directly; on Node 22 add `--experimental-strip-types`.
 
