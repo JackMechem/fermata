@@ -52,6 +52,14 @@ All notable changes to Fermata are recorded here. The format follows
   it. Both now leave the region where it was, with the existing "is frozen" message.
 - On Linux, one audio block taking longer than the buffer's length ended the app with SIGXCPU.
   Opening a heavy plug-in's editor could do it. It's now a dropout at worst.
+- Editing during playback no longer restarts held notes. Adding, deleting or reordering a track,
+  adding an aux, changing a send, moving a fader, selecting a track, switching the metronome or
+  moving the cycle each released every instrument's notes and chased them again, which a sampler
+  that ignores note-offs played doubled. Now a track's notes only restart when its own instrument
+  or regions change, or when a key held on it loses its way: moving the MIDI target or turning
+  MIDI Thru off with a key down releases that key, which with a VST3 instrument used to stick.
+- Changing or removing an instrument during playback now releases the held notes and starts them
+  on the new one, and so does editing a region, where the note used to stop until the next one.
 
 ## [0.1.0-alpha.3] - 2026-10-30
 

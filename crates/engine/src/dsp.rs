@@ -1068,10 +1068,30 @@ impl Engine {
         }
     }
 
+    /// The MIDI a track's instrument got in the last block.
+    #[cfg(test)]
+    pub(crate) fn midi_sent(&self, track: Id) -> &[MidiEvent] {
+        self.tracks.iter().find(|t| t.id == track).map_or(&[], |t| &t.midi)
+    }
+
     fn flush_all_notes(&mut self) {
         for t in &mut self.tracks {
             t.flush_notes = true;
             t.chase_cc = true;
+        }
+    }
+
+    /// Live MIDI is about to stop reaching the target, so the note-offs of the keys held on it
+    /// never would. Only that track, and only if a key is down: what the regions play has nothing
+    /// to do with where live MIDI goes.
+    fn release_live_notes(&mut self) {
+        let Some(id) = self.midi_target else { return };
+        if let Some(t) = self.track_mut(id) {
+            if t.live_held.contains(&true) {
+                t.adopt_live_notes();
+                t.flush_notes = true;
+                t.chase_cc = true;
+            }
         }
     }
 
@@ -1169,6 +1189,7 @@ impl Engine {
                 if let Some(t) = self.track_mut(id) {
                     let old = std::mem::replace(&mut t.regions, r);
                     t.flush_notes = true;
+                    t.chase_cc = true;
                     self.discard(Garbage::Regions(old));
                 }
             }
@@ -1205,6 +1226,9 @@ impl Engine {
             Cmd::Instrument { track, insert } => {
                 let old = self.track_mut(track).and_then(|t| {
                     t.auto_sent = [f32::NAN; MAX_AUTO_SENT];
+                    // The new one hasn't heard the notes being held.
+                    t.flush_notes = true;
+                    t.chase_cc = true;
                     std::mem::replace(&mut t.instrument, insert)
                 });
                 if let Some(o) = old {
@@ -1245,8 +1269,10 @@ impl Engine {
             }
             Cmd::Analyzer(t) => self.analyzer_target = t,
             Cmd::MidiTarget(t) => {
-                self.midi_target = t;
-                self.flush_all_notes();
+                if t != self.midi_target {
+                    self.release_live_notes();
+                    self.midi_target = t;
+                }
             }
             Cmd::Automation(MASTER_ID, lanes) => self.set_master_lanes(lanes),
             Cmd::Automation(id, lanes) => {
@@ -1276,8 +1302,10 @@ impl Engine {
             }
             Cmd::Click(c) => self.click_params = c,
             Cmd::MidiThru(on) => {
-                self.midi_thru = on;
-                self.flush_all_notes();
+                if on != self.midi_thru {
+                    self.release_live_notes();
+                    self.midi_thru = on;
+                }
             }
             Cmd::Pdc { track, params, line, feed_line } => {
                 let old_feed = match self.track_mut(track) {

@@ -586,7 +586,10 @@ Details of each stage:
   are not resent (`auto_sent`), except after a jump or mode change. Parameters the user is
   holding (`touched`) are skipped so the live value wins.
 - **MIDI**: notes outside regions are cut at the region end; `sounding` tracks held notes so a
-  flush (stop, locate, region change, MIDI target change) can send note-offs. **CC chase**:
+  flush (stop, locate, a change of the track's regions or instrument, which chase afterwards)
+  can send note-offs. `Cmd::MidiTarget` and `Cmd::MidiThru` are sent after many edits and only act
+  on a real change, and then only on the old target with a key down (`live_held`): where live
+  MIDI goes is nothing to do with what the regions play. **CC chase**:
   when playback starts or jumps, the latest value of every controller before the playhead (in
   the region that covers it) is sent first, so a region started in the middle sounds right.
   A flush after controllers were played also releases sustain and centres pitch bend.

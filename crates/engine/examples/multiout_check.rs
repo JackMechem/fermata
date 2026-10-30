@@ -398,11 +398,6 @@ fn main() {
     let r2 = s.create_midi_region(inst, LEN, 9 * LEN).unwrap();
     let notes: Vec<Note> = (0..45).map(|k| Note { start: k * 9600, length: 4800, pitch: NOTE_ONE, velocity: 127, muted: false }).collect();
     s.set_midi_content(vec![MidiContent { region: r2, notes, cc: vec![], start: None, length: None }]);
-    // An edit while playing restarts held notes (Chase), and this sampler ignores note-offs, so
-    // a restarted note would sound twice: not what's being measured.
-    let mut prefs = s.prefs.clone();
-    prefs.midi.chase_notes = false;
-    s.set_prefs(prefs);
     s.idle();
     s.locate(0);
     s.play();

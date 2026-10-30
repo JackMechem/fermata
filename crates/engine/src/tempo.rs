@@ -189,7 +189,7 @@ impl BarSpan {
 }
 
 /// A stretch between two tempo events.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Seg {
     pos: f64,
     /// Quarters elapsed at `pos`.
@@ -200,7 +200,7 @@ struct Seg {
 }
 
 /// A run of bars in one signature.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct Meter {
     /// 0-based index of its first bar.
     bar: i64,
@@ -223,7 +223,7 @@ impl Meter {
 /// The project's tempo and signature changes, ready for conversions. Built off the audio
 /// thread; the engine gets it as an `Arc` and only reads it (every lookup is a binary search
 /// plus a closed form, without allocating).
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TempoMap {
     sr: f64,
     segs: Vec<Seg>,

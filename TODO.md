@@ -19,8 +19,6 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
 - Undo in a VST3's own editor was checked by hand on TONE3000 with a model: the knob follows Undo
   and Redo, with no late blocks over three rounds while stopped. Not listened to during playback.
   The CPU meter's red state hasn't been seen, since nothing ran late.
-- Adding any track during playback restarts held notes (`Cmd::MidiTarget`, then Chase); with a
-  sampler that ignores note-offs, one note sounds doubled.
 - In Low Latency Mode a monitored instrument skips its compensation delay but its output auxes
   keep theirs, so an aux can lag while monitoring.
 - An LSP lookahead change didn't reach delay compensation after a render until the next

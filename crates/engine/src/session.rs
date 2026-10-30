@@ -93,6 +93,8 @@ mod region_gain;
 mod musical_moves;
 mod track_off;
 mod vst_key;
+#[cfg(test)]
+mod held_notes;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -230,6 +232,8 @@ pub struct Session {
     captured_states: HashMap<Id, String>,
     /// The clip indicators' held peaks (see `session/strip_meters.rs`).
     peak_holds: PeakHolds,
+    /// The tempo map the engine's playback lists were last built for.
+    regions_tempo: Option<crate::tempo::TempoMap>,
     /// Controller assignments (see `session/controllers.rs`).
     controls: controllers::Controls,
     /// The sequence number of the next MIDI input message the ticks haven't reported.
@@ -371,6 +375,7 @@ impl Session {
             unsaved_journals: Vec::new(),
             captured_states: HashMap::new(),
             peak_holds: PeakHolds::default(),
+            regions_tempo: None,
             controls: Default::default(),
             midi_seen: 0,
             section_clip: None,
@@ -478,8 +483,13 @@ impl Session {
         }
         self.update_midi_target();
         self.update_pdc();
-        // Region quantize and delay in ticks follow the tempo map.
-        self.push_tempo_regions();
+        // Region quantize and delay in ticks follow the tempo map. Only when it moved: new
+        // playback lists release and chase the track's notes.
+        let tempo = crate::tempo::TempoMap::from_project(&self.project);
+        if self.regions_tempo.as_ref() != Some(&tempo) {
+            self.regions_tempo = Some(tempo);
+            self.push_tempo_regions();
+        }
     }
 
     /// What the engine plays for a track, with its stacks applied: a folder's fader scales its

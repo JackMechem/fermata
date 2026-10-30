@@ -125,6 +125,11 @@ impl TrackDsp {
         self.resume_left = fade;
         self.pdc_taps = pdc::PdcTaps::at(&self.pdc);
         // The flush set when it went off releases these with the notes it played itself.
+        self.adopt_live_notes();
+    }
+
+    /// The next flush releases the keys held on this track with the notes it played itself.
+    pub(super) fn adopt_live_notes(&mut self) {
         for (sounding, held) in self.sounding.iter_mut().zip(&mut self.live_held) {
             *sounding |= std::mem::take(held);
         }
