@@ -142,8 +142,8 @@ fn main() {
     let rb3 = s.import_audio(&noise, b, sr * 22 / 10).unwrap();
     s.resize_region(rb3, sr * 22 / 10, sr * 6 / 10);
     // Volume ramps: on A across the edge of sections 1 and 2, on B through section 3.
-    let ramp_a = vec![AutoPoint { pos: sr * 9 / 10, value: 0.0 }, AutoPoint { pos: sr * 11 / 10, value: -12.0 }];
-    let ramp_b = vec![AutoPoint { pos: 0, value: -6.0 }, AutoPoint { pos: 2 * sr, value: -20.0 }, AutoPoint { pos: sr * 29 / 10, value: 0.0 }, AutoPoint { pos: 3 * sr, value: -6.0 }];
+    let ramp_a = vec![AutoPoint { pos: sr * 9 / 10, value: 0.0, curve: 0.0 }, AutoPoint { pos: sr * 11 / 10, value: -12.0, curve: 0.0 }];
+    let ramp_b = vec![AutoPoint { pos: 0, value: -6.0, curve: 0.0 }, AutoPoint { pos: 2 * sr, value: -20.0, curve: 0.0 }, AutoPoint { pos: sr * 29 / 10, value: 0.0, curve: 0.0 }, AutoPoint { pos: 3 * sr, value: -6.0, curve: 0.0 }];
     s.set_automation_lane(a, AutoParam::Volume, ramp_a.clone());
     s.set_automation_lane(b, AutoParam::Volume, ramp_b.clone());
 

@@ -45,6 +45,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "list-editors", label: "Show/Hide List Editors", group: "View", keys: ["D"] },
   { id: "browser", label: "Show/Hide Browsers", group: "View", keys: ["F"] },
   { id: "automation", label: "Show/Hide Automation", group: "View", keys: ["A"] },
+  { id: "used-automation", label: "Show Used Automation", group: "View", keys: ["Shift+A"] },
   { id: "global-tracks", label: "Show/Hide Global Tracks", group: "View", keys: ["G"] },
   { id: "show-hidden", label: "Show Hidden Tracks", group: "View", keys: ["H"] },
   { id: "zoom-in", label: "Zoom In Horizontally", group: "View", keys: ["Mod+ArrowRight"] },

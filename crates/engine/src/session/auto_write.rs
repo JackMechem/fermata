@@ -15,7 +15,7 @@ use vst3_host::{Gesture, ParamInfo};
 use super::{Session, TrackPatch};
 use crate::automation::{lanes_dsp, splice, thin, tolerance, value_at, AutoTarget};
 use crate::dsp::Cmd;
-use crate::model::{AutoLane, AutoMode, AutoParam, AutoPoint, Id, TrackKind};
+use crate::model::{AutoLane, AutoMode, AutoParam, AutoPoint, Id, MASTER_ID};
 
 /// How long Touch takes to glide back to the existing curve after the control is let go (s).
 const RETURN_GLIDE: f64 = 0.2;
@@ -54,6 +54,13 @@ struct Pass {
 impl Session {
     /// The parameter's live value: the fader, pan knob, mute button or plug-in control.
     fn live_value(&self, track: Id, param: &AutoParam) -> Option<f32> {
+        if track == MASTER_ID {
+            return match param {
+                AutoParam::Volume => Some(self.project.master.volume_db),
+                AutoParam::Plugin { uid, param, .. } => self.controllers.get(uid).and_then(|c| c.param_value(*param)).map(|v| v as f32).or_else(|| self.builtin_normalized(*uid, *param)),
+                _ => None,
+            };
+        }
         let t = self.project.track(track)?;
         match param {
             AutoParam::Volume => Some(t.volume_db),
@@ -66,6 +73,10 @@ impl Session {
 
     /// Moves the control itself (used to pick a control up where the automation has it).
     fn set_live(&mut self, track: Id, param: &AutoParam, v: f32) {
+        if track == MASTER_ID && matches!(param, AutoParam::Volume) {
+            self.set_master_volume(v);
+            return;
+        }
         let patch = match param {
             AutoParam::Volume => TrackPatch { volume_db: Some(v), ..Default::default() },
             AutoParam::Pan => TrackPatch { pan: Some(v), ..Default::default() },
@@ -87,13 +98,13 @@ impl Session {
 
     /// What the lane plays at `pos`, if it has points.
     fn curve_value(&self, track: Id, param: &AutoParam, pos: i64) -> Option<f32> {
-        let lane = self.project.track(track)?.automation.iter().find(|l| l.param.same(param))?;
+        let lane = self.strip_lanes(track)?.iter().find(|l| l.param.same(param))?;
         value_at(&lane.points, pos)
     }
 
     pub(super) fn push_automation(&mut self, track: Id) {
-        if let Some(t) = self.project.track(track) {
-            let lanes = lanes_dsp(&t.automation);
+        if let Some(lanes) = self.strip_lanes(track) {
+            let lanes = lanes_dsp(lanes);
             self.send(Cmd::Automation(track, lanes));
             self.resync_builtins(track);
         }
@@ -109,19 +120,17 @@ impl Session {
         if let Some(i) = self.pass_index(track, param) {
             return Some(i);
         }
-        let t = self.project.track(track)?;
-        // A folder's own settings only shape its subtracks, which the engine doesn't automate.
-        if !t.auto_mode.writes() || t.kind == TrackKind::Folder {
+        let mode = self.auto_mode_of(track)?;
+        if !mode.writes() || !self.automatable(track, param) {
             return None;
         }
-        let mode = t.auto_mode;
         let value = self.live_value(track, param)?;
         let before = before.or_else(|| self.curve_value(track, param, pos)).unwrap_or(value);
         // Write mode already plays every live value; Touch and Latch let go of this one.
         if mode != AutoMode::Write {
             self.send(Cmd::AutoTouch { track, target: AutoTarget::from(param), on: true });
         }
-        self.auto.passes.push(Pass { track, param: param.clone(), mode, before, done: Vec::new(), start: pos, points: vec![AutoPoint { pos, value }], value, held: false });
+        self.auto.passes.push(Pass { track, param: param.clone(), mode, before, done: Vec::new(), start: pos, points: vec![AutoPoint { pos, value, curve: 0.0 }], value, held: false });
         Some(self.auto.passes.len() - 1)
     }
 
@@ -133,7 +142,7 @@ impl Session {
         let p = &mut self.auto.passes[i];
         p.value = value;
         let Some(last) = p.points.last().copied() else {
-            p.points.push(AutoPoint { pos, value });
+            p.points.push(AutoPoint { pos, value, curve: 0.0 });
             return;
         };
         if pos < last.pos {
@@ -141,13 +150,13 @@ impl Session {
             let (cs, ce) = if cycle.enabled { (cycle.start.min(pos), cycle.end.max(last.pos)) } else { (pos, last.pos) };
             let mut pts = std::mem::take(&mut p.points);
             if ce > last.pos {
-                pts.push(AutoPoint { pos: ce, value: last.value });
+                pts.push(AutoPoint { pos: ce, value: last.value, curve: 0.0 });
             }
             p.done.push((p.start, ce, pts));
             p.start = cs;
-            p.points.push(AutoPoint { pos: cs, value });
+            p.points.push(AutoPoint { pos: cs, value, curve: 0.0 });
             if pos > cs {
-                p.points.push(AutoPoint { pos, value });
+                p.points.push(AutoPoint { pos, value, curve: 0.0 });
             }
             return;
         }
@@ -156,9 +165,9 @@ impl Session {
             return;
         }
         if last.value != value && (pos - last.pos) as f64 > HOLD_GAP * sr {
-            p.points.push(AutoPoint { pos: pos - (HOLD_RAMP * sr) as i64, value: last.value });
+            p.points.push(AutoPoint { pos: pos - (HOLD_RAMP * sr) as i64, value: last.value, curve: 0.0 });
         }
-        p.points.push(AutoPoint { pos, value });
+        p.points.push(AutoPoint { pos, value, curve: 0.0 });
     }
 
     /// The playhead was moved while writing: what was written so far ends where it was, and
@@ -169,11 +178,11 @@ impl Session {
             let end = from.max(last);
             let mut pts = std::mem::take(&mut p.points);
             if end > last {
-                pts.push(AutoPoint { pos: end, value: p.value });
+                pts.push(AutoPoint { pos: end, value: p.value, curve: 0.0 });
             }
             p.done.push((p.start, end, pts));
             p.start = to;
-            p.points.push(AutoPoint { pos: to, value: p.value });
+            p.points.push(AutoPoint { pos: to, value: p.value, curve: 0.0 });
         }
     }
 
@@ -245,7 +254,7 @@ impl Session {
         if !self.is_playing() {
             return;
         }
-        let Some(mode) = self.project.track(track).map(|t| t.auto_mode) else { return };
+        let Some(mode) = self.auto_mode_of(track) else { return };
         if !mode.writes() {
             return;
         }
@@ -276,12 +285,13 @@ impl Session {
 
     /// Write mode starts writing every lane, and volume and pan, from where playback starts.
     fn start_write_passes(&mut self, track: Id, from: i64) {
-        let Some(t) = self.project.track(track) else { return };
-        if t.auto_mode != AutoMode::Write || t.kind == TrackKind::Folder {
+        if self.auto_mode_of(track) != Some(AutoMode::Write) {
             return;
         }
+        let Some(lanes) = self.strip_lanes(track) else { return };
+        // (begin_pass leaves out what the strip can't automate: pan on a folder or Stereo Out.)
         let mut params = vec![AutoParam::Volume, AutoParam::Pan];
-        for l in &t.automation {
+        for l in lanes {
             // Send lanes too (an empty send slot has no value, so begin_pass skips it).
             if !params.iter().any(|p| p.same(&l.param)) {
                 params.push(l.param.clone());
@@ -295,7 +305,10 @@ impl Session {
     pub(super) fn auto_play_started(&mut self, from: i64) {
         // Editors may have been moved by hand while stopped.
         self.auto.shown.clear();
-        let ids: Vec<Id> = self.project.tracks.iter().filter(|t| t.auto_mode == AutoMode::Write).map(|t| t.id).collect();
+        let mut ids: Vec<Id> = self.project.tracks.iter().filter(|t| t.auto_mode == AutoMode::Write).map(|t| t.id).collect();
+        if self.project.master.auto_mode == AutoMode::Write {
+            ids.push(MASTER_ID);
+        }
         for id in ids {
             self.start_write_passes(id, from);
         }
@@ -309,11 +322,10 @@ impl Session {
         wrote.dedup();
         self.commit(passes, at);
         for id in wrote {
-            if let Some(t) = self.project.track_mut(id) {
-                if t.auto_mode == AutoMode::Write {
-                    t.auto_mode = AutoMode::Latch;
-                    self.send(Cmd::AutoMode(id, AutoMode::Latch));
-                }
+            let mode = if id == MASTER_ID { Some(&mut self.project.master.auto_mode) } else { self.project.track_mut(id).map(|t| &mut t.auto_mode) };
+            if let Some(mode) = mode.filter(|m| **m == AutoMode::Write) {
+                *mode = AutoMode::Latch;
+                self.send(Cmd::AutoMode(id, AutoMode::Latch));
             }
         }
     }
@@ -344,21 +356,21 @@ impl Session {
             // Stop can land behind the last point when the cycle just jumped back.
             let end = end.max(last);
             if end > last {
-                p.points.push(AutoPoint { pos: end, value: p.value });
+                p.points.push(AutoPoint { pos: end, value: p.value, curve: 0.0 });
             }
             p.done.push((p.start, end, std::mem::take(&mut p.points)));
-            let Some(t) = self.project.track_mut(p.track) else { continue };
-            let existing = t.automation.iter().position(|l| l.param.same(&p.param));
+            let Some(automation) = self.strip_lanes_mut(p.track) else { continue };
+            let existing = automation.iter().position(|l| l.param.same(&p.param));
             let unchanged = p.done.iter().all(|(_, _, pts)| pts.iter().all(|x| x.value == p.before));
             // Untouched parameters (Write mode) don't get new lanes.
             if existing.is_none() && unchanged {
                 continue;
             }
             let i = existing.unwrap_or_else(|| {
-                t.automation.push(AutoLane { param: p.param.clone(), points: Vec::new() });
-                t.automation.len() - 1
+                automation.push(AutoLane { param: p.param.clone(), points: Vec::new() });
+                automation.len() - 1
             });
-            let lane = &mut t.automation[i];
+            let lane = &mut automation[i];
             for (s, e, pts) in &p.done {
                 let rec = thin(pts, tolerance(&p.param));
                 lane.points = splice(&lane.points, &rec, *s, *e, p.before, p.mode == AutoMode::Touch, glide, tolerance(&p.param));
@@ -378,14 +390,15 @@ impl Session {
         self.dirty = true;
     }
 
-    /// The track a plug-in instance is on (Stereo Out plug-ins aren't automated).
+    /// The track a plug-in instance is on (`MASTER_ID` for Stereo Out).
     fn track_of_plugin(&self, uid: Id) -> Option<Id> {
-        self.project.tracks.iter().find(|t| t.inserts.iter().flatten().chain(t.instrument.iter()).any(|s| s.uid == uid)).map(|t| t.id)
+        let track = self.project.tracks.iter().find(|t| t.inserts.iter().flatten().chain(t.instrument.iter()).any(|s| s.uid == uid)).map(|t| t.id);
+        track.or_else(|| self.project.master.inserts.iter().flatten().any(|s| s.uid == uid).then_some(MASTER_ID))
     }
 
     fn plugin_param(&self, track: Id, uid: Id, param: u32) -> AutoParam {
         let probe = AutoParam::Plugin { uid, param, name: String::new() };
-        if let Some(l) = self.project.track(track).and_then(|t| t.automation.iter().find(|l| l.param.same(&probe))) {
+        if let Some(l) = self.strip_lanes(track).and_then(|lanes| lanes.iter().find(|l| l.param.same(&probe))) {
             return l.param.clone();
         }
         let name = self.controllers.get(&uid).and_then(|c| c.parameters().into_iter().find(|p| p.id == param)).map(|p| p.name);
@@ -450,13 +463,14 @@ impl Session {
     fn follow_editors(&mut self) {
         let pos = self.position();
         let mut moves = Vec::new();
-        for t in &self.project.tracks {
-            if !matches!(t.auto_mode, AutoMode::Read | AutoMode::Touch | AutoMode::Latch) {
+        let master = std::iter::once((MASTER_ID, self.project.master.auto_mode, &self.project.master.automation));
+        for (id, mode, lanes) in self.project.tracks.iter().map(|t| (t.id, t.auto_mode, &t.automation)).chain(master) {
+            if !matches!(mode, AutoMode::Read | AutoMode::Touch | AutoMode::Latch) {
                 continue;
             }
-            for l in &t.automation {
+            for l in lanes {
                 let AutoParam::Plugin { uid, param, .. } = &l.param else { continue };
-                if self.auto.passes.iter().any(|p| p.track == t.id && p.param.same(&l.param)) {
+                if self.auto.passes.iter().any(|p| p.track == id && p.param.same(&l.param)) {
                     continue;
                 }
                 let Some(v) = value_at(&l.points, pos) else { continue };
@@ -487,21 +501,21 @@ impl Session {
             }
         }
         points.sort_by_key(|p| p.pos);
-        let Some(t) = self.project.track_mut(track) else { return };
-        match t.automation.iter().position(|l| l.param.same(&param)) {
+        let Some(automation) = self.strip_lanes_mut(track) else { return };
+        match automation.iter().position(|l| l.param.same(&param)) {
             Some(i) if points.is_empty() => {
-                t.automation.remove(i);
+                automation.remove(i);
             }
-            Some(i) => t.automation[i] = AutoLane { param, points },
+            Some(i) => automation[i] = AutoLane { param, points },
             None if points.is_empty() => {}
-            None => t.automation.push(AutoLane { param, points }),
+            None => automation.push(AutoLane { param, points }),
         }
         self.push_automation(track);
         self.dirty = true;
     }
 
     pub fn set_auto_mode(&mut self, track: Id, mode: AutoMode) {
-        if self.project.track(track).is_none() {
+        if self.auto_mode_of(track).is_none() {
             return;
         }
         // Passes in progress on the track end here.
@@ -509,7 +523,9 @@ impl Session {
         self.auto.passes = rest;
         let pos = self.position();
         self.commit(mine, pos);
-        if let Some(t) = self.project.track_mut(track) {
+        if track == MASTER_ID {
+            self.project.master.auto_mode = mode;
+        } else if let Some(t) = self.project.track_mut(track) {
             t.auto_mode = mode;
         }
         self.send(Cmd::AutoMode(track, mode));
@@ -521,10 +537,10 @@ impl Session {
 
     /// Deletes one lane, or all of the track's automation with `param` None.
     pub fn clear_automation(&mut self, track: Id, param: Option<AutoParam>) {
-        let Some(t) = self.project.track_mut(track) else { return };
+        let Some(automation) = self.strip_lanes_mut(track) else { return };
         match &param {
-            Some(p) => t.automation.retain(|l| !l.param.same(p)),
-            None => t.automation.clear(),
+            Some(p) => automation.retain(|l| !l.param.same(p)),
+            None => automation.clear(),
         }
         self.push_automation(track);
         self.dirty = true;
@@ -557,6 +573,6 @@ impl Session {
     /// Whether moving the track's controls now records automation (playing in Touch, Latch or
     /// Write). Those moves belong to the pass's undo step rather than getting their own.
     pub fn automation_writing(&self, track: Id) -> bool {
-        self.is_playing() && self.project.track(track).map(|t| t.auto_mode.writes()).unwrap_or(false)
+        self.is_playing() && self.auto_mode_of(track).map(|m| m.writes()).unwrap_or(false)
     }
 }

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use daw_engine::audio_io::{list_devices, AudioConfig, AudioStatus, DeviceList};
 use daw_engine::fades::{Crossfade, DragMode, FadeInType, FadeOutType};
-use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, InputSel, Project, Region, TrackKind, TrackSend};
+use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, InputSel, Project, Region, TrackKind, TrackSend, MASTER_ID};
 use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
 use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, PlayedNotes, RangeEdit, RegionParamsPatch, RenderOptions, TrackPatch};
 use daw_engine::vst3_host::{ParamInfo, PluginDescriptor};
@@ -240,7 +240,11 @@ pub fn set_count_in(state: State<AppState>, on: bool) -> Snapshot {
 #[tauri::command]
 pub fn set_master_volume(state: State<AppState>, db: f32) -> Snapshot {
     with(&state, |s| s.touched(CtlTarget::MasterVolume));
-    edit(&state, "Stereo Out Volume", Some("master-volume".into()), false, |s| s.set_master_volume(db))
+    // Moves recorded as automation belong to the pass's undo step.
+    if with(&state, |s| s.automation_writing(MASTER_ID)) {
+        return snap(&state, |s| s.set_master_volume_linked(db));
+    }
+    edit(&state, "Stereo Out Volume", Some("master-volume".into()), false, |s| s.set_master_volume_linked(db))
 }
 
 #[tauri::command]
@@ -1721,4 +1725,13 @@ pub fn move_arrangement_marker(state: State<AppState>, id: Id, before: Option<Id
 pub fn delete_arrangement_marker(state: State<AppState>, id: Id, content: bool) -> R<Snapshot> {
     let label = if content { "Delete Arrangement Marker and Content" } else { "Delete Arrangement Marker" };
     try_edit(&state, label, None, false, |s| s.delete_arrangement_marker(id, content))
+}
+
+// ---- Automation lanes ---------------------------------------------------------------------
+
+/// Sets the extra automation lanes shown under tracks: `[track, parameters]` pairs, with
+/// `MASTER_ID` for the Output track. One undo step.
+#[tauri::command]
+pub fn set_auto_lanes(state: State<AppState>, lanes: Vec<(Id, Vec<AutoParam>)>) -> Snapshot {
+    edit(&state, "Automation Lanes", None, false, |s| s.set_auto_lanes(lanes))
 }

@@ -1,12 +1,14 @@
 // Track automation in the arrange area: the lanes' maths (values, scales, labels), drawing each
-// track's shown lane over its dimmed regions, and editing points with the mouse. Arrange.tsx
-// hands over drawing and pointer events while the automation view is on.
+// track's shown lanes (the main one over its dimmed regions, extra ones below it, and the Output
+// track's), and editing points and curves with the mouse. Arrange.tsx hands over drawing and
+// pointer events while the automation view is on. The pure parts are in autoLanes.ts.
 
 import { useEffect, useRef, useState } from "react";
 import { act, BUILTIN_SYNTH, call, type AutoLane, type AutoMode, type AutoParam, type AutoPoint, type Id, type ParamInfo, type Project, type Track } from "./api";
+import { boxAt, curveThrough, laneBoxes, nextParam, OUTPUT_ID, sameParam, segmentAt, segmentSamples, usedLayout, valueAt, withCurve, type LaneBox, type LaneRow } from "./autoLanes";
 import type { MenuItem } from "./components/Menu";
 import { keyHint } from "./keymap";
-import { indexAt, type Layout } from "./layout";
+import type { Layout } from "./layout";
 import { currentTick, getState, onTick, setState } from "./store";
 import { mix, theme } from "./theme";
 import { dbToFader, faderToDb, formatDb, snapPos } from "./time";
@@ -21,11 +23,7 @@ export const MODES: AutoMode[] = ["off", "read", "touch", "latch", "write"];
 
 // ---- parameters -------------------------------------------------------------------------------
 
-export function sameParam(a: AutoParam, b: AutoParam): boolean {
-  if (a.type === "send" && b.type === "send") return a.value === b.value;
-  if (a.type === "plugin" && b.type === "plugin") return a.value.uid === b.value.uid && a.value.param === b.value.param;
-  return a.type === b.type;
-}
+export { sameParam, valueAt };
 
 export function paramLabel(p: AutoParam): string {
   switch (p.type) {
@@ -51,9 +49,66 @@ export function shownParam(t: Track): AutoParam {
   return getState().autoLane[t.id] ?? VOLUME;
 }
 
-/** Folders only shape their subtracks, so they have nothing of their own to automate. */
-export function automatable(t: Track): boolean {
-  return t.kind !== "folder";
+/** Every strip can be automated: a folder its volume and mute (which reach its subtracks),
+ *  Stereo Out its volume and plug-ins. */
+export function automatable(_t: Track): boolean {
+  return true;
+}
+
+export function isOutput(t: Track): boolean {
+  return t.id === OUTPUT_ID;
+}
+
+let outputCache: { project: Project; track: Track } | null = null;
+
+/** Stereo Out as a track, for the Output track and the automation code: its volume, plug-ins
+ *  and lanes. The same object for the same project snapshot. */
+export function outputTrack(project: Project): Track {
+  if (outputCache?.project === project) return outputCache.track;
+  const m = project.master;
+  const track: Track = {
+    id: OUTPUT_ID,
+    kind: "aux",
+    name: "Stereo Out",
+    color: "#8e8e93",
+    volume_db: m.volume_db,
+    pan: 0,
+    mute: false,
+    solo: false,
+    armed: false,
+    monitor: false,
+    input: { type: "none" },
+    instrument: null,
+    inserts: m.inserts,
+    regions: [],
+    eq: m.eq,
+    parent: null,
+    collapsed: false,
+    group: null,
+    hidden: false,
+    sends: [],
+    output: null,
+    bus: 0,
+    automation: m.automation ?? [],
+    auto_mode: m.auto_mode ?? "read",
+    auto_lanes: m.auto_lanes ?? [],
+  };
+  outputCache = { project, track };
+  return track;
+}
+
+/** A strip by id: a track, or the Output track for Stereo Out. */
+export function stripOf(project: Project | undefined, id: Id): Track | undefined {
+  if (!project) return undefined;
+  return id === OUTPUT_ID ? outputTrack(project) : project.tracks.find((t) => t.id === id);
+}
+
+/** The parameters a strip has besides its plug-ins' (Stereo Out has no pan or mute, a folder
+ *  no pan). */
+function baseParams(t: Track): AutoParam[] {
+  if (isOutput(t)) return [VOLUME];
+  if (t.kind === "folder") return [VOLUME, { type: "mute" }];
+  return [VOLUME, { type: "pan" }, { type: "mute" }, ...t.sends.flatMap((s, k): AutoParam[] => (s ? [{ type: "send", value: k }] : []))];
 }
 
 /** Height in the lane (0..1) for a value. Volume follows the fader's taper, as in Logic. */
@@ -106,7 +161,7 @@ export function formatValue(p: AutoParam, v: number): string {
 function builtinSpec(uid: Id, param: number): FxParamSpec | undefined {
   const st = getState();
   const project = st.snap?.project;
-  const slot = project?.tracks.flatMap((t) => t.inserts).find((s) => s?.uid === uid);
+  const slot = [...(project?.tracks.flatMap((t) => t.inserts) ?? []), ...(project?.master.inserts ?? [])].find((s) => s?.uid === uid);
   return st.fxList.find((f) => f.id === slot?.plugin_id)?.params.find((p) => p.id === param);
 }
 
@@ -130,18 +185,6 @@ function liveValue(t: Track, p: AutoParam): number {
   }
 }
 
-/** Straight lines between points, held before the first and after the last (as the engine). */
-export function valueAt(points: AutoPoint[], pos: number): number | null {
-  if (!points.length) return null;
-  if (pos < points[0].pos) return points[0].value;
-  let i = 0;
-  while (i < points.length && points[i].pos <= pos) i++;
-  if (i >= points.length) return points[points.length - 1].value;
-  const a = points[i - 1];
-  const b = points[i];
-  return a.value + ((b.value - a.value) * (pos - a.pos)) / (b.pos - a.pos);
-}
-
 // ---- plug-in parameters -------------------------------------------------------------------
 
 const paramCache = new Map<Id, Promise<ParamInfo[]>>();
@@ -160,22 +203,64 @@ function showParam(t: Track, p: AutoParam) {
   setState({ autoLane: { ...getState().autoLane, [t.id]: p } });
 }
 
+function setSubLanes(t: Track, lanes: AutoParam[]) {
+  act("set_auto_lanes", { lanes: [[t.id, lanes]] });
+}
+
+/** Shows another lane below the track's lanes (the "+" on a lane header): the next lane with
+ *  automation that isn't shown, else the next of volume, pan, mute and sends. */
+export function addLane(t: Track) {
+  const subs = t.auto_lanes ?? [];
+  const p = nextParam([shownParam(t), ...subs], t.automation, baseParams(t));
+  if (p) setSubLanes(t, [...subs, p]);
+}
+
+/** Closes sub-lane `k`. */
+export function closeLane(t: Track, k: number) {
+  setSubLanes(t, (t.auto_lanes ?? []).filter((_, i) => i !== k));
+}
+
+/** Show Used Automation: every lane holding points on the selected tracks (all tracks when
+ *  none is selected) gets shown, the main lane first. Turns the automation view on. */
+export function showUsedAutomation() {
+  const s = getState();
+  const project = s.snap?.project;
+  if (!project) return;
+  const sel = s.selectedTracks.length ? s.selectedTracks : s.snap?.selected != null ? [s.snap.selected] : project.tracks.map((t) => t.id);
+  const strips = sel.map((id) => stripOf(project, id)).filter((t): t is Track => !!t);
+  if (s.showOutput && !strips.some(isOutput)) strips.push(outputTrack(project));
+  const autoLane = { ...s.autoLane };
+  const lanes: [Id, AutoParam[]][] = [];
+  for (const t of strips) {
+    const { main, subs } = usedLayout(t.automation, shownParam(t));
+    autoLane[t.id] = main;
+    lanes.push([t.id, subs]);
+  }
+  setState({ autoLane, showAutomation: true });
+  act("set_auto_lanes", { lanes });
+}
+
 /** The parameter picker: Volume, Pan, Mute and the parameters of the track's plug-ins. Lanes
- *  that hold automation are marked. */
-export async function paramMenu(t: Track): Promise<MenuItem[]> {
-  const cur = shownParam(t);
+ *  that hold automation are marked. `sub` picks for that sub-lane instead of the main lane. */
+export async function paramMenu(t: Track, sub = -1): Promise<MenuItem[]> {
+  const cur = sub < 0 ? shownParam(t) : (t.auto_lanes?.[sub] ?? VOLUME);
+  const pick = (p: AutoParam) => {
+    if (sub < 0) return showParam(t, p);
+    const lanes = [...(t.auto_lanes ?? [])];
+    lanes[sub] = p;
+    setSubLanes(t, lanes);
+  };
   const item = (p: AutoParam, label = paramLabel(p)): MenuItem => ({
     label,
     checked: sameParam(cur, p),
     hint: laneOf(t, p)?.points.length ? "●" : undefined,
-    onClick: () => showParam(t, p),
+    onClick: () => pick(p),
   });
-  const items: MenuItem[] = [item(VOLUME), item({ type: "pan" }), item({ type: "mute" })];
   const project = getState().snap?.project;
-  t.sends.forEach((s, k) => {
-    if (!s) return;
-    const aux = project?.tracks.find((x) => x.id === s.bus);
-    items.push(item({ type: "send", value: k }, `Send ${k + 1} → ${aux?.name ?? "Bus"}`));
+  const items: MenuItem[] = baseParams(t).map((p) => {
+    if (p.type !== "send") return item(p);
+    const aux = project?.tracks.find((x) => x.id === t.sends[p.value]?.bus);
+    return item(p, `Send ${p.value + 1} → ${aux?.name ?? "Bus"}`);
   });
   // The built-in synth has no parameters; built-in effects list theirs.
   const slots = [t.instrument, ...t.inserts].filter((s) => s && s.plugin_id !== BUILTIN_SYNTH);
@@ -241,8 +326,11 @@ export function useAutomation(track: Track | null, param: AutoParam, live: numbe
 const POINT_R = 3;
 const HIT_R = 6;
 
-/** A drag in progress: the points to draw instead of the track's lane. */
-let preview: { track: Id; points: AutoPoint[] } | null = null;
+/** A drag in progress: the points to draw instead of one lane's. */
+let preview: { track: Id; param: AutoParam; points: AutoPoint[] } | null = null;
+/** The point the last click added, and the lane before it: a double-click on a curved
+ *  segment (whose first click adds a point) puts the lane back with the segment straight. */
+let lastAdd: { track: Id; param: AutoParam; pos: number; before: AutoPoint[]; onCurve: boolean } | null = null;
 /** Selected points, by position, on one track's shown lane. */
 let selection: { track: Id; param: AutoParam; pos: Set<number> } | null = null;
 let band: { x0: number; y0: number; x1: number; y1: number } | null = null;
@@ -261,9 +349,43 @@ function bounds(top: number, h: number): [number, number] {
   return [top + 5, top + h - 6];
 }
 
-function pointsOf(t: Track): AutoPoint[] {
-  if (preview && preview.track === t.id) return preview.points;
-  return laneOf(t, shownParam(t))?.points ?? [];
+function pointsOf(t: Track, param: AutoParam): AutoPoint[] {
+  if (preview && preview.track === t.id && sameParam(preview.param, param)) return preview.points;
+  return laneOf(t, param)?.points ?? [];
+}
+
+/** The rows the automation view draws: every visible track, then the Output track. */
+function laneRows(project: Project, layout: Layout): LaneRow[] {
+  const rows: LaneRow[] = [];
+  project.tracks.forEach((track, i) => {
+    if (!layout.heights[i]) return;
+    const top = layout.tops[i];
+    rows.push({ track, top, main: layout.heights[i] - layout.takeRows[i], subsTop: top + layout.heights[i], sub: layout.subLane[i] });
+  });
+  const o = layout.output;
+  if (o) rows.push({ track: outputTrack(project), top: o.top, main: o.height, subsTop: o.top + o.height, sub: o.subLane });
+  return rows;
+}
+
+function boxesOf(project: Project, layout: Layout): LaneBox[] {
+  return laneBoxes(laneRows(project, layout), shownParam);
+}
+
+/** Strokes a lane's curve: lines between points (sampled where a segment is curved), held
+ *  out to the edges. */
+function strokeLane(ctx: CanvasRenderingContext2D, pts: AutoPoint[], px: (pos: number) => number, py: (v: number) => number, W: number) {
+  ctx.moveTo(Math.min(0, px(pts[0].pos)), py(pts[0].value));
+  ctx.lineTo(px(pts[0].pos), py(pts[0].value));
+  for (let k = 1; k < pts.length; k++) {
+    const a = pts[k - 1];
+    const b = pts[k];
+    const x0 = px(a.pos);
+    const x1 = px(b.pos);
+    // Off-screen curves are drawn straight; only their ends show.
+    if (x1 < 0 || x0 > W) ctx.lineTo(x1, py(b.value));
+    else for (const s of segmentSamples(a, x0, x1)) ctx.lineTo(s.x, py(a.value + (b.value - a.value) * s.f));
+  }
+  ctx.lineTo(Math.max(W, px(pts[pts.length - 1].pos)), py(pts[pts.length - 1].value));
 }
 
 function lineColor(t: Track): string {
@@ -284,59 +406,72 @@ function tag(ctx: CanvasRenderingContext2D, x: number, y: number, text: string, 
   ctx.fillText(text, tx + 5, ty + 9);
 }
 
-/** Draws every visible track's shown lane over its (dimmed) regions. */
+function drawLane(ctx: CanvasRenderingContext2D, box: LaneBox, y: number, pps: number, left: number, W: number) {
+  const { track: t, param } = box;
+  const pts = pointsOf(t, param);
+  const [top, bottom] = bounds(y, box.height);
+  const py = (val: number) => bottom - toUnit(param, val) * (bottom - top);
+  const px = (pos: number) => pos * pps - left;
+  const color = lineColor(t);
+  ctx.save();
+  if (t.auto_mode === "off") ctx.globalAlpha = 0.45;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  if (!pts.length) {
+    // No automation yet: the control's own value, where a first point would continue from.
+    const ly = Math.round(py(liveValue(t, param))) + 0.5;
+    ctx.setLineDash([4, 3]);
+    ctx.moveTo(0, ly);
+    ctx.lineTo(W, ly);
+    ctx.stroke();
+    ctx.restore();
+    return;
+  }
+  strokeLane(ctx, pts, px, py, W);
+  ctx.stroke();
+  const sel = selection && selection.track === t.id && sameParam(selection.param, param) ? selection.pos : null;
+  for (const p of pts) {
+    const x = px(p.pos);
+    if (x < -POINT_R || x > W + POINT_R) continue;
+    const on = !!sel?.has(p.pos);
+    ctx.beginPath();
+    ctx.arc(x, py(p.value), on ? POINT_R + 0.5 : POINT_R, 0, Math.PI * 2);
+    ctx.fillStyle = on ? "#ffffff" : color;
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = on ? mix(t.color, "#000000", 0.2) : "rgba(0,0,0,0.55)";
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** Draws every visible track's lanes: the main one over its (dimmed) regions, the extra ones
+ *  below it, and the Output track's. */
 export function drawAutomation(ctx: CanvasRenderingContext2D, v: AutoView) {
   const { project, layout, pps, vp } = v;
   const W = vp.width;
   const H = vp.height;
-  project.tracks.forEach((t, i) => {
+  project.tracks.forEach((_, i) => {
     const th = layout.heights[i];
     const y = layout.tops[i] - vp.top;
     if (th === 0 || y > H || y + th < 0) return;
     // Regions stay visible but recede, as in Logic.
     ctx.fillStyle = theme.region === "light" ? "rgba(255,255,255,0.5)" : "rgba(0,0,0,0.4)";
     ctx.fillRect(0, y, W, th - 1);
-    if (!automatable(t)) return;
-    const param = shownParam(t);
-    const pts = pointsOf(t);
-    const [top, bottom] = bounds(y, th);
-    const py = (val: number) => bottom - toUnit(param, val) * (bottom - top);
-    const px = (pos: number) => pos * pps - vp.left;
-    const color = lineColor(t);
-    ctx.save();
-    if (t.auto_mode === "off") ctx.globalAlpha = 0.45;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    if (!pts.length) {
-      // No automation yet: the control's own value, where a first point would continue from.
-      const ly = Math.round(py(liveValue(t, param))) + 0.5;
-      ctx.setLineDash([4, 3]);
-      ctx.moveTo(0, ly);
-      ctx.lineTo(W, ly);
-      ctx.stroke();
-      ctx.restore();
-      return;
-    }
-    ctx.moveTo(Math.min(0, px(pts[0].pos)), py(pts[0].value));
-    for (const p of pts) ctx.lineTo(px(p.pos), py(p.value));
-    ctx.lineTo(W, py(pts[pts.length - 1].value));
-    ctx.stroke();
-    const sel = selection && selection.track === t.id && sameParam(selection.param, param) ? selection.pos : null;
-    for (const p of pts) {
-      const x = px(p.pos);
-      if (x < -POINT_R || x > W + POINT_R) continue;
-      const on = !!sel?.has(p.pos);
-      ctx.beginPath();
-      ctx.arc(x, py(p.value), on ? POINT_R + 0.5 : POINT_R, 0, Math.PI * 2);
-      ctx.fillStyle = on ? "#ffffff" : color;
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = on ? mix(t.color, "#000000", 0.2) : "rgba(0,0,0,0.55)";
-      ctx.stroke();
-    }
-    ctx.restore();
   });
+  for (const box of boxesOf(project, layout)) {
+    const y = box.top - vp.top;
+    if (y > H || y + box.height < 0) continue;
+    // Sub-lanes and the Output track have no regions: they get a lane of their own.
+    if (box.sub >= 0 || isOutput(box.track)) {
+      ctx.fillStyle = theme.lane;
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(0, y, W, box.height - 1);
+      ctx.globalAlpha = 1;
+    }
+    drawLane(ctx, box, y, pps, vp.left, W);
+  }
   if (band) {
     const x = Math.min(band.x0, band.x1) - vp.left;
     const y = Math.min(band.y0, band.y1) - vp.top;
@@ -359,7 +494,8 @@ export interface AutoInput extends Omit<AutoView, "vp"> {
 
 interface Hit {
   track: Track;
-  index: number;
+  /** The lane under the pointer. */
+  box: LaneBox;
   param: AutoParam;
   points: AutoPoint[];
   /** Content coordinates. */
@@ -375,13 +511,11 @@ function hitTest(e: { clientX: number; clientY: number }, v: AutoInput): Hit | n
   const rect = v.el.getBoundingClientRect();
   const x = e.clientX - rect.left + v.el.scrollLeft;
   const y = e.clientY - rect.top + v.el.scrollTop;
-  if (y >= v.layout.total) return null;
-  const index = indexAt(v.layout, y);
-  const track = v.project.tracks[index];
-  if (!track || !automatable(track)) return null;
-  const param = shownParam(track);
+  const box = boxAt(boxesOf(v.project, v.layout), y);
+  if (!box) return null;
+  const { track, param } = box;
   const points = laneOf(track, param)?.points ?? [];
-  const [top, bottom] = bounds(v.layout.tops[index], v.layout.heights[index]);
+  const [top, bottom] = bounds(box.top, box.height);
   let point = -1;
   let best = HIT_R * HIT_R;
   points.forEach((p, k) => {
@@ -393,10 +527,16 @@ function hitTest(e: { clientX: number; clientY: number }, v: AutoInput): Hit | n
       point = k;
     }
   });
-  return { track, index, param, points, x, y, top, bottom, point };
+  return { track, box, param, points, x, y, top, bottom, point };
 }
 
 const unitAt = (h: { top: number; bottom: number }, y: number) => (h.bottom - y) / Math.max(1, h.bottom - h.top);
+
+/** The curve's height on screen at content x, for a hit's lane. */
+function curveY(h: Hit, pts: AutoPoint[], x: number, pps: number): number | null {
+  const v = valueAt(pts, x / pps);
+  return v === null ? null : h.bottom - toUnit(h.param, v) * (h.bottom - h.top);
+}
 
 /** Sends a lane's points, at most one request at a time with the newest points winning, so a
  *  drag can be heard while it happens without queueing up stale edits. */
@@ -418,6 +558,68 @@ function sendLane(track: Id, param: AutoParam, points: AutoPoint[]) {
   next();
 }
 
+/** Keeps drawing a drag's points until the lane's new snapshot arrives. */
+function endPreview(v: AutoInput) {
+  const done = () => {
+    if (inflight) return void setTimeout(done, 16);
+    preview = null;
+    v.redraw();
+  };
+  done();
+}
+
+/** Ctrl-Shift-drag (or Alt-Shift-drag) on a segment bends it into a curve, as in Logic: the
+ *  line follows the pointer up and down. */
+function bendSegment(e: React.MouseEvent, h: Hit, v: AutoInput): boolean {
+  const pos = h.x / v.pps;
+  const seg = segmentAt(h.points, pos);
+  if (seg < 0) return false;
+  const a = h.points[seg];
+  const b = h.points[seg + 1];
+  if (a.value === b.value) return false;
+  const t = (pos - a.pos) / (b.pos - a.pos);
+  selection = null;
+  let result = h.points;
+  let moved = false;
+  const move = (ev: MouseEvent) => {
+    moved = true;
+    const c = hitPoint(ev, v);
+    // In the parameter's own units, so the curve passes through the value under the pointer.
+    const val = fromUnitExact(h.param, unitAt(h, c.y));
+    const curve = curveThrough(t, (val - a.value) / (b.value - a.value));
+    result = withCurve(h.points, seg, curve);
+    preview = { track: h.track.id, param: h.param, points: result };
+    hover = { track: h.track.id, x: h.x, y: c.y, text: curve ? `Curve ${curve > 0 ? "+" : ""}${Math.round(curve * 100)}` : "Linear" };
+    sendLane(h.track.id, h.param, result);
+    v.redraw();
+  };
+  const up = () => {
+    window.removeEventListener("mousemove", move);
+    window.removeEventListener("mouseup", up);
+    hover = null;
+    if (moved) sendLane(h.track.id, h.param, result);
+    endPreview(v);
+  };
+  e.preventDefault();
+  window.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", up);
+  return true;
+}
+
+/** `fromUnit` without the rounding, for following the pointer smoothly. */
+function fromUnitExact(p: AutoParam, u: number): number {
+  u = Math.min(1, Math.max(0, u));
+  switch (p.type) {
+    case "volume":
+    case "send":
+      return faderToDb(u);
+    case "pan":
+      return u * 2 - 1;
+    default:
+      return u;
+  }
+}
+
 /** A press on a lane while the automation view is on. */
 export function automationMouseDown(e: React.MouseEvent, v: AutoInput) {
   const h = hitTest(e, v);
@@ -426,15 +628,24 @@ export function automationMouseDown(e: React.MouseEvent, v: AutoInput) {
     v.redraw();
     return;
   }
-  if (h.track.id !== getState().snap?.selected) act("select_track", { id: h.track.id });
+  if (!isOutput(h.track) && h.track.id !== getState().snap?.selected) act("select_track", { id: h.track.id });
   const snap = (pos: number) => Math.max(0, Math.round(snapPos(v.project, pos, getState().snapMode, getState().pxPerBeat)));
   const sameLane = selection && selection.track === h.track.id && sameParam(selection.param, h.param);
 
+  if (h.point < 0 && e.shiftKey && (e.ctrlKey || e.altKey) && bendSegment(e, h, v)) return;
+
   if (h.point >= 0) {
     const grabbed = h.points[h.point];
-    // Double-click or Alt-click deletes a point.
+    // Double-click or Alt-click deletes a point. The second click of a double-click on a
+    // curved segment lands on the point its first click added: that straightens the segment.
     if (e.altKey || e.detail >= 2) {
       selection = null;
+      const add = lastAdd;
+      lastAdd = null;
+      if (e.detail >= 2 && add && add.track === h.track.id && sameParam(add.param, h.param) && add.pos === grabbed.pos && add.onCurve) {
+        sendLane(h.track.id, h.param, withCurve(add.before, segmentAt(add.before, add.pos), 0));
+        return;
+      }
       sendLane(h.track.id, h.param, h.points.filter((_, k) => k !== h.point));
       return;
     }
@@ -459,9 +670,9 @@ export function automationMouseDown(e: React.MouseEvent, v: AutoInput) {
       moved = true;
       const dPos = ev.shiftKey ? 0 : snap(grabbed.pos + (ev.clientX - startX) / v.pps) - grabbed.pos;
       const dU = (startY - ev.clientY) / Math.max(1, h.bottom - h.top);
-      result = h.points.map((p, k) => (picked[k] ? { pos: Math.max(0, p.pos + dPos), value: fromUnit(h.param, toUnit(h.param, p.value) + dU) } : p));
+      result = h.points.map((p, k) => (picked[k] ? { ...p, pos: Math.max(0, p.pos + dPos), value: fromUnit(h.param, toUnit(h.param, p.value) + dU) } : p));
       result.sort((a, b) => a.pos - b.pos);
-      preview = { track: h.track.id, points: result };
+      preview = { track: h.track.id, param: h.param, points: result };
       selection = { track: h.track.id, param: h.param, pos: new Set(h.points.filter((_, k) => picked[k]).map((p) => Math.max(0, p.pos + dPos))) };
       const g = { pos: grabbed.pos + dPos, value: fromUnit(h.param, toUnit(h.param, grabbed.value) + dU) };
       hover = { track: h.track.id, x: g.pos * v.pps, y: h.bottom - toUnit(h.param, g.value) * (h.bottom - h.top), text: formatValue(h.param, g.value) };
@@ -472,16 +683,19 @@ export function automationMouseDown(e: React.MouseEvent, v: AutoInput) {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
       if (moved) sendLane(h.track.id, h.param, result);
-      // Keep drawing the dragged points until the lane's new snapshot arrives.
-      const done = () => {
-        if (inflight) return void setTimeout(done, 16);
-        preview = null;
-        v.redraw();
-      };
-      done();
+      endPreview(v);
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
+    return;
+  }
+
+  // The second click of a double-click whose first one added a point that hasn't arrived yet.
+  const add = lastAdd;
+  if (e.detail >= 2 && add && add.track === h.track.id && sameParam(add.param, h.param)) {
+    lastAdd = null;
+    selection = null;
+    sendLane(h.track.id, h.param, add.onCurve ? withCurve(add.before, segmentAt(add.before, add.pos), 0) : add.before);
     return;
   }
 
@@ -514,7 +728,13 @@ export function automationMouseDown(e: React.MouseEvent, v: AutoInput) {
       v.redraw();
       return;
     }
-    const p = { pos: snap(h.x / v.pps), value: fromUnit(h.param, unitAt(h, h.y)) };
+    const pos = snap(h.x / v.pps);
+    // A point added inside a curved segment keeps both halves bent the same way.
+    const seg = segmentAt(h.points, pos);
+    const curve = seg >= 0 ? h.points[seg].curve : undefined;
+    const p: AutoPoint = { pos, value: fromUnit(h.param, unitAt(h, h.y)), ...(curve ? { curve } : {}) };
+    const cy = curveY(h, h.points, h.x, v.pps);
+    lastAdd = { track: h.track.id, param: h.param, pos, before: h.points, onCurve: !!curve && cy !== null && Math.abs(cy - h.y) <= HIT_R + 2 };
     selection = { track: h.track.id, param: h.param, pos: new Set([p.pos]) };
     sendLane(h.track.id, h.param, [...h.points.filter((q) => q.pos !== p.pos), p]);
   };
@@ -541,7 +761,8 @@ export function automationHover(e: React.MouseEvent, v: AutoInput) {
   } else {
     const val = valueAt(h.points, h.x / v.pps) ?? liveValue(h.track, h.param);
     hover = { track: h.track.id, x: h.x, y: h.y, text: `${paramLabel(h.param)} ${formatValue(h.param, val)}` };
-    v.el.style.cursor = "crosshair";
+    // Over a segment with the bend keys held: the curve tool's cursor.
+    v.el.style.cursor = e.shiftKey && (e.ctrlKey || e.altKey) && segmentAt(h.points, h.x / v.pps) >= 0 ? "ns-resize" : "crosshair";
   }
   if (prev || hover) v.redraw();
 }
@@ -557,7 +778,7 @@ export function automationLeave(v: { redraw: () => void }) {
 export function deleteSelectedPoints(): boolean {
   const s = getState();
   if (!s.showAutomation || !selection?.pos.size) return false;
-  const t = s.snap?.project.tracks.find((x) => x.id === selection!.track);
+  const t = stripOf(s.snap?.project, selection.track);
   const lane = t && laneOf(t, selection.param);
   if (!lane) return false;
   const gone = selection.pos;
@@ -566,16 +787,25 @@ export function deleteSelectedPoints(): boolean {
   return true;
 }
 
-/** Right-click on a lane in the automation view. */
-export function automationMenu(t: Track | undefined): MenuItem[] {
-  if (!t || !automatable(t)) return [{ label: "Hide Automation", hint: keyHint("automation"), onClick: () => setState({ showAutomation: false }) }];
-  const p = shownParam(t);
+/** Right-click on the lanes in the automation view: for the lane under the pointer. */
+export function automationMenu(e: { clientX: number; clientY: number }, v: AutoInput): MenuItem[] {
+  const hide: MenuItem = { label: "Hide Automation", hint: keyHint("automation"), onClick: () => setState({ showAutomation: false }) };
+  const used: MenuItem = { label: "Show Used Automation", hint: keyHint("used-automation"), onClick: showUsedAutomation };
+  const h = hitTest(e, v);
+  if (!h) return [used, hide];
+  const { track: t, param: p, box } = h;
   const n = selection && selection.track === t.id && sameParam(selection.param, p) ? selection.pos.size : 0;
+  const seg = segmentAt(h.points, h.x / v.pps);
+  const curved = seg >= 0 && !!h.points[seg].curve;
   return [
     { label: n > 1 ? "Delete Selected Points" : "Delete Selected Point", disabled: !n, hint: keyHint("delete-regions"), onClick: () => deleteSelectedPoints() },
+    { label: "Straighten Segment", disabled: !curved, onClick: () => sendLane(t.id, p, withCurve(h.points, seg, 0)) },
     { label: `Delete ${paramLabel(p)} Automation`, disabled: !laneOf(t, p)?.points.length, onClick: () => act("clear_automation", { track: t.id, param: p }) },
     { label: "Delete All Automation on Track", disabled: !t.automation.some((l) => l.points.length), onClick: () => act("clear_automation", { track: t.id, param: null }) },
     { separator: true },
-    { label: "Hide Automation", hint: keyHint("automation"), onClick: () => setState({ showAutomation: false }) },
+    { label: "Show Another Lane", onClick: () => addLane(t) },
+    ...(box.sub >= 0 ? [{ label: "Close Lane", onClick: () => closeLane(t, box.sub) }] : []),
+    used,
+    hide,
   ];
 }

@@ -147,7 +147,7 @@ fn automation(tone: &Path, scratch: &Path) {
     // A region at 0.5..1 s, and volume automation that is only open under it.
     let r = tone_region(&mut s, tone, t, sec / 2, sec / 2);
     let (lo, hi) = (sec / 2, sec);
-    let points = vec![AutoPoint { pos: 0, value: -96.0 }, AutoPoint { pos: lo - 1, value: -96.0 }, AutoPoint { pos: lo, value: 0.0 }, AutoPoint { pos: hi - 1, value: 0.0 }, AutoPoint { pos: hi, value: -96.0 }];
+    let points = vec![AutoPoint { pos: 0, value: -96.0, curve: 0.0 }, AutoPoint { pos: lo - 1, value: -96.0, curve: 0.0 }, AutoPoint { pos: lo, value: 0.0, curve: 0.0 }, AutoPoint { pos: hi - 1, value: 0.0, curve: 0.0 }, AutoPoint { pos: hi, value: -96.0, curve: 0.0 }];
     s.set_automation_lane(t, AutoParam::Volume, points);
     let open = level(&mut s, lo, hi);
     check(&format!("the region plays under its automation ({open:.3})"), open > 0.03);

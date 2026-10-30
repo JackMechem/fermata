@@ -39,7 +39,7 @@ fn main() {
     s.set_send(a, 0, Some(TrackSend { bus: aux, level_db: 0.0, pre_fader: false, muted: false })).unwrap();
     let (lv, _) = levels(&mut s, &[aux]);
     let before = lv[0];
-    s.set_automation_lane(a, AutoParam::Send(0), vec![AutoPoint { pos: 0, value: -20.0 }, AutoPoint { pos: 48000, value: -20.0 }]);
+    s.set_automation_lane(a, AutoParam::Send(0), vec![AutoPoint { pos: 0, value: -20.0, curve: 0.0 }, AutoPoint { pos: 48000, value: -20.0, curve: 0.0 }]);
     let (lv, _) = levels(&mut s, &[aux]);
     let drop = 20.0 * (lv[0] / before).log10();
     let ok = (drop + 20.0).abs() < 1.0;

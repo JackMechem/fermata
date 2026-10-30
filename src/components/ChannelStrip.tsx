@@ -6,7 +6,7 @@ import { onTick, peakHold, useStore } from "../store";
 import { formatDb, inputLabel } from "../time";
 import { Fader, GrMeter, Knob, Meter } from "./Controls";
 import { EqThumb } from "./Eq";
-import { automatable, useAutomation, VOLUME } from "../automation";
+import { automatable, outputTrack, useAutomation, VOLUME } from "../automation";
 import { AutoModeButton } from "./AutomationHeader";
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { OutputSlot, SendsSection } from "./Sends";
@@ -185,7 +185,10 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   })();
   const setVolume = (db: number) => (isMaster ? act("set_master_volume", { db }) : api.updateTrack(id, { volume_db: db }));
   // While playing, the fader and pan knob follow the automation.
-  const [autoVolume, volumeTouch] = useAutomation(track, VOLUME, volume);
+  // Stereo Out's fader follows its lane on the Output track.
+  const project = useStore((s) => s.snap?.project);
+  const strip = track ?? (project ? outputTrack(project) : null);
+  const [autoVolume, volumeTouch] = useAutomation(strip, VOLUME, volume);
   const [autoPan, panTouch] = useAutomation(track, PAN, track?.pan ?? 0);
   // Like Logic, a strip with a dynamics effect shows its gain reduction beside the meter.
   const dynamics = !folder && !track?.frozen && inserts.some((p) => !!p && reducesGain(fxInfo(p.plugin_id)?.meters ?? []));
@@ -288,7 +291,7 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
 
       <div className="strip-pan">
         {/* Logic puts the automation mode right above the pan knob. */}
-        {track && automatable(track) ? <AutoModeButton track={track} /> : <div className="auto-mode-spacer" />}
+        {strip && automatable(strip) ? <AutoModeButton track={strip} /> : <div className="auto-mode-spacer" />}
         {isMaster || folder ? <div style={{ height: 26 }} /> : <Knob value={autoPan} onChange={(pan) => api.updateTrack(id, { pan })} {...panTouch} />}
       </div>
 

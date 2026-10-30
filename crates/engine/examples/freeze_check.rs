@@ -71,7 +71,7 @@ fn main() {
     let uid = s.set_plugin(inst, 0, &maxim.id).unwrap();
     let (plain, _) = mix(&mut s, len);
     let gain = s.plugin_params(uid).into_iter().find(|p| p.name == "Input Gain").expect("ZaMaximX2 has an Input Gain");
-    let pts = vec![AutoPoint { pos: 0, value: gain.default as f32 }, AutoPoint { pos: 2 * bar, value: 0.0 }];
+    let pts = vec![AutoPoint { pos: 0, value: gain.default as f32, curve: 0.0 }, AutoPoint { pos: 2 * bar, value: 0.0, curve: 0.0 }];
     s.set_automation_lane(inst, AutoParam::Plugin { uid, param: gain.id, name: gain.name.clone() }, pts);
     let (live, live_secs) = mix(&mut s, len);
     ok &= check(&format!("the maximizer's Input Gain automation changes the sound (max diff {:.3})", diff(&plain, &live)), diff(&plain, &live) > 0.01);

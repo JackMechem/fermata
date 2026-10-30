@@ -154,9 +154,7 @@ impl Session {
             self.update_pdc();
         }
         self.dirty = true;
-        if track != MASTER_ID {
-            self.auto_plugin_moved(track, uid, id, before);
-        }
+        self.auto_plugin_moved(track, uid, id, before);
         Ok(())
     }
 
@@ -323,10 +321,11 @@ impl Session {
     /// drives any more go back to their own values (the engine holds the last automated
     /// value otherwise, which the project wouldn't know about).
     pub(super) fn resync_builtins(&mut self, track: Id) {
-        let Some(t) = self.project.track(track) else { return };
-        let driven = |uid: Id, id: u32| t.automation.iter().any(|l| !l.points.is_empty() && matches!(l.param, AutoParam::Plugin { uid: u, param, .. } if u == uid && param == id));
+        let m = &self.project.master;
+        let Some((automation, inserts)) = (if track == MASTER_ID { Some((&m.automation, &m.inserts)) } else { self.project.track(track).map(|t| (&t.automation, &t.inserts)) }) else { return };
+        let driven = |uid: Id, id: u32| automation.iter().any(|l| !l.points.is_empty() && matches!(l.param, AutoParam::Plugin { uid: u, param, .. } if u == uid && param == id));
         let mut cmds = Vec::new();
-        for s in t.inserts.iter().flatten() {
+        for s in inserts.iter().flatten() {
             let Some(info) = fx::find(&s.plugin_id) else { continue };
             for p in info.params.iter().filter(|p| !driven(s.uid, p.id)) {
                 cmds.push(Cmd::FxParam { track, uid: s.uid, id: p.id, value: value_of(s, p) });

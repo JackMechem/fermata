@@ -6,7 +6,7 @@
 // MIDI files (.mid) work the same way with instrument tracks in place of audio tracks.
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { call, type Id, type Snapshot } from "./api";
-import { indexAt, trackLayout } from "./layout";
+import { indexAt, trackLayout, autoLayout } from "./layout";
 import { importMidiFiles, isMidiPath } from "./midiFiles";
 import { getState, setState } from "./store";
 import { samplesPerBeat, snapPos } from "./time";
@@ -26,7 +26,7 @@ export function isAudioPath(p: string): boolean {
 
 function layoutNow() {
   const s = getState();
-  return trackLayout(s.snap?.project.tracks ?? [], s.trackHeight, s.trackHeights, s.showHidden, s.openFolders);
+  return trackLayout(s.snap?.project.tracks ?? [], s.trackHeight, s.trackHeights, s.showHidden, s.openFolders, autoLayout());
 }
 
 /** Only MIDI files: they land on instrument lanes rather than audio ones. */

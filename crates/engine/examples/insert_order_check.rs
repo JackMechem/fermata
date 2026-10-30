@@ -196,10 +196,10 @@ fn automation_follows(s: &mut Session, tone: &str, len: i64, scratch: &std::path
     let comp = s.set_plugin(d, 0, "builtin:compressor").unwrap();
     let makeup = fx::find("builtin:compressor").unwrap().params.iter().find(|p| p.name == "Make Up").unwrap().id;
     // Make Up all the way down (-20 dB), well away from its 0 dB default.
-    let points = vec![AutoPoint { pos: 0, value: 0.0 }, AutoPoint { pos: len, value: 0.0 }];
+    let points = vec![AutoPoint { pos: 0, value: 0.0, curve: 0.0 }, AutoPoint { pos: len, value: 0.0, curve: 0.0 }];
     s.set_automation_lane(d, AutoParam::Plugin { uid: comp, param: makeup, name: "Compressor: Make Up".into() }, points.clone());
     // A lane of the track's own, at pan's centre so the two tracks still sound alike.
-    s.set_automation_lane(d, AutoParam::Pan, vec![AutoPoint { pos: 0, value: 0.0 }]);
+    s.set_automation_lane(d, AutoParam::Pan, vec![AutoPoint { pos: 0, value: 0.0, curve: 0.0 }]);
     settle(s);
     let dry = render(s, len, e);
     let driven = render(s, len, d);
@@ -238,10 +238,12 @@ fn automation_follows(s: &mut Session, tone: &str, len: i64, scratch: &std::path
     check("a copy leaves the lane with the original", plugin_lanes(s, e) == vec![(new_uid, makeup, points.clone())] && plugin_lanes(s, d).is_empty());
     s.remove_plugin(d, 0);
 
-    // Stereo Out has no automation: the lane stays behind there, as when a plug-in is deleted.
+    // Stereo Out has automation too: the lane goes along there.
     s.checkpoint("Move Plug-in", None, true);
     s.move_plugin(e, 0, MASTER_ID, 2, false).unwrap();
-    check("a move to Stereo Out leaves the lane on the track", plugin_lanes(s, e).len() == 1 && uids(s, e)[0].is_none());
+    let on_master: Vec<Id> = s.project.master.automation.iter().filter_map(|l| match l.param { AutoParam::Plugin { uid, .. } => Some(uid), _ => None }).collect();
+    let master_uid = uids(s, MASTER_ID)[2];
+    check("a move to Stereo Out takes the lane along", plugin_lanes(s, e).is_empty() && uids(s, e)[0].is_none() && master_uid.is_some() && on_master == vec![master_uid.unwrap()]);
     s.undo();
     settle(s);
 

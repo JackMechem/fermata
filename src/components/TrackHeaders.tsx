@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
 import { act, api, canRecord, isStack, type Group, type Id, type Track } from "../api";
 import { Icon } from "../icons";
 import { getState, setState, useStore } from "../store";
@@ -8,6 +8,7 @@ import { clickTrack, selectedTracks, setHidden, toggleCollapsed, trackMenu } fro
 import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { automatable, paramMenu, useAutomation, VOLUME } from "../automation";
 import { AutoModeButton, AutomationControls } from "./AutomationHeader";
+import { OutputTrackHeader, SubLaneHeaders } from "./AutoLaneHeaders";
 import { canFreeze, toggleFreeze } from "../freeze";
 import { takeRowsHeight } from "../takes";
 import { fmt, keyHint } from "../keymap";
@@ -374,20 +375,23 @@ export function TrackHeaders() {
       <div ref={inner} className="headers-inner">
         {project.tracks.map((t, i) =>
           layout.heights[i] > 0 ? (
-            <Header
-              key={t.id}
-              track={t}
-              index={i}
-              selected={selectedSet.has(t.id)}
-              primary={t.id === selected && selectedSet.size > 1}
-              height={layout.heights[i]}
-              depth={layout.depth[i]}
-              group={t.group !== null ? project.groups.find((g) => g.id === t.group) : undefined}
-              hideMode={hideMode}
-              onReorderStart={startReorder}
-            />
+            <Fragment key={t.id}>
+              <Header
+                track={t}
+                index={i}
+                selected={selectedSet.has(t.id)}
+                primary={t.id === selected && selectedSet.size > 1}
+                height={layout.heights[i]}
+                depth={layout.depth[i]}
+                group={t.group !== null ? project.groups.find((g) => g.id === t.group) : undefined}
+                hideMode={hideMode}
+                onReorderStart={startReorder}
+              />
+              {layout.autoRows[i] > 0 && <SubLaneHeaders track={t} height={layout.subLane[i]} indent={layout.depth[i] * INDENT} />}
+            </Fragment>
           ) : null,
         )}
+        {layout.output && <OutputTrackHeader row={layout.output} />}
         {drop !== null && <div className="reorder-line" style={{ top: (drop < layout.tops.length ? layout.tops[drop] : layout.total) - 1 }} />}
         {fileDrop !== null && (
           <div className="drop-new-track" style={{ top: (fileDrop < layout.tops.length ? layout.tops[fileDrop] : layout.total) - 1 }}>

@@ -24,6 +24,12 @@ All notable changes to Fermata are recorded here. The format follows
 - **Markers with their own lengths:** set from the marker menu's Length submenu, the Marker
   List's new Length column, or by dragging the end of a marker's bar. Clicking a marker selects
   it (Delete removes it); with Cycle on, or dragged into the cycle strip, it sets the locators.
+- **Automation lanes, curves, stacks and Stereo Out:** the **+** on a lane header opens more
+  lanes below a track, each with its own parameter; **Show Used Automation** (Shift+A) shows
+  every lane with data. Ctrl+Shift-drag (Control-Shift on macOS, or Alt+Shift) bends a segment
+  into a curve; double-click straightens it. Folder stacks automate their volume and mute,
+  and **Track › Show Output Track** shows Stereo Out with lanes for its volume and plug-ins.
+  Bounces and exports render all of it.
 
 - **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
   name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state

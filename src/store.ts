@@ -69,6 +69,8 @@ export interface State {
   showAutomation: boolean;
   /** The automation lane each track shows (Volume when unset). */
   autoLane: Record<Id, AutoParam>;
+  /** The Output track (Stereo Out) at the bottom of the Tracks area (Track › Show Output Track). */
+  showOutput: boolean;
   /** Take folders shown open, with a row per take below their track. */
   openFolders: Id[];
   /** The Marker List sheet. */
@@ -145,6 +147,7 @@ let state: State = {
   showHidden: false,
   showAutomation: false,
   autoLane: {},
+  showOutput: false,
   openFolders: [],
   showMarkerList: false,
   showGlobalTracks: false,

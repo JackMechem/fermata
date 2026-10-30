@@ -343,14 +343,30 @@ samples at the project rate.
 ### Automation
 
 - `Track::automation: Vec<AutoLane>`; each lane has an `AutoParam` (`Volume`, `Pan`, `Mute`,
-  `Send(slot)`, or `Plugin { uid, param, name }`) and sorted `AutoPoint { pos, value }`.
+  `Send(slot)`, or `Plugin { uid, param, name }`) and sorted `AutoPoint { pos, value, curve }`.
   Values are in native units: dB for volume and sends (-96..+6), -1..1 for pan, 0/1 for mute,
   0..1 normalized for plug-in parameters.
-- `automation::value_at` interpolates linearly, holds the first value before the first point
-  and the last after the last; two points at one position make a step.
+- `automation::value_at` interpolates between points, holds the first value before the first
+  point and the last after the last; two points at one position make a step. A point's `curve`
+  (-1..1, 0 straight, saved only when set) bends the segment after it: `automation::shape` is
+  `t^(2^(-3·curve))`. A straight segment takes exactly the old arithmetic, so projects without
+  curves play bit for bit as before. The frontend's `autoLanes.ts` mirrors it for drawing.
 - `Track::auto_mode` is Logic's Off / Read / Touch / Latch / Write (`AutoMode`).
 - The engine gets lanes as `Arc<Vec<LaneDsp>>` (empty lanes left out) and compares targets
   with the cheap `AutoTarget` (no names).
+- Stereo Out has lanes too (`Master::automation`, `auto_mode`): every automation command and
+  `Cmd` takes `MASTER_ID` for it (`session/auto_lanes.rs` has `strip_lanes`), and the engine
+  plays them in `dsp/auto.rs` (volume and plug-ins, read `pdc.total` back).
+- Folder stacks automate their volume and mute. The engine works out each folder's
+  `FoldState` before the tracks play (folders come after their subtracks in the processing
+  order); a track whose nearest folder (`TrackParams::folder`) has automation playing rebuilds
+  its volume and mute from `own_gain`, `own_mute` and `bus_mute` with the folder's gain and
+  mute of that block. Without folder automation the session's static stack values apply as
+  before.
+- Which lanes the UI shows: the main lane's parameter is UI state (`autoLane` in the store);
+  the extra lanes below a track are `Track::auto_lanes` (`Master::auto_lanes` for the Output
+  track), set with `set_auto_lanes` (one undo step). `layout.ts` gives them `autoRows` after
+  the track's `heights`, and the Output track an `output` row below `total`.
 - Writing is in `session/auto_write.rs`: a *pass* collects points while a control moves (and
   about 30 times a second from `idle`), and goes into its lane in one undo step when it ends
   (on release in Touch, at Stop otherwise). `automation::splice` inserts it and `thin` removes

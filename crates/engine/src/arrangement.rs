@@ -216,7 +216,8 @@ pub fn map_pos(pieces: &[Piece], pos: i64) -> Vec<i64> {
 
 /// An automation lane (sorted points) after the time map. Inside every piece the curve is
 /// exactly what it was: a point holding the old curve's value is added at each end of a piece
-/// (its first and last sample), and dropped again where the curve doesn't need it.
+/// (its first and last sample), and dropped again where the curve doesn't need it. A curved
+/// segment cut at a piece's edge is approximated: the added points are straight.
 pub fn remap_points(points: &[AutoPoint], pieces: &[Piece]) -> Vec<AutoPoint> {
     if points.is_empty() {
         return Vec::new();
@@ -227,12 +228,12 @@ pub fn remap_points(points: &[AutoPoint], pieces: &[Piece]) -> Vec<AutoPoint> {
     for p in pieces {
         let d = p.delta();
         if !has(p.start) {
-            out.push((AutoPoint { pos: p.dst, value: value(p.start) }, true));
+            out.push((AutoPoint { pos: p.dst, value: value(p.start), curve: 0.0 }, true));
         }
-        out.extend(points.iter().filter(|q| q.pos >= p.start && q.pos < p.end).map(|q| (AutoPoint { pos: q.pos + d, value: q.value }, false)));
+        out.extend(points.iter().filter(|q| q.pos >= p.start && q.pos < p.end).map(|q| (AutoPoint { pos: q.pos + d, value: q.value, curve: q.curve }, false)));
         let last = p.end.saturating_sub(1);
         if p.end != i64::MAX && last > p.start && !has(last) {
-            out.push((AutoPoint { pos: last + d, value: value(last) }, true));
+            out.push((AutoPoint { pos: last + d, value: value(last), curve: 0.0 }, true));
         }
     }
     // Pieces land on separate stretches, so this only orders them (steps keep their order).
@@ -258,7 +259,7 @@ mod tests {
     }
 
     fn pt(pos: i64, value: f32) -> AutoPoint {
-        AutoPoint { pos, value }
+        AutoPoint { pos, value, curve: 0.0 }
     }
 
     fn at(points: &[AutoPoint], x: i64) -> f32 {

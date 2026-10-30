@@ -235,10 +235,10 @@ status, the audio devices, and the number of MIDI inputs.
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Select All, Delete |
-| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
+| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
-| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
+| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Show Used Automation, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
 
 When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
 All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
@@ -769,7 +769,8 @@ Select tracks and choose **Create Folder Stack** (Ctrl+Shift+D) or **Create Summ
 
 - A **Folder Stack** groups tracks under a collapsible main track. Its fader moves every
   subtrack by the same amount, and its mute and solo apply to all of them. It has no audio of
-  its own, so no plug-ins, sends or meter.
+  its own, so no plug-ins, sends or meter. Its volume and mute can be automated (see
+  [Automation](#13-automation)).
 - A **Summing Stack** is also a bus: its subtracks play through its own Channel EQ, plug-ins,
   pan and fader. Soloing a subtrack keeps its stack audible. A subtrack's output can still be
   set to Stereo Out or an aux, to skip the stack.
@@ -1239,8 +1240,10 @@ The clip indicators keep their peak until you reset them, as in Logic: playing a
 reset them, and they are the same in the Mixer, the Inspector and a Mixer in its own window.
 Opening another project starts them afresh; bounces and exports don't touch them.
 
-A folder stack's strip shows only its fader and buttons ("A folder has no audio of its own").
-Stereo Out has Channel EQ, Audio FX, its fader and meter.
+A folder stack's strip shows only its fader, buttons and automation mode ("A folder has no audio
+of its own").
+Stereo Out has Channel EQ, Audio FX, its fader and meter, and an automation mode pop-up for the
+Output track's lanes.
 
 Mono audio tracks pan with a -3 dB compensated pan law (unity in the centre); stereo tracks
 and buses use balance.
@@ -1751,7 +1754,9 @@ An assignment whose track or plug-in isn't in the open project is greyed and doe
 ## 13. Automation
 
 Volume, pan, mute, send levels and any plug-in parameter can be automated per track, as in
-Logic. Folder stacks and Stereo Out have no automation of their own.
+Logic. A folder stack automates its volume and mute, which reach its subtracks; a summing stack
+automates like any track. Stereo Out automates its volume and its plug-ins on the Output
+track.
 
 ### Showing and editing automation
 
@@ -1770,9 +1775,37 @@ regions. Region editing is off while it is shown.
 - **Delete:** double-click or Alt+click a point, or press Backspace or Delete for the selected
   points. Right-click for Delete Selected Points, Delete *parameter* Automation, Delete All
   Automation on Track and Hide Automation.
-- Hovering shows the value. Volume is drawn on the fader's scale. Lanes are straight lines
-  between points, holding the first value before them and the last one after.
+- **Curves:** Ctrl+Shift-drag a line between two points (Control-Shift on macOS; Alt+Shift
+  works too) to bend it into a curve that follows the pointer up or down: the change then comes
+  early or late. Double-click the curve, or right-click › Straighten Segment, to make it a
+  straight line again. A point added inside a curve keeps both halves bent the same way.
+- Hovering shows the value. Volume is drawn on the fader's scale. Lanes are lines between
+  points, holding the first value before them and the last one after.
 - A lane is drawn faded when the track's mode is Off.
+
+### Several lanes per track
+
+- The **+** beside the parameter pop-up opens another lane below the track, with its own
+  parameter pop-up (it starts on the next parameter that has automation, else the next of
+  Volume, Pan, Mute and the sends). Each extra lane is edited exactly like the main one; its
+  **+** adds another and its **−** closes it. Right-click a lane for **Show Another Lane** and
+  **Close Lane**.
+- **Show Used Automation** (Shift+A, View menu, or a lane's right-click menu) shows every lane
+  that holds automation on the selected tracks (all tracks when none is selected), and the
+  Output track's when it is shown. The main lane keeps its parameter if it has automation.
+- Extra lanes are as tall as their track (at least 36 pixels), sit below any open take
+  folder's rows, and appear only while automation is shown. They are saved with the project;
+  opening and closing them is an undo step.
+
+### The Output track
+
+**Track › Show Output Track** (also in the Tracks area's Track menu) adds a **Stereo Out** track
+at the bottom of the Tracks area. It has no regions: its header has Stereo Out's volume and,
+with automation shown, the automation controls. Its lanes take Volume and the parameters of
+Stereo Out's plug-ins, and work like a track's (extra lanes, curves, modes, writing from the
+Stereo Out fader or plug-in panels). The mode pop-up is also on the Stereo Out channel strip,
+and its fader follows the lane while playing. Whether the Output track is shown is remembered
+per project, like track heights.
 
 ### Automation modes
 
@@ -1800,9 +1833,12 @@ strip.
   to another track's strip moves its lanes to that track, with their points, so they keep
   driving the same parameters there (the track showing one of them shows it on the new track).
   They play in the new track's automation mode. A copy (Alt-drag, or Copy and Paste Plug-in)
-  starts without automation, and the original keeps its lanes. Stereo Out has no automation,
-  so a plug-in moved there leaves its lanes on the old track, where they no longer drive
-  anything (as when a plug-in is deleted).
+  starts without automation, and the original keeps its lanes. A plug-in moved to or from
+  Stereo Out takes its lanes along too.
+- **Stacks:** a folder stack's volume and mute lanes scale and mute its subtracks on top of
+  their own faders and lanes (nested folders multiply). A summing stack's lanes act on its bus.
+  Bounces, exports and Bounce in Place include stack and Stereo Out automation; exported
+  subtracks include their folder's.
 
 ---
 
@@ -2184,6 +2220,7 @@ shown.
 | D | Show/Hide List Editors (the Event List) |
 | F | Show/Hide Browsers |
 | A | Show/Hide Automation |
+| Shift+A | Show Used Automation |
 | H | Show Hidden Tracks |
 | Ctrl+Right / Ctrl+Left | Zoom in / out horizontally |
 | Ctrl+Down / Ctrl+Up | Zoom in / out vertically (taller / shorter tracks) |
@@ -2505,9 +2542,12 @@ blank, because WebKit then draws on the CPU.
   latency makes each take that much shorter.
 - **Markers** have no length editing (a marker reaches the next one); there is no Arrangement
   track.
-- **Automation:** folder stacks and Stereo Out have no automation of their own (a plug-in moved
-  to Stereo Out leaves its lanes behind). Move Automation with Regions works along a track, not
-  for regions moved onto another track or copied.
+- **Automation:** Move Automation with Regions works along a track, not for regions moved onto
+  another track or copied; where it cuts a curved segment, the cut part is approximated.
+  Automation curves are power curves only (no S-curves). A folder's automation follows the
+  folder's own timing, not each subtrack's delay compensation. Stereo Out's lanes play at the
+  output's delay; with latency on Stereo Out's own plug-ins, their parameters change slightly
+  early.
 - **Piano Roll:** no Score, and controllers have no curve shapes.
 - **Event List:** lists MIDI regions only (not the regions of the project, or audio), on one
   track at a time. Fermata stores no MIDI channel, program changes, polyphonic aftertouch,

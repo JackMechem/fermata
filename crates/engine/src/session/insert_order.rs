@@ -69,20 +69,19 @@ impl Session {
         Ok(())
     }
 
-    /// Moves the lanes of plug-in `old` on track `from` to track `to`, where the plug-in is now
-    /// instance `new`, so they keep driving the same parameters. Stereo Out has no automation,
-    /// so a plug-in moved there leaves its lanes behind, as a deleted one does.
+    /// Moves the lanes of plug-in `old` on strip `from` to strip `to` (either may be Stereo
+    /// Out), where the plug-in is now instance `new`, so they keep driving the same parameters.
     fn carry_automation(&mut self, from: Id, old: Id, to: Id, new: Id) {
-        if self.project.track(to).is_none() {
+        if self.strip_lanes(to).is_none() {
             return;
         }
-        let Some(src) = self.project.track_mut(from) else { return };
-        let lanes = crate::automation::take_plugin_lanes(&mut src.automation, old, new);
+        let Some(src) = self.strip_lanes_mut(from) else { return };
+        let lanes = crate::automation::take_plugin_lanes(src, old, new);
         if lanes.is_empty() {
             return;
         }
-        if let Some(dst) = self.project.track_mut(to) {
-            dst.automation.extend(lanes);
+        if let Some(dst) = self.strip_lanes_mut(to) {
+            dst.extend(lanes);
         }
         self.push_automation(from);
         self.push_automation(to);

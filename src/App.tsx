@@ -34,7 +34,7 @@ import { currentLayout, loadHeights, saveHeights, stepVisible, zoomTracks } from
 import { installNativeDrop } from "./dnd";
 import { newAux } from "./routing";
 import { editorMenuCommand } from "./audioEdit";
-import { deleteSelectedPoints } from "./automation";
+import { deleteSelectedPoints, showUsedAutomation } from "./automation";
 import { deleteSelectedTempoEvent } from "./components/GlobalTracks";
 import { pianoRollMenu } from "./components/PianoRoll";
 import { exportSelectionMidi, importMidiDialog } from "./midiFiles";
@@ -324,6 +324,12 @@ function handleMenu(id: string) {
     case "automation":
       setState({ showAutomation: !s.showAutomation });
       break;
+    case "used-automation":
+      showUsedAutomation();
+      break;
+    case "output-track":
+      setState({ showOutput: !s.showOutput });
+      break;
     case "global-tracks":
       setState({ showGlobalTracks: !s.showGlobalTracks });
       break;
@@ -408,6 +414,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "hide-tracks": () => ops.hideTracks(),
   "reset-clips": () => resetClipIndicators(null),
   automation: () => handleMenu("automation"),
+  "used-automation": () => handleMenu("used-automation"),
   "global-tracks": () => handleMenu("global-tracks"),
   "nudge-left": () => nudgeRegions(-1),
   "nudge-right": () => nudgeRegions(1),
@@ -490,6 +497,7 @@ function useHeightPersistence() {
   const path = useStore((s) => s.snap?.path);
   const base = useStore((s) => s.trackHeight);
   const heights = useStore((s) => s.trackHeights);
+  const output = useStore((s) => s.showOutput);
   const [loaded, setLoaded] = useState<string | null>(null);
   useEffect(() => {
     if (path && path !== loaded) {
@@ -499,7 +507,7 @@ function useHeightPersistence() {
   }, [path, loaded]);
   useEffect(() => {
     if (path && path === loaded) saveHeights(path);
-  }, [path, loaded, base, heights]);
+  }, [path, loaded, base, heights, output]);
 }
 
 export default function App() {

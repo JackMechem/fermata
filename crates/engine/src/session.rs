@@ -69,6 +69,7 @@ mod templates;
 pub use templates::{delete_template, list_templates, rename_template, templates_dir, UserTemplate};
 mod track_alternatives;
 mod arrangement;
+mod auto_lanes;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -467,10 +468,13 @@ impl Session {
         let mut solo = t.solo;
         let mut stack_db = 0.0;
         let mut stack_mute = false;
+        let mut bus_mute = false;
         for a in ancestors.iter().filter_map(|id| p.track(*id)) {
             if a.kind == TrackKind::Folder {
                 volume_db += a.volume_db;
                 stack_db += a.volume_db;
+            } else {
+                bus_mute |= a.mute;
             }
             mute |= a.mute;
             stack_mute |= a.mute;
@@ -516,6 +520,10 @@ impl Session {
             sends,
             stack_gain: volume_gain(stack_db.max(-96.0)),
             stack_mute,
+            folder: ancestors.iter().copied().find(|id| p.track(*id).map(|a| a.kind == TrackKind::Folder).unwrap_or(false)),
+            own_gain: volume_gain(t.volume_db.max(-96.0)),
+            own_mute: t.mute,
+            bus_mute,
         }
     }
 
@@ -759,6 +767,7 @@ impl Session {
         drop(old_controllers);
         // Another project (or the same one reloaded): its strips start without clips.
         self.peak_holds.reset(None);
+        self.sync_master_automation();
         self.sync_globals();
     }
 
@@ -944,6 +953,10 @@ impl Session {
                 }
                 self.restore_builtin(MASTER_ID, a, b);
             }
+        }
+        if !same(&current.master.automation, &master.automation) || current.master.auto_mode != master.auto_mode {
+            self.sync_master_automation();
+            self.resync_builtins(MASTER_ID);
         }
 
         // Recordings and imports made after the snapshot stay loaded, so redo can bring them back.
@@ -1326,6 +1339,7 @@ impl Session {
             vca: None,
             alternatives: Vec::new(),
             alternative: String::new(),
+            auto_lanes: Vec::new(),
         };
         if kind == TrackKind::Instrument {
             let pid = instrument.unwrap_or_else(|| BUILTIN_SYNTH.to_string());

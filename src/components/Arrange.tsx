@@ -347,7 +347,7 @@ export function Arrange() {
       )
     : 0;
   const contentW = Math.ceil(lengthSamples * pps);
-  const contentH = layout.total + baseHeight * 4;
+  const contentH = layout.total + (layout.output ? layout.output.height + layout.output.autoRows : 0) + baseHeight * 4;
 
   // Keep the latest values for the imperative draw routine.
   const live = useRef({ project, selectedTrack, selectedRegions, pps, layout });
@@ -383,6 +383,11 @@ export function Arrange() {
       ctx.fillRect(0, y, W, th - 1);
       ctx.globalAlpha = 1;
     });
+    // The Output track's lane (it has no regions; automation draws over it).
+    if (layout.output) {
+      ctx.fillStyle = theme.lane;
+      ctx.fillRect(0, layout.output.top - vp.top, W, layout.output.height + layout.output.autoRows - 1);
+    }
 
     // Grid, through the tempo map: bar lines, and beats when they are far enough apart.
     const gridBottom = Math.min(H, layout.total - vp.top);
@@ -1085,10 +1090,10 @@ export function Arrange() {
     if (!getState().showOverview && e.clientY >= el.getBoundingClientRect().top + el.clientHeight) {
       return openMenu(e.clientX, e.clientY, [{ label: "Show Overview", onClick: toggleOverview }]);
     }
-    const h = hit(e);
     const { project } = live.current;
+    if (showAutomation && project) return openMenu(e.clientX, e.clientY, automationMenu(e, autoInput()));
+    const h = hit(e);
     if (!h || !project) return;
-    if (showAutomation) return openMenu(e.clientX, e.clientY, automationMenu(h.track));
     if (h.row) return openMenu(e.clientX, e.clientY, takeFolderMenu(h.row.region));
     if (!h.region) {
       const pos = Math.max(0, Math.round(snapPos(project, h.sample, getState().snapMode, getState().pxPerBeat)));

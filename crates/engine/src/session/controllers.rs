@@ -448,8 +448,9 @@ impl Session {
                 self.set_eq(*track, eq);
             }
             CtlTarget::MasterVolume => {
-                self.checkpoint("Stereo Out Volume", Some("master-volume".into()), false);
-                self.set_master_volume(round_to(ctl::fader_to_db(n), 0.1));
+                self.ctl_checkpoint(MASTER_ID, "Stereo Out Volume", "master-volume".into());
+                self.ctl_hold(MASTER_ID, AutoParam::Volume);
+                self.set_master_volume_linked(round_to(ctl::fader_to_db(n), 0.1));
             }
             CtlTarget::Mute { .. } | CtlTarget::Solo { .. } | CtlTarget::Arm { .. } | CtlTarget::Transport { .. } => {}
         }

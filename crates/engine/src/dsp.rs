@@ -25,6 +25,8 @@ mod pdc;
 pub use pdc::{DelayLine, PdcGlobal, PdcParams, INSTRUMENT_BIT};
 mod builtin;
 pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared};
+mod auto;
+use auto::{FoldState, MasterAuto};
 
 pub const MAX_BLOCK: usize = 1024;
 pub const MAX_INPUTS: usize = 32;
@@ -212,6 +214,14 @@ pub struct TrackParams {
     /// its VCA, which still applies when automation drives the track's own volume and mute.
     pub stack_gain: f32,
     pub stack_mute: bool,
+    /// The nearest folder stack the track is in. Automation on it (or on a folder above it)
+    /// replaces `stack_gain` and `stack_mute` while playing.
+    pub folder: Option<Id>,
+    /// The track's own fader gain and mute, and the mute of the summing stacks it is in:
+    /// what `volume` and `mute` are made of again when a folder's automation plays.
+    pub own_gain: f32,
+    pub own_mute: bool,
+    pub bus_mute: bool,
 }
 
 /// A send as the engine plays it. A muted send keeps its slot at gain 0, so it fades out
@@ -272,6 +282,10 @@ pub struct TrackDsp {
     keyed_pre: bool,
     pre_key_l: Vec<f32>,
     pre_key_r: Vec<f32>,
+    /// Index in the engine's list of `params.folder` (kept up to date by `resolve_routes()`).
+    fold_idx: Option<usize>,
+    /// For folder stacks: what they do to their subtracks this block.
+    fold: FoldState,
 }
 
 impl TrackDsp {
@@ -312,6 +326,8 @@ impl TrackDsp {
             keyed_pre: false,
             pre_key_l: vec![0.0; MAX_BLOCK],
             pre_key_r: vec![0.0; MAX_BLOCK],
+            fold_idx: None,
+            fold: FoldState::default(),
         }
     }
 
@@ -604,6 +620,8 @@ pub struct Engine {
     auto_monitor: bool,
     master_eq: EqCoeffs,
     master_eq_state: EqState,
+    /// Stereo Out's automation lanes.
+    master_auto: MasterAuto,
     analyzer_target: Option<Id>,
     analyzer_tx: rtrb::Producer<f32>,
     /// Commands from the session. A wait-free single-producer ring: the audio thread must never
@@ -800,6 +818,7 @@ impl Engine {
             auto_monitor: false,
             master_eq: EqCoeffs::default(),
             master_eq_state: EqState::default(),
+            master_auto: MasterAuto::default(),
             analyzer_target: None,
             analyzer_tx,
             cmd_rx,
@@ -869,9 +888,11 @@ impl Engine {
             for (k, s) in self.tracks[i].params.sends.iter().enumerate() {
                 sends[k] = s.and_then(|s| find(s.bus));
             }
+            let fold = self.tracks[i].params.folder.and_then(find);
             let t = &mut self.tracks[i];
             t.out_idx = out;
             t.send_idx = sends;
+            t.fold_idx = fold;
         }
         self.resolve_keys();
     }
@@ -1016,7 +1037,7 @@ impl Engine {
             Cmd::Params(id, p) => {
                 if let Some(t) = self.track_mut(id) {
                     let bus = |s: &Option<SendParams>| s.map(|s| s.bus);
-                    let rerouted = t.params.output != p.output || t.params.sends.iter().map(bus).ne(p.sends.iter().map(bus));
+                    let rerouted = t.params.output != p.output || t.params.folder != p.folder || t.params.sends.iter().map(bus).ne(p.sends.iter().map(bus));
                     t.params = p;
                     if rerouted {
                         self.resolve_routes();
@@ -1106,6 +1127,7 @@ impl Engine {
                 self.midi_target = t;
                 self.flush_all_notes();
             }
+            Cmd::Automation(MASTER_ID, lanes) => self.set_master_lanes(lanes),
             Cmd::Automation(id, lanes) => {
                 if let Some(t) = self.track_mut(id) {
                     let old = std::mem::replace(&mut t.automation, lanes);
@@ -1115,12 +1137,17 @@ impl Engine {
                     self.discard(Garbage::Automation(lanes));
                 }
             }
+            Cmd::AutoMode(MASTER_ID, mode) => {
+                self.master_auto.mode = mode;
+                self.master_auto.sent = [f32::NAN; MAX_AUTO_SENT];
+            }
             Cmd::AutoMode(id, mode) => {
                 if let Some(t) = self.track_mut(id) {
                     t.auto_mode = mode;
                     t.auto_sent = [f32::NAN; MAX_AUTO_SENT];
                 }
             }
+            Cmd::AutoTouch { track: MASTER_ID, target, on } => self.set_master_touched(target, on),
             Cmd::AutoTouch { track, target, on } => {
                 if let Some(t) = self.track_mut(track) {
                     t.set_touched(target, on);
@@ -1307,6 +1334,7 @@ impl Engine {
 
         self.bus_l[..n].fill(0.0);
         self.bus_r[..n].fill(0.0);
+        self.update_folders();
         // Isolated renders work out audibility themselves (see `Isolate`).
         let any_solo = self.isolate.is_none() && self.tracks.iter().any(|t| t.params.solo);
         let iso = self.isolate.as_ref();
@@ -1335,6 +1363,9 @@ impl Engine {
             r.fill(0.0);
             t.midi.clear();
             let mut p = t.params;
+            if let Some(j) = t.fold_idx.filter(|&j| j > ti) {
+                auto::apply_fold(&mut p, tail[j - ti - 1].fold);
+            }
             let pdc = t.pdc;
             // A live track (recording, or monitored in Low Latency Mode) skips its delay
             // compensation, so the performer isn't kept waiting (see session/pdc.rs).
@@ -1732,6 +1763,10 @@ impl Engine {
                 let _ = self.analyzer_tx.push(0.5 * (bl[i] + br[i]));
             }
         }
+        if master_fx {
+            self.automate_master(n);
+        }
+        let (bl, br) = (&mut self.bus_l[..n], &mut self.bus_r[..n]);
         for ins in self.master_inserts.iter_mut().flatten().filter(|_| master_fx) {
             if !ins.bypass {
                 match &mut ins.plugin {
@@ -1741,7 +1776,7 @@ impl Engine {
                 check_output(&self.status, ins, bl, br);
             }
         }
-        let master_target = if master_fx { self.master_volume } else { 1.0 };
+        let master_target = if master_fx { self.master_auto.volume.unwrap_or(self.master_volume) } else { 1.0 };
         let mut g = if snap_gains { master_target } else { self.master_gain };
         let (mut pl, mut pr) = (0.0f32, 0.0f32);
         for i in 0..n {

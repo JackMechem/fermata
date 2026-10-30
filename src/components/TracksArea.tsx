@@ -20,6 +20,7 @@ import { act } from "../api";
 import type { DragMode } from "../fades";
 import { ToolPopups } from "./TrackTools";
 import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste } from "../trackTools";
+import { showUsedAutomation } from "../automation";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 /** Logic's Drag pop-up; only Overlap and X-Fade so far. */
@@ -87,6 +88,7 @@ export function TracksArea() {
     { label: "Import MIDI File…", onClick: importMidiDialog },
     { label: "Export Selection as MIDI File…", onClick: exportSelectionMidi },
     { separator: true },
+    { label: "Show Output Track", checked: getState().showOutput, onClick: () => setState({ showOutput: !getState().showOutput }) },
     { label: "Hide Track", hint: keyHint("hide-tracks"), onClick: () => ops.hideTracks() },
     { label: "Unhide All Tracks", disabled: !getState().snap?.project.tracks.some((t) => t.hidden), onClick: ops.unhideAllTracks },
     { separator: true },
@@ -101,6 +103,7 @@ export function TracksArea() {
     { label: "Mixer", hint: keyHint("mixer"), checked: s.bottom === "mixer", onClick: () => setState({ bottom: s.bottom === "mixer" ? "none" : "mixer" }) },
     { label: "Browsers", hint: keyHint("browser"), checked: s.showBrowser, onClick: () => setState({ showBrowser: !s.showBrowser }) },
     { label: "Show Automation", hint: keyHint("automation"), checked: s.showAutomation, onClick: () => setState({ showAutomation: !s.showAutomation }) },
+    { label: "Show Used Automation", hint: keyHint("used-automation"), onClick: showUsedAutomation },
     { label: "Show Global Tracks", hint: keyHint("global-tracks"), checked: s.showGlobalTracks, onClick: () => setState({ showGlobalTracks: !s.showGlobalTracks }) },
     { label: "Show Overview", checked: s.showOverview, onClick: toggleOverview },
     { separator: true },

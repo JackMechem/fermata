@@ -503,6 +503,10 @@ pub struct Track {
     /// The name of the active track alternative ("A" when empty).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub alternative: String,
+    /// Extra automation lanes shown below the track's main lane (Logic's sub-lanes), by the
+    /// parameter each shows. The main lane's parameter is a view setting of the UI.
+    #[serde(default)]
+    pub auto_lanes: Vec<AutoParam>,
 }
 
 /// An inactive track alternative: a named set of regions that replaces the track's regions
@@ -580,13 +584,21 @@ pub struct AutoPoint {
     /// In the parameter's native units: dB for volume and sends, -1..1 for pan, 0/1 for mute,
     /// normalized 0..1 for plug-in parameters.
     pub value: f32,
+    /// The shape of the segment from this point to the next: 0 is a straight line, towards 1
+    /// the change comes early, towards -1 late (see `automation::shape`).
+    #[serde(default, skip_serializing_if = "is_linear")]
+    pub curve: f32,
+}
+
+fn is_linear(c: &f32) -> bool {
+    *c == 0.0
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AutoLane {
     pub param: AutoParam,
-    /// Sorted by position. Values are joined by straight lines; before the first point its
-    /// value holds, and after the last point the last value does.
+    /// Sorted by position. Values are joined by lines (curved by each point's `curve`); before
+    /// the first point its value holds, and after the last point the last value does.
     #[serde(default)]
     pub points: Vec<AutoPoint>,
 }
@@ -641,6 +653,14 @@ pub struct Master {
     pub inserts: Vec<Option<PluginSlot>>,
     #[serde(default)]
     pub eq: ChannelEq,
+    /// Stereo Out's automation: volume and its plug-ins' parameters, as on a track.
+    #[serde(default)]
+    pub automation: Vec<AutoLane>,
+    #[serde(default)]
+    pub auto_mode: AutoMode,
+    /// Extra lanes shown below the Output track's main lane.
+    #[serde(default)]
+    pub auto_lanes: Vec<AutoParam>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -749,7 +769,7 @@ impl Project {
             sig_den: 4,
             key: "C major".into(),
             tracks: Vec::new(),
-            master: Master { volume_db: 0.0, inserts: vec![None; INSERT_SLOTS], eq: ChannelEq::default() },
+            master: Master { volume_db: 0.0, inserts: vec![None; INSERT_SLOTS], eq: ChannelEq::default(), automation: Vec::new(), auto_mode: AutoMode::Read, auto_lanes: Vec::new() },
             cycle: Cycle { enabled: false, start: 0, end: 0 },
             metronome: false,
             count_in: false,
@@ -1166,6 +1186,7 @@ mod routing_tests {
             vca: None,
             alternatives: Vec::new(),
             alternative: String::new(),
+            auto_lanes: Vec::new(),
         });
         id
     }

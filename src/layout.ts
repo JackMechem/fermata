@@ -1,6 +1,7 @@
 import type { Id, Track } from "./api";
 import { getState, setState, useStore } from "./store";
 import { takeRowsHeight } from "./takes";
+import { OUTPUT_ID, subLaneHeight } from "./autoLanes";
 
 /** Smallest track height: one line of text. Headers lay out in tiers by height (see
  *  trackHeader.ts), and regions slim their name bar (regionBar.ts). */
@@ -17,14 +18,40 @@ export interface Layout {
   depth: number[];
   total: number;
   takeRows: number[];
+  /** With automation shown: each track's extra automation lanes sit below it (after
+   *  `heights`), `autoRows` tall in all, `subLane` each. `total` includes them. */
+  autoRows: number[];
+  subLane: number[];
+  /** The Output track (Stereo Out), below the last track and outside `total`. */
+  output: OutputRow | null;
 }
 
-export function trackLayout(tracks: Track[], base: number, heights: Record<Id, number>, showHidden = false, openFolders: Id[] = []): Layout {
+export interface OutputRow {
+  top: number;
+  /** Its main lane; its sub-lanes follow, `autoRows` in all. */
+  height: number;
+  autoRows: number;
+  subLane: number;
+}
+
+/** What the automation view adds: sub-lanes (while shown), and the Output track. */
+export interface AutoLayout {
+  shown: boolean;
+  output: boolean;
+  /** The Output track's sub-lanes. */
+  outputLanes: number;
+}
+
+const NO_AUTO: AutoLayout = { shown: false, output: false, outputLanes: 0 };
+
+export function trackLayout(tracks: Track[], base: number, heights: Record<Id, number>, showHidden = false, openFolders: Id[] = [], auto: AutoLayout = NO_AUTO): Layout {
   const byId = new Map(tracks.map((t) => [t.id, t]));
   const tops: number[] = [];
   const hs: number[] = [];
   const depth: number[] = [];
   const takeRows: number[] = [];
+  const autoRows: number[] = [];
+  const subLane: number[] = [];
   let y = 0;
   for (const t of tracks) {
     let d = 0;
@@ -35,13 +62,23 @@ export function trackLayout(tracks: Track[], base: number, heights: Record<Id, n
     }
     const rows = hidden || !openFolders.length ? 0 : takeRowsHeight(t, openFolders);
     const h = hidden ? 0 : (heights[t.id] ?? base) + rows;
+    const lane = subLaneHeight(heights[t.id] ?? base);
+    const subs = hidden || !auto.shown ? 0 : (t.auto_lanes?.length ?? 0) * lane;
     tops.push(y);
     hs.push(h);
     depth.push(d);
     takeRows.push(rows);
-    y += h;
+    autoRows.push(subs);
+    subLane.push(lane);
+    y += h + subs;
   }
-  return { tops, heights: hs, depth, total: y, takeRows };
+  let output: OutputRow | null = null;
+  if (auto.output) {
+    const h = heights[OUTPUT_ID] ?? base;
+    const lane = subLaneHeight(h);
+    output = { top: y, height: h, subLane: lane, autoRows: auto.shown ? auto.outputLanes * lane : 0 };
+  }
+  return { tops, heights: hs, depth, total: y, takeRows, autoRows, subLane, output };
 }
 
 /** Index of the track at content y, clamped to the last track (or -1 with no tracks). */
@@ -60,13 +97,22 @@ export function useLayout(): Layout {
   const heights = useStore((s) => s.trackHeights);
   const showHidden = useStore((s) => s.showHidden);
   const openFolders = useStore((s) => s.openFolders);
-  return trackLayout(tracks ?? [], base, heights, showHidden, openFolders);
+  const shown = useStore((s) => s.showAutomation);
+  const output = useStore((s) => s.showOutput);
+  const outputLanes = useStore((s) => s.snap?.project.master.auto_lanes?.length ?? 0);
+  return trackLayout(tracks ?? [], base, heights, showHidden, openFolders, { shown, output, outputLanes });
 }
 
 /** The layout as it is now, for code outside React. */
 export function currentLayout(): Layout {
   const s = getState();
-  return trackLayout(s.snap?.project.tracks ?? [], s.trackHeight, s.trackHeights, s.showHidden, s.openFolders);
+  return trackLayout(s.snap?.project.tracks ?? [], s.trackHeight, s.trackHeights, s.showHidden, s.openFolders, autoLayout());
+}
+
+/** The automation view's part of the layout, as the store has it now. */
+export function autoLayout(): AutoLayout {
+  const s = getState();
+  return { shown: s.showAutomation, output: s.showOutput, outputLanes: s.snap?.project.master.auto_lanes?.length ?? 0 };
 }
 
 /** The nearest track with height `d` steps away from `index` (skipping collapsed and hidden
@@ -111,7 +157,7 @@ export function zoomTracks(factor: number) {
   setState({ trackHeight: clampHeight(s.trackHeight * factor), trackHeights: heights });
 }
 
-// ---- persistence: heights are a view preference, remembered per project folder ----------
+// ---- persistence: heights (and the Output track) are view preferences, remembered per project folder
 
 const key = (path: string) => `fermata.trackHeights:${path}`;
 
@@ -119,16 +165,16 @@ export function loadHeights(path: string) {
   try {
     const raw = localStorage.getItem(key(path));
     const v = raw ? JSON.parse(raw) : null;
-    setState({ trackHeight: clampHeight(v?.base ?? 64), trackHeights: v?.heights ?? {} });
+    setState({ trackHeight: clampHeight(v?.base ?? 64), trackHeights: v?.heights ?? {}, showOutput: !!v?.output });
   } catch {
-    setState({ trackHeight: 64, trackHeights: {} });
+    setState({ trackHeight: 64, trackHeights: {}, showOutput: false });
   }
 }
 
 export function saveHeights(path: string) {
   try {
     const s = getState();
-    localStorage.setItem(key(path), JSON.stringify({ base: s.trackHeight, heights: s.trackHeights }));
+    localStorage.setItem(key(path), JSON.stringify({ base: s.trackHeight, heights: s.trackHeights, output: s.showOutput }));
   } catch {
     // Not critical: heights fall back to the default next time.
   }

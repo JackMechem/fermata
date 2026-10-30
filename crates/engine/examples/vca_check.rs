@@ -100,7 +100,7 @@ fn main() {
     level(&mut s, v, 0.0);
     s.update_track(a, TrackPatch { mute: Some(true), ..Default::default() });
     let solo_b = mix_db(&mut s);
-    s.set_automation_lane(b, AutoParam::Volume, vec![AutoPoint { pos: 0, value: -10.0 }]);
+    s.set_automation_lane(b, AutoParam::Volume, vec![AutoPoint { pos: 0, value: -10.0, curve: 0.0 }]);
     check(&format!("automation alone takes b to -10 dB ({:.2})", mix_db(&mut s) - solo_b), near(mix_db(&mut s) - solo_b, -10.0));
     level(&mut s, v, -6.0);
     let both = mix_db(&mut s) - solo_b;

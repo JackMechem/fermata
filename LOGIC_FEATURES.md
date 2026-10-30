@@ -329,7 +329,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Track automation of volume, pan, mute, send levels and any plug-in parameter (p. 621)
 - [x] Show Automation (A) (p. 622)
 - [x] Parameter picker, with automated parameters marked (p. 623)
-- [~] Automation lanes (p. 626–627). *One parameter shown per track at a time; no extra lanes.*
+- [x] Automation lanes (p. 626–627)
 - [x] Modes: Off, Read, Touch, Latch, Write (p. 627–628)
 - [x] Write switches to Latch afterwards, as in Logic (p. 1064)
 - [x] Add, move and delete points; rubber-band select (p. 631–636)
@@ -620,11 +620,11 @@ Audio File Editor (p. 499–523)
 
 ### Automation: advanced (p. 621–644)
 
-- [ ] Several automation lanes per track (p. 626–627)
+- [x] Several automation lanes per track (p. 626–627)
 - [ ] Region automation, and converting between region and track automation (p. 621–623)
 - [ ] Trim mode (p. 629)
 - [ ] Relative automation (p. 629–630)
-- [ ] Automation curves (p. 59)
+- [~] Automation curves (p. 59). *Ctrl-Shift-drag bends a segment; no S-curves.*
 - [ ] Copy and move automation, within and between tracks (p. 637)
 - [~] Move automation with regions (p. 638). *Never, Always and Ask, along a track; not onto
   another track or for copies.*
@@ -634,7 +634,7 @@ Audio File Editor (p. 499–523)
 - [ ] Set modes for selected or all tracks (p. 628)
 - [ ] Automation Event List (p. 642)
 - [ ] Automation Quick Access (p. 643)
-- [ ] Automation for folder stacks and Stereo Out
+- [x] Automation for folder stacks and Stereo Out (Show Output Track)
 - [ ] Automation settings: ramp times, which parameters Write overwrites (p. 1064)
 
 ### Smart Controls (p. 645–657)

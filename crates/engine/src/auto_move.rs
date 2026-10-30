@@ -40,7 +40,7 @@ pub fn move_with_regions(points: &[AutoPoint], moves: &[Shift]) -> Vec<AutoPoint
 
 /// The curve over samples `lo..hi` as points: its value at each end and the points between.
 fn segment(points: &[AutoPoint], lo: i64, hi: i64) -> Vec<AutoPoint> {
-    let at = |x: i64| AutoPoint { pos: x, value: value_at(points, x).unwrap_or(0.0) };
+    let at = |x: i64| AutoPoint { pos: x, value: value_at(points, x).unwrap_or(0.0), curve: 0.0 };
     let last = hi - 1;
     let mut out = vec![at(lo)];
     out.extend(points.iter().filter(|p| p.pos > lo && p.pos < last));
@@ -61,11 +61,11 @@ fn replace(curve: &[AutoPoint], lo: i64, hi: i64, seg: &[AutoPoint]) -> Vec<Auto
     // Each point and whether it was added here (and may go again if redundant).
     let mut out: Vec<(AutoPoint, bool)> = curve.iter().filter(|p| p.pos < lo).map(|p| (*p, false)).collect();
     if lo > 0 && !curve.iter().any(|p| p.pos == lo - 1) {
-        out.push((AutoPoint { pos: lo - 1, value: value(lo - 1) }, true));
+        out.push((AutoPoint { pos: lo - 1, value: value(lo - 1), curve: 0.0 }, true));
     }
     out.extend(seg.iter().map(|p| (*p, true)));
     if !curve.iter().any(|p| p.pos == hi) {
-        out.push((AutoPoint { pos: hi, value: value(hi) }, true));
+        out.push((AutoPoint { pos: hi, value: value(hi), curve: 0.0 }, true));
     }
     out.extend(curve.iter().filter(|p| p.pos >= hi).map(|p| (*p, false)));
     prune(out)
@@ -102,7 +102,7 @@ mod tests {
     use super::*;
 
     fn pt(pos: i64, value: f32) -> AutoPoint {
-        AutoPoint { pos, value }
+        AutoPoint { pos, value, curve: 0.0 }
     }
 
     fn at(points: &[AutoPoint], x: i64) -> f32 {

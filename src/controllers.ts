@@ -85,6 +85,8 @@ export function fromPercent(p: number): number {
 
 /** The target for an automation lane's parameter (how VST3 parameters are learned from a lane). */
 export function autoParamTarget(track: Id, p: AutoParam): CtlTarget {
+  // Stereo Out (the Output track, id 0) has its own fader target.
+  if (track === 0 && p.type === "volume") return { type: "master_volume" };
   switch (p.type) {
     case "volume":
       return { type: "volume", track };

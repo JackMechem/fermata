@@ -39,7 +39,7 @@ fn check(name: &str, ok: bool) {
 }
 
 fn pts(v: &[(i64, f32)]) -> Vec<AutoPoint> {
-    v.iter().map(|&(pos, value)| AutoPoint { pos, value }).collect()
+    v.iter().map(|&(pos, value)| AutoPoint { pos, value, curve: 0.0 }).collect()
 }
 
 fn lane(s: &Session, id: u64, param: &AutoParam) -> Vec<AutoPoint> {

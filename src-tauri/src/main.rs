@@ -341,6 +341,7 @@ fn main() {
             commands::resize_arrangement_marker,
             commands::move_arrangement_marker,
             commands::delete_arrangement_marker,
+            commands::set_auto_lanes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

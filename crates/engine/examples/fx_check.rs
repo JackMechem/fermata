@@ -176,7 +176,7 @@ fn check_effect(s: &mut Session, info: &EffectInfo, tone: &str, scratch: &PathBu
     // Automation drives the parameter (normalized values, as for VST3).
     let lane = AutoParam::Plugin { uid, param: p.id, name: format!("{}: {}", info.name, p.name) };
     let n = far_normalized(p);
-    s.set_automation_lane(a, lane.clone(), vec![AutoPoint { pos: 0, value: n }, AutoPoint { pos: len, value: n }]);
+    s.set_automation_lane(a, lane.clone(), vec![AutoPoint { pos: 0, value: n, curve: 0.0 }, AutoPoint { pos: len, value: n, curve: 0.0 }]);
     let auto = render(s, len, None);
     if audible.is_empty() {
         check(&format!("{}: automation renders cleanly", info.name), finite(&auto));

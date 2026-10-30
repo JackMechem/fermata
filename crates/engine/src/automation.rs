@@ -50,9 +50,10 @@ pub fn lanes_dsp(lanes: &[AutoLane]) -> Arc<Vec<LaneDsp>> {
     )
 }
 
-/// The lane's value at `pos`: straight lines between points, the first point's value before
-/// it and the last point's value after it. Two points at the same position make a step (the
-/// later one applies from there on). None for an empty lane.
+/// The lane's value at `pos`: lines between points (straight, or bent by the earlier point's
+/// `curve`), the first point's value before it and the last point's value after it. Two
+/// points at the same position make a step (the later one applies from there on). None for
+/// an empty lane.
 pub fn value_at(points: &[AutoPoint], pos: i64) -> Option<f32> {
     let first = points.first()?;
     if pos < first.pos {
@@ -63,7 +64,25 @@ pub fn value_at(points: &[AutoPoint], pos: i64) -> Option<f32> {
     let a = points[i - 1];
     // a.pos <= pos < b.pos, so the span is never empty.
     let t = (pos - a.pos) as f64 / (b.pos - a.pos) as f64;
-    Some(a.value + (b.value - a.value) * t as f32)
+    // A straight segment takes exactly the arithmetic it always has, so projects without
+    // curves play bit for bit as before.
+    let t = if a.curve == 0.0 { t as f32 } else { shape(t as f32, a.curve) };
+    Some(a.value + (b.value - a.value) * t)
+}
+
+/// The steepest a curve gets: at `curve` ±1 the segment follows `t^(1/8)` or `t^8`.
+const CURVE_RANGE: f32 = 3.0;
+
+/// How far along a curved segment's change the value is at `t` (0..1 of the way in time):
+/// a power curve, `t^(2^(-3·curve))`. It starts at exactly 0 and ends at exactly 1, rises
+/// steadily in between, and is the straight line at `curve` 0. Positive curves make the
+/// change early (a rising segment bulges upwards), negative ones late.
+pub fn shape(t: f32, curve: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    if curve == 0.0 {
+        return t;
+    }
+    t.powf((-CURVE_RANGE * curve.clamp(-1.0, 1.0)).exp2())
 }
 
 /// How far a written value may stray from the thinned curve, in the parameter's units.
@@ -125,7 +144,7 @@ pub fn splice(lane: &[AutoPoint], recorded: &[AutoPoint], start: i64, end: i64, 
     if recorded.is_empty() {
         return lane.to_vec();
     }
-    let base: Vec<AutoPoint> = if lane.is_empty() { vec![AutoPoint { pos: 0, value: before }] } else { lane.to_vec() };
+    let base: Vec<AutoPoint> = if lane.is_empty() { vec![AutoPoint { pos: 0, value: before, curve: 0.0 }] } else { lane.to_vec() };
     let back = end + glide.max(1);
     let returns = return_to_curve || lane.iter().any(|p| p.pos > end);
     let mut out: Vec<AutoPoint> = base.iter().filter(|p| p.pos < start).copied().collect();
@@ -133,13 +152,13 @@ pub fn splice(lane: &[AutoPoint], recorded: &[AutoPoint], start: i64, end: i64, 
     if start > 0 {
         let v = value_at(&base, start - 1).unwrap_or(before);
         if out.last().map(|p| p.pos < start - 1 || p.value != v).unwrap_or(true) {
-            out.push(AutoPoint { pos: start - 1, value: v });
+            out.push(AutoPoint { pos: start - 1, value: v, curve: 0.0 });
         }
     }
     out.extend(recorded.iter().filter(|p| p.pos >= start && p.pos <= end));
     if returns {
         let v = value_at(&base, back).unwrap_or(before);
-        out.push(AutoPoint { pos: back, value: v });
+        out.push(AutoPoint { pos: back, value: v, curve: 0.0 });
     }
     let written = thin(&out[written_from..], tol);
     out.truncate(written_from);
@@ -180,7 +199,7 @@ mod tests {
     use super::*;
 
     fn pts(v: &[(i64, f32)]) -> Vec<AutoPoint> {
-        v.iter().map(|&(pos, value)| AutoPoint { pos, value }).collect()
+        v.iter().map(|&(pos, value)| AutoPoint { pos, value, curve: 0.0 }).collect()
     }
 
     #[test]
@@ -203,6 +222,82 @@ mod tests {
         assert!((value_at(&p, 50).unwrap() - 0.5).abs() < 1e-6);
         assert!((value_at(&p, 200).unwrap() - 0.0).abs() < 1e-6);
         assert!((value_at(&p, 250).unwrap() + 0.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn straight_segments_match_the_plain_line_exactly() {
+        // The formula as it was before curves: a project without them must play bit for bit.
+        let old = |p: &[AutoPoint], pos: i64| {
+            let i = p.partition_point(|q| q.pos <= pos);
+            let (a, b) = (p[i - 1], p[i]);
+            let t = (pos - a.pos) as f64 / (b.pos - a.pos) as f64;
+            a.value + (b.value - a.value) * t as f32
+        };
+        let p = pts(&[(0, -96.0), (48_000, 6.0), (100_001, -13.7)]);
+        for pos in (0..100_001).step_by(37) {
+            assert_eq!(value_at(&p, pos).unwrap().to_bits(), old(&p, pos).to_bits(), "at {pos}");
+        }
+    }
+
+    fn curved(a: (i64, f32, f32), b: (i64, f32)) -> Vec<AutoPoint> {
+        vec![AutoPoint { pos: a.0, value: a.1, curve: a.2 }, AutoPoint { pos: b.0, value: b.1, curve: 0.0 }]
+    }
+
+    #[test]
+    fn curves_meet_their_points_exactly() {
+        for c in [-1.0, -0.5, -0.01, 0.3, 1.0] {
+            let p = curved((100, -40.0, c), (1100, 3.0));
+            assert_eq!(value_at(&p, 100), Some(-40.0));
+            assert_eq!(value_at(&p, 1100), Some(3.0));
+            assert_eq!(value_at(&p, 99), Some(-40.0));
+            assert_eq!(value_at(&p, 5000), Some(3.0));
+            assert_eq!(shape(0.0, c), 0.0);
+            assert_eq!(shape(1.0, c), 1.0);
+        }
+    }
+
+    #[test]
+    fn curves_are_monotonic() {
+        for c in [-1.0, -0.7, -0.2, 0.2, 0.7, 1.0] {
+            for (from, to) in [(-40.0, 3.0), (0.8, 0.1)] {
+                let p = curved((0, from, c), (1000, to));
+                let mut last = from;
+                for pos in 0..=1000 {
+                    let v = value_at(&p, pos).unwrap();
+                    assert!(if to > from { v >= last } else { v <= last }, "curve {c} at {pos}: {v} after {last}");
+                    assert!(v >= from.min(to) && v <= from.max(to));
+                    last = v;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn curve_sign_moves_the_change_earlier_or_later() {
+        let mid = |c: f32| value_at(&curved((0, 0.0, c), (1000, 1.0)), 500).unwrap();
+        assert!((mid(0.0) - 0.5).abs() < 1e-6);
+        assert!(mid(0.5) > 0.7 && mid(1.0) > mid(0.5));
+        assert!(mid(-0.5) < 0.3 && mid(-1.0) < mid(-0.5));
+        // Falling segments bend the same way in time: the change comes early.
+        let fall = value_at(&curved((0, 1.0, 0.5), (1000, 0.0)), 500).unwrap();
+        assert!(fall < 0.3);
+    }
+
+    #[test]
+    fn a_curve_only_bends_its_own_segment() {
+        let p = vec![AutoPoint { pos: 0, value: 0.0, curve: 0.8 }, AutoPoint { pos: 100, value: 1.0, curve: 0.0 }, AutoPoint { pos: 200, value: 0.0, curve: 0.0 }];
+        assert!((value_at(&p, 150).unwrap() - 0.5).abs() < 1e-6);
+        assert!(value_at(&p, 50).unwrap() > 0.8);
+    }
+
+    #[test]
+    fn curves_are_saved_only_when_set() {
+        let j = serde_json::to_string(&AutoPoint { pos: 5, value: 1.0, curve: 0.0 }).unwrap();
+        assert_eq!(j, r#"{"pos":5,"value":1.0}"#);
+        let back: AutoPoint = serde_json::from_str(r#"{"pos":5,"value":1.0}"#).unwrap();
+        assert_eq!(back.curve, 0.0);
+        let c: AutoPoint = serde_json::from_str(r#"{"pos":5,"value":1.0,"curve":-0.25}"#).unwrap();
+        assert_eq!(c.curve, -0.25);
     }
 
     #[test]

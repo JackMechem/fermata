@@ -27,6 +27,9 @@ here has been checked by eye in the app yet unless it says so.
     Inspector's fade rows; the Drag pop-up; the Scroll to Playhead button; the recovery sheet
     after `kill -9` during a take.
 - **Small fixes:**
+  - Check a VCA on a subtrack of a folder stack whose own volume is automated: the folder's
+    automation (`apply_fold`) replaces the static stack values, which is also where the VCA's
+    offset is folded in (`track_params`), so the VCA may be ignored while the folder lane plays.
   - The Compressor's "Lookahead" and the Classic Opto's "Peak Reduction" labels may overlap
     their knobs by a pixel or two.
 - **Larger:**
@@ -96,7 +99,7 @@ Goal: precise MIDI editing and hands-on control from hardware.
 Goal: finish a mix and deliver it without leaving Fermata.
 
 - [x] Channel strip settings; copy and paste a whole strip
-- [ ] Several automation lanes per track, automation curves, automation for folder stacks and
+- [x] Several automation lanes per track, automation curves, automation for folder stacks and
       Stereo Out
 - [ ] Undo for parameter changes made in a VST3's own editor
 - [x] VCA faders

@@ -7216,3 +7216,38 @@ canvas.pr-cursor-line {
 .arrangement-lane {
   display: block;
 }
+
+/* ---- Automation lanes: extra lanes below a track, and the Output track ---------------------- */
+
+.auto-sublane {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 12px;
+  border-bottom: 1px solid var(--header-line);
+  background: var(--header);
+  overflow: hidden;
+}
+
+.auto-sublane .th-auto {
+  flex: 1;
+  margin-left: 26px;
+}
+
+.tbtn.auto-lane-btn {
+  flex: none;
+  height: 19px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.output-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+/* Stereo Out sits apart from the tracks above it. */
+.output-header {
+  border-top: 1px solid var(--edge);
+}

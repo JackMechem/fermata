@@ -186,6 +186,8 @@ export interface Track {
   alternatives?: { name: string }[];
   /** The active track alternative's name; absent means "A". */
   alternative?: string;
+  /** Extra automation lanes shown below the main lane. */
+  auto_lanes?: AutoParam[];
 }
 
 export interface FreezeInfo {
@@ -205,6 +207,9 @@ export type AutoParam =
 export interface AutoPoint {
   pos: number;
   value: number;
+  /** The segment to the next point: 0 (or absent) straight, towards 1 the change comes early,
+   *  towards -1 late. */
+  curve?: number;
 }
 
 export interface AutoLane {
@@ -262,7 +267,15 @@ export interface Project {
   sig_den: number;
   key: string;
   tracks: Track[];
-  master: { volume_db: number; inserts: (PluginSlot | null)[]; eq: ChannelEq };
+  master: {
+    volume_db: number;
+    inserts: (PluginSlot | null)[];
+    eq: ChannelEq;
+    /** Stereo Out's automation (volume and plug-in parameters), shown on the Output track. */
+    automation?: AutoLane[];
+    auto_mode?: AutoMode;
+    auto_lanes?: AutoParam[];
+  };
   cycle: { enabled: boolean; start: number; end: number };
   metronome: boolean;
   count_in: boolean;

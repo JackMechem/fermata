@@ -1,5 +1,5 @@
 import type { Track } from "../api";
-import { MODE_LABELS, modeMenu, paramLabel, paramMenu, VOLUME } from "../automation";
+import { addLane, MODE_LABELS, modeMenu, paramLabel, paramMenu, VOLUME } from "../automation";
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import { openMenuAt } from "./Menu";
@@ -40,6 +40,24 @@ export function AutomationControls({ track }: { track: Track }) {
         <span>{paramLabel(param)}</span>
         <Icon.chevron />
       </button>
+      <AddLaneButton track={track} />
     </div>
+  );
+}
+
+/** The "+" that shows another automation lane below the track's, as Logic's disclosure
+ *  triangle on a lane header does. */
+export function AddLaneButton({ track }: { track: Track }) {
+  return (
+    <button
+      className="tbtn auto-lane-btn"
+      title="Show another automation lane"
+      onMouseDown={(e) => {
+        e.stopPropagation();
+        addLane(track);
+      }}
+    >
+      +
+    </button>
   );
 }
