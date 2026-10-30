@@ -409,6 +409,9 @@ pub enum Cmd {
     Sidechain { track: Id, uid: Id, source: Option<Id> },
     /// Whether a built-in effect's side-chain key is taken before the source's fader.
     SidechainPre { track: Id, uid: Id, pre: bool },
+    /// Settings › MIDI › Chase: whether starting or jumping mid-region starts the notes held
+    /// over the playhead, and sends the controller values in effect there.
+    Chase { notes: bool, controllers: bool },
 }
 
 pub enum Garbage {
@@ -638,6 +641,8 @@ pub struct Engine {
     /// See `Cmd::Autopunch`.
     punch_range: Option<(i64, i64)>,
     capture: Option<(i64, i64)>,
+    /// See `Cmd::Chase`: (notes, controllers).
+    chase: (bool, bool),
 }
 
 fn db_to_gain(db: f32) -> f32 {
@@ -819,6 +824,7 @@ impl Engine {
             gain_r: vec![0.0; MAX_BLOCK],
             punch_range: None,
             capture: None,
+            chase: (true, true),
         }
     }
 
@@ -1162,6 +1168,7 @@ impl Engine {
                 }
                 self.resolve_keys();
             }
+            Cmd::Chase { notes, controllers } => self.chase = (notes, controllers),
         }
     }
 
@@ -1477,7 +1484,7 @@ impl Engine {
                         // The latest value of each controller before the playhead, in the
                         // region that covers it.
                         let mut last: [Option<u16>; CC_KINDS] = [None; CC_KINDS];
-                        for reg in t.regions.iter() {
+                        for reg in t.regions.iter().filter(|_| self.chase.1) {
                             let RegionDsp::Midi { start, length, cc, .. } = reg else { continue };
                             if pos < *start || pos >= *start + *length {
                                 continue;
@@ -1492,6 +1499,19 @@ impl Engine {
                                 if t.midi.len() < t.midi.capacity() {
                                     t.midi.push(MidiEvent { offset: 0, data: CcKind::from_index(i).message(*v) });
                                     t.cc_sent = true;
+                                }
+                            }
+                        }
+                        // Chase: Notes. Notes held over the playhead start now (after the
+                        // controllers, so a sustain pedal is down first); the region loop below
+                        // ends them where they end.
+                        for reg in t.regions.iter().filter(|_| self.chase.0) {
+                            let RegionDsp::Midi { start, length, notes, .. } = reg else { continue };
+                            for note in crate::midi::sounding_at(notes, *start, *start + *length, pos) {
+                                let p = note.pitch as usize & 127;
+                                if !t.sounding[p] && t.midi.len() + 2 < t.midi.capacity() {
+                                    t.midi.push(MidiEvent { offset: 0, data: [0x90, note.pitch, note.velocity.max(1)] });
+                                    t.sounding[p] = true;
                                 }
                             }
                         }

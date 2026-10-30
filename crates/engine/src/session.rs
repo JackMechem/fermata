@@ -116,6 +116,8 @@ pub struct Tick {
     pub learn: Option<String>,
     /// What the learn that just finished assigned; shown once.
     pub learned: Option<String>,
+    /// Messages from hardware MIDI inputs since the last tick, oldest first (for Step Input).
+    pub midi_in: Vec<[u8; 3]>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -207,6 +209,8 @@ pub struct Session {
     peak_holds: PeakHolds,
     /// Controller assignments (see `session/controllers.rs`).
     controls: controllers::Controls,
+    /// The sequence number of the next MIDI input message the ticks haven't reported.
+    midi_seen: u64,
 }
 
 /// A project snapshot taken before an edit.
@@ -338,6 +342,7 @@ impl Session {
             captured_states: HashMap::new(),
             peak_holds: PeakHolds::default(),
             controls: Default::default(),
+            midi_seen: 0,
         };
         s.restart_audio();
         s.sync_globals();
@@ -434,6 +439,7 @@ impl Session {
             Cmd::Analyzer(self.analyzer_target),
             Cmd::Click(ClickParams::from_settings(&p.click)),
             Cmd::MidiThru(self.prefs.midi.thru),
+            Cmd::Chase { notes: self.prefs.midi.chase_notes, controllers: self.prefs.midi.chase_controllers },
         ];
         for c in cmds {
             self.send(c);
@@ -1194,7 +1200,12 @@ impl Session {
             if !notes.is_empty() || !cc.is_empty() {
                 notes.sort_by_key(|n| n.start);
                 cc.sort_by_key(|c| c.start);
-                let merged = self.prefs.recording.midi_overlap == MidiOverlap::Merge && self.merge_midi_take(track, start, end, &notes);
+                let merged = match self.prefs.recording.midi_mode() {
+                    MidiOverlap::NewRegion => false,
+                    MidiOverlap::Merge => self.merge_midi_take(track, start, end, &notes, &cc),
+                    // From the punch-in (or where recording started) to where it stopped.
+                    MidiOverlap::Replace => self.replace_midi_take(track, (w.lo, w.hi), start, end, &notes, &cc),
+                };
                 let id = self.project.alloc_id();
                 if let (false, Some(t)) = (merged, self.project.track_mut(track)) {
                     let name = t.name.clone();
@@ -2571,7 +2582,18 @@ impl Session {
             gain_reduction: self.gain_reductions(),
             learn: self.learning(),
             learned: self.take_learned(),
+            midi_in: self.midi_since_last_tick(),
         }
+    }
+
+    /// What hardware MIDI inputs sent since the last call, from the activity log.
+    fn midi_since_last_tick(&mut self) -> Vec<[u8; 3]> {
+        let log = self.midi.recent();
+        let fresh: Vec<[u8; 3]> = log.iter().filter(|e| e.seq >= self.midi_seen).map(|e| e.data).collect();
+        if let Some(last) = log.last() {
+            self.midi_seen = last.seq + 1;
+        }
+        fresh
     }
 
     /// A warning when the audio callback had to silence blocks because the engine panicked

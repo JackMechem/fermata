@@ -491,6 +491,11 @@ Details of each stage:
   when playback starts or jumps, the latest value of every controller before the playhead (in
   the region that covers it) is sent first, so a region started in the middle sounds right.
   A flush after controllers were played also releases sustain and centres pitch bend.
+  **Note chase**: right after, the notes held over the playhead (`midi::sounding_at`, a slice
+  of the region's sorted notes, no allocation) are started at offset 0, so a long note sounds
+  when playback starts, jumps or wraps a cycle inside it; the region loop sends their note-off
+  as usual. Both chases follow Settings › MIDI › Chase (`Cmd::Chase`, sent by `sync_globals`
+  and `set_prefs`; offline renders use the same engine, so they follow it too).
 - **Live MIDI** goes to `midi_target` (the selected instrument track, else the first armed
   one). With MIDI Thru off it is recorded but not played.
 - **Built-in effects and side-chains**: a built-in effect runs in its insert slot like a VST3,
@@ -855,6 +860,18 @@ window; a full ring counts an overrun (`EngineStatus::overruns`). The `recorder`
 every ring every 10 ms into the file, an in-memory copy (so the take plays straight away) and
 peak previews for the UI (`Tick::previews`). `finish_all` finalizes the files.
 
+Where a finished take goes over existing regions follows Settings › Recording › Overlapping
+Recordings, read through `RecordingPrefs::audio_mode` / `midi_mode`: the control bar's Replace
+button (`RecordingPrefs::replace`) turns both into Replace. Audio is placed by `place_take`
+(Replace trims the regions underneath). MIDI (`place_recording`) makes a new region, or merges
+into the newest MIDI region it overlaps (`merge_midi_take`, notes and controllers), or with
+Replace first clears the recorded range, `MidiWindow::lo..hi` (punch-in or record start to the
+stop, or the cycle window), from every MIDI region on the track (`replace_midi_take`, with
+`midi::erase_range` restoring changed controllers after the range) and then merges.
+
+Step Input hears hardware MIDI through the ticks: `Tick::midi_in` carries the messages the
+inputs' activity log got since the last tick.
+
 ### Without a device
 
 When no output device is running, `Session::send` processes the command queue inline, so the
@@ -1190,7 +1207,7 @@ it like any plug-in.
 | `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
-| `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing. |
+| `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |
 | `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
 | `smf.rs` | Standard MIDI File reader and writer. |
 | `audio_io.rs` | Device enumeration and the duplex stream that drives the engine. |
@@ -1272,6 +1289,7 @@ it like any plug-in.
 | `midiEdit.ts` | The Piano Roll's editing functions, pure and unit-tested. |
 | `pianoRollDraw.ts` | Piano Roll canvas drawing. |
 | `eventList.ts` | The Event List's positions, lengths, typed values and edits; pure, tested. |
+| `stepInput.ts` | Step Input: step lengths through the tempo map, the chord/advance state machine (Rest, Back, Chord, Sustain, Quantize) and the region edits it makes; pure, tested. Also the hook Musical Typing reports its notes through. |
 | `midiFiles.ts` | MIDI file import and export entry points. |
 | `audioEdit.ts` | Audio Track Editor state and operations: range selection, zoom, transients, keys. |
 | `audioRange.ts` | The Audio Track Editor's range arithmetic; pure, tested. |
@@ -1322,6 +1340,7 @@ it like any plug-in.
 | `AudioEditor.tsx` | The Audio Track Editor. |
 | `AutomationHeader.tsx` | The automation mode pop-up. |
 | `MusicalTyping.tsx` | Musical Typing window. |
+| `StepInput.tsx` | The Step Input Keyboard: feeds `stepInput.ts` from its keyboard, MIDI inputs (`Tick::midi_in`) and Musical Typing, and sends the edits in order. |
 | `Dialogs.tsx` | New Tracks, the Settings window frame, Group Settings, the input level warning. |
 | `Settings.tsx` | Settings panes, Project Settings, the Recovery sheet. |
 | `ProjectChooser.tsx` | Project Chooser. |
@@ -1341,7 +1360,7 @@ it like any plug-in.
 
 | Path | Contents |
 |---|---|
-| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
+| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `stepInput.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
 | `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |

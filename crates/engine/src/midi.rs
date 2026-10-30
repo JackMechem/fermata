@@ -85,6 +85,39 @@ pub fn join<'a>(parts: impl IntoIterator<Item = (i64, &'a [Note], &'a [CcEvent])
     (notes, cc)
 }
 
+/// The notes (sorted by start, relative to a region at `start` that plays until `end`) that
+/// started before `pos` and still sound there: what Chase: Notes starts when playback begins in
+/// the middle of them. Notes are cut at the region end, as playback cuts them. Allocation-free,
+/// for the audio thread.
+pub fn sounding_at(notes: &[Note], start: i64, end: i64, pos: i64) -> impl Iterator<Item = &Note> {
+    let before = if pos > start && pos < end { notes.partition_point(|n| start + n.start < pos) } else { 0 };
+    notes[..before].iter().filter(move |n| (start + n.start + n.length).min(end) > pos)
+}
+
+/// Clears `from..to` (relative to a region `length` long) for a recording in Replace mode:
+/// notes that start there and controller events there are removed, and notes that started
+/// earlier end at `from`. A controller that changed inside the range gets its old value back at
+/// `to` when the region goes on past it, so what follows plays as before.
+pub fn erase_range(notes: &mut Vec<Note>, cc: &mut Vec<CcEvent>, from: i64, to: i64, length: i64) {
+    if to <= from {
+        return;
+    }
+    notes.retain(|n| n.start < from || n.start >= to);
+    for n in notes.iter_mut().filter(|n| n.start < from) {
+        n.length = n.length.min(from - n.start);
+    }
+    // The value each controller had at `to` before, if an event inside the range set it.
+    let mut restore: [Option<CcEvent>; CC_KINDS] = [None; CC_KINDS];
+    for c in cc.iter().filter(|c| c.start >= from && c.start < to && to < length) {
+        restore[c.kind.index()] = Some(CcEvent { start: to, ..*c });
+    }
+    cc.retain(|c| c.start < from || c.start >= to);
+    let changes_at_to = |cc: &[CcEvent], e: &CcEvent| cc.iter().any(|c| c.start == to && c.kind == e.kind);
+    let extra: Vec<CcEvent> = restore.iter().flatten().filter(|e| !changes_at_to(cc, e)).copied().collect();
+    cc.extend(extra);
+    cc.sort_by_key(|c| c.start);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -176,5 +209,37 @@ mod tests {
         assert_eq!(notes[0].start, 5);
         assert_eq!((notes[1].pitch, notes[1].velocity, notes[1].length), (127, 1, 1));
         assert_eq!(events, vec![cc(1, CcKind::PitchBend, 16383), cc(9, MOD, 127)]);
+    }
+    #[test]
+    fn sounding_at_finds_notes_held_over_the_playhead() {
+        let notes = vec![Note { length: 500, ..note(0, 48) }, note(90, 60), Note { length: 300, ..note(150, 64) }, note(200, 67)];
+        // Region at 1000 playing until 1400: at 1195 the long C and the E (from 1150) sound; the
+        // note at 1090 ended at 1100 and the one at 1200 hasn't started.
+        let held: Vec<u8> = sounding_at(&notes, 1000, 1400, 1195).map(|n| n.pitch).collect();
+        assert_eq!(held, vec![48, 64]);
+        // The region end cuts notes, as playback does.
+        assert_eq!(sounding_at(&notes, 1000, 1160, 1159).map(|n| n.pitch).collect::<Vec<_>>(), vec![48, 64]);
+        // A note starting right at the playhead plays normally; outside the region, nothing.
+        assert_eq!(sounding_at(&notes, 1000, 1400, 1150).map(|n| n.pitch).collect::<Vec<_>>(), vec![48]);
+        assert_eq!(sounding_at(&notes, 1000, 1400, 1000).count(), 0);
+        assert_eq!(sounding_at(&notes, 1000, 1400, 1400).count(), 0);
+    }
+
+    #[test]
+    fn erase_range_clears_notes_and_restores_controllers() {
+        let mut notes = vec![Note { length: 50, ..note(80, 59) }, note(100, 60), note(150, 62), note(200, 64)];
+        let mut events = vec![cc(0, MOD, 10), cc(120, MOD, 50), cc(130, CcKind::PitchBend, 9000), cc(200, CcKind::PitchBend, 8192), cc(250, MOD, 70)];
+        erase_range(&mut notes, &mut events, 100, 200, 1000);
+        // The note held into the range ends at its start; the ones inside are gone.
+        assert_eq!(notes.iter().map(|n| (n.start, n.length, n.pitch)).collect::<Vec<_>>(), vec![(80, 20, 59), (200, 10, 64)]);
+        // Mod changed inside, so its value at 200 comes back; the bend already changes at 200.
+        assert_eq!(events, vec![cc(0, MOD, 10), cc(200, CcKind::PitchBend, 8192), cc(200, MOD, 50), cc(250, MOD, 70)]);
+        // An empty range changes nothing.
+        let before = format!("{notes:?} {events:?}");
+        erase_range(&mut notes, &mut events, 300, 300, 1000);
+        assert_eq!(format!("{notes:?} {events:?}"), before);
+        // A range reaching the region end leaves nothing to restore.
+        erase_range(&mut notes, &mut events, 240, 2000, 1000);
+        assert_eq!(events, vec![cc(0, MOD, 10), cc(200, CcKind::PitchBend, 8192), cc(200, MOD, 50)]);
     }
 }

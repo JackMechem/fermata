@@ -97,6 +97,9 @@ pub enum MidiOverlap {
     NewRegion,
     /// The notes are merged into the region they overlap.
     Merge,
+    /// The notes and controllers in the recorded range (punch-in to where recording stopped)
+    /// are removed from the regions underneath, and the recording is merged in their place.
+    Replace,
 }
 
 /// How new recordings are named.
@@ -188,6 +191,21 @@ pub struct RecordingPrefs {
     /// Folder for new recordings; None = the project's Audio Files. A project subfolder is
     /// made inside it.
     pub folder: Option<String>,
+    /// The control bar's Replace button: every recording replaces what it overlaps, audio and
+    /// MIDI alike, whatever `audio_overlap` and `midi_overlap` say.
+    pub replace: bool,
+}
+
+impl RecordingPrefs {
+    /// What an overlapping audio recording does, with the Replace button applied.
+    pub fn audio_mode(&self) -> AudioOverlap {
+        if self.replace { AudioOverlap::Replace } else { self.audio_overlap }
+    }
+
+    /// What an overlapping MIDI recording does, with the Replace button applied.
+    pub fn midi_mode(&self) -> MidiOverlap {
+        if self.replace { MidiOverlap::Replace } else { self.midi_overlap }
+    }
 }
 
 impl Default for RecordingPrefs {
@@ -200,6 +218,7 @@ impl Default for RecordingPrefs {
             midi_overlap: MidiOverlap::NewRegion,
             take_names: TakeNames::TrackNumber,
             folder: None,
+            replace: false,
         }
     }
 }
@@ -213,11 +232,17 @@ pub struct MidiPrefs {
     pub thru: bool,
     pub velocity: VelocityCurve,
     pub fixed_velocity: u8,
+    /// Chase: Notes. Starting playback (or jumping, or wrapping a cycle) inside a long note
+    /// starts it, as Logic does.
+    pub chase_notes: bool,
+    /// Chase: Controllers. The latest value of each controller (sustain, modulation, pitch
+    /// bend...) before the playhead is sent first.
+    pub chase_controllers: bool,
 }
 
 impl Default for MidiPrefs {
     fn default() -> Self {
-        MidiPrefs { disabled_inputs: Vec::new(), thru: true, velocity: VelocityCurve::Linear, fixed_velocity: 100 }
+        MidiPrefs { disabled_inputs: Vec::new(), thru: true, velocity: VelocityCurve::Linear, fixed_velocity: 100, chase_notes: true, chase_controllers: true }
     }
 }
 
@@ -330,6 +355,18 @@ mod tests {
         let text = serde_json::to_string(&p).unwrap();
         let back: Prefs = serde_json::from_str(&text).unwrap();
         assert_eq!(back, p);
+    }
+
+    #[test]
+    fn replace_button_overrides_both_overlap_settings() {
+        let mut r = RecordingPrefs { midi_overlap: MidiOverlap::Merge, ..Default::default() };
+        assert_eq!((r.audio_mode(), r.midi_mode()), (AudioOverlap::OnTop, MidiOverlap::Merge));
+        r.replace = true;
+        assert_eq!((r.audio_mode(), r.midi_mode()), (AudioOverlap::Replace, MidiOverlap::Replace));
+        // Older settings files have neither the button nor the chase switches.
+        let p: Prefs = serde_json::from_str(r#"{"recording":{"midi_overlap":"replace"},"midi":{"thru":false}}"#).unwrap();
+        assert!(!p.recording.replace && p.recording.midi_mode() == MidiOverlap::Replace);
+        assert!(p.midi.chase_notes && p.midi.chase_controllers);
     }
 
     #[test]

@@ -18,6 +18,7 @@ import { FxWindows } from "./components/fx/FxWindow";
 import { FxDock } from "./components/fx/FxDock";
 import { loadFxList } from "./fxHost";
 import { MusicalTyping } from "./components/MusicalTyping";
+import { StepInput } from "./components/StepInput";
 import { MenuHost } from "./components/Menu";
 import { loadPaneSizes, Splitter } from "./components/Splitter";
 import { Browser, Inspector, Library, Mixer } from "./components/Panels";
@@ -89,6 +90,9 @@ function handleMenu(id: string) {
       break;
     case "musical-typing":
       setState({ showTyping: !getState().showTyping });
+      break;
+    case "step-input":
+      setState({ showStepInput: !getState().showStepInput });
       break;
     case "chooser-recent":
       setState({ dialog: "chooser", chooserTab: "recent" });
@@ -385,6 +389,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "tool-menu": openToolMenu,
   "learn-assignment": () => handleMenu("learn-assignment"),
   "controller-assignments": () => handleMenu("controller-assignments"),
+  "step-input": () => handleMenu("step-input"),
 };
 
 function nudgeRegions(dir: number) {
@@ -476,6 +481,7 @@ export default function App() {
   useHeightPersistence();
   useAppearancePersistence();
   const showTyping = useStore((s) => s.showTyping);
+  const showStepInput = useStore((s) => s.showStepInput);
   const groupSheet = useStore((s) => s.groupSheet);
   const showMarkerList = useStore((s) => s.showMarkerList);
   const showControllerAssignments = useStore((s) => s.showControllerAssignments);
@@ -583,6 +589,7 @@ export default function App() {
       <LearnBanner />
       <FxWindows />
       {showTyping && <MusicalTyping />}
+      {showStepInput && <StepInput />}
       <MenuHost />
       <Toast />
     </div>

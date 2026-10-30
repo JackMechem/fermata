@@ -17,7 +17,7 @@ export interface KeyCommand {
   keys: string[];
 }
 
-export const KEY_GROUPS = ["Transport", "Navigation", "View", "Tracks", "Editing", "Windows", "Control Surfaces"] as const;
+export const KEY_GROUPS = ["Transport", "Navigation", "View", "Tracks", "Editing", "Windows", "Control Surfaces", "Step Input"] as const;
 
 export const KEY_COMMANDS: KeyCommand[] = [
   { id: "play", label: "Play / Stop", group: "Transport", keys: ["Space"] },
@@ -77,6 +77,17 @@ export const KEY_COMMANDS: KeyCommand[] = [
 
   { id: "learn-assignment", label: "Learn Assignment for Last Touched Parameter", group: "Control Surfaces", keys: ["Mod+L"] },
   { id: "controller-assignments", label: "Controller Assignments…", group: "Control Surfaces", keys: ["Mod+Shift+L"] },
+  // Logic's ⌥⌘K opens the Marker List here, so the keyboard takes ⌥⇧⌘K. The others work while
+  // the Step Input Keyboard is open (StepInput.tsx).
+  { id: "step-input", label: "Show/Hide Step Input Keyboard", group: "Step Input", keys: ["Mod+Alt+Shift+K"] },
+  { id: "step-rest", label: "Rest", group: "Step Input", keys: ["N"] },
+  { id: "step-back", label: "Back (Delete Last Step)", group: "Step Input", keys: ["Shift+Backspace"] },
+  { id: "step-chord", label: "Chord", group: "Step Input", keys: [] },
+  { id: "step-sustain", label: "Sustain Inserted Notes", group: "Step Input", keys: [] },
+  { id: "step-quantize", label: "Quantize Step Input", group: "Step Input", keys: [] },
+  ...[1, 2, 4, 8, 16, 32, 64, 128].map((v, i) => ({ id: `step-${v}`, label: `Note Value 1/${v}`, group: "Step Input", keys: [String(i + 1)] })),
+  { id: "step-dotted", label: "Dotted Note", group: "Step Input", keys: ["9"] },
+  { id: "step-triplet", label: "Triplet", group: "Step Input", keys: ["0"] },
 ];
 
 /** Accelerators of the native menu (src-tauri/src/menu.rs); they can't be changed here. */

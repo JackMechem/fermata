@@ -401,6 +401,8 @@ export interface Tick {
   learn?: string | null;
   /** What the learn that just finished assigned; sent once. */
   learned?: string | null;
+  /** Messages from hardware MIDI inputs since the last tick (Step Input listens to them). */
+  midi_in?: [number, number, number][];
 }
 
 export interface DeviceInfo {

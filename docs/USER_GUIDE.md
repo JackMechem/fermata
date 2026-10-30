@@ -128,7 +128,9 @@ From left to right:
   - **Key:** click for the major and minor keys.
   - The **chevron** offers "Beats & Project", "Time" (the position as time) and
     "Project Settings…".
-- **Mode buttons:** Cycle (C), Autopunch, Count-in (the "1234" button, Shift+K), Metronome (K).
+- **Mode buttons:** Cycle (C), Autopunch, **Replace** (red when on: recordings replace what they
+  overlap; see [Overlapping recordings](#recording-audio)), Count-in (the "1234" button,
+  Shift+K), Metronome (K).
 - **Master volume** slider and the **CPU** meter (the audio thread's load; amber above 50%, red
   above 80%).
 - **Musical Typing** (Ctrl+K), **List Editors** (D, the Event List) and **Browsers** (F) buttons.
@@ -236,7 +238,7 @@ status, the audio devices, and the number of MIDI inputs.
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
-| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Musical Typing, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
+| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
 
 When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
 All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
@@ -303,7 +305,11 @@ be opened in a window of their own, for example to put the Mixer on a second mon
 **Overlapping recordings** (Settings › Recording): a new take over existing regions is put
 **on top** (the older audio stays underneath and is hidden where the new one plays), on a **new
 track** below with the same settings, or **replaces** what's underneath (the older regions are
-trimmed; their files are kept).
+trimmed; their files are kept). MIDI has its own setting (see [Recording MIDI](#recording-midi)).
+
+The **Replace** button in the control bar (beside Autopunch) works like Logic's: while it is on,
+every recording replaces what it overlaps, audio and MIDI alike, whatever the two Overlapping
+Recordings settings say. Turn it off and they apply again.
 
 A newer region always hides the older audio it overlaps during playback, as in Logic. The
 older regions are not deleted; move or trim the newer one to hear them again. Regions that
@@ -350,9 +356,20 @@ early and replace just a phrase.
 
 Arm an instrument track and record as for audio. MIDI goes to the selected instrument track
 (or, if the selected track isn't one, the first armed instrument track). Notes, controllers,
-pitch bend and aftertouch are recorded into a region that spans whole bars. With Settings ›
-Recording › Overlapping Recordings › MIDI set to **Merge**, the notes go into the region they
-overlap instead of a new one. Notes still held when you stop end at the stop position.
+pitch bend and aftertouch are recorded into a region that spans whole bars. Notes still held
+when you stop end at the stop position. Settings › Recording › Overlapping Recordings › MIDI
+says what happens over an existing MIDI region:
+
+- **Create a new region** (the default): the recording is a region of its own, on top.
+- **Merge into the existing region:** the notes and controllers go into the region they
+  overlap, which grows to hold them.
+- **Replace in the recorded range:** from where recording started (or the punch-in) to where
+  it stopped, the notes and controller events of the regions underneath are removed and the
+  recording is merged in their place. A note that started earlier is shortened to end where
+  recording started, and a controller that changed inside the range gets its old value back
+  after it, so what follows plays as before. A region left empty inside the range is removed.
+  In cycle mode the whole cycle (narrowed by Autopunch) is replaced. A recording in which
+  nothing was played changes nothing. The **Replace** button in the control bar does the same.
 
 ### Latency compensation
 
@@ -404,6 +421,47 @@ position, so it works on any keyboard layout:
   affected.
 - Notes played this way are recorded like notes from a MIDI keyboard. The MIDI velocity curve
   doesn't apply to them.
+- With the Step Input Keyboard open, they are entered as steps too (see below).
+
+### Step Input
+
+The **Step Input Keyboard** (View › Step Input Keyboard, Ctrl+Alt+Shift+K, or the button with
+the note and arrow in the Piano Roll's bar) enters notes one step at a time, as in Logic: each
+note goes in at the playhead, as long as the chosen note value, and the playhead moves on by
+that value. Notes go into the track the Piano Roll shows (the selected region's track, or the
+selected instrument track): into the region under the playhead, or one that ends less than a
+bar before it (which grows), or else a new one-bar region. The transport must be stopped.
+
+- **Note value:** 1/1 to 1/128, with **Dotted** (half as long again) and **Triplet** (two thirds
+  as long). Lengths follow the tempo map, so a quarter is a quarter whatever the tempo does.
+- **Velocity:** ppp (16) to fff (127) for the on-screen keyboard. With **As Played** on (the
+  default), notes from a MIDI keyboard or Musical Typing keep the velocity they were played
+  with; off, they get the one chosen here.
+- **Rest** moves on a step without a note. **Back** deletes the last step and moves the playhead
+  back to it (a rest just moves back).
+- **Chord:** notes held down together always go in as one chord, and the playhead moves on
+  when every key is up. With Chord on, the playhead stays put after the keys are released, so
+  you can click a chord in one note at a time; turn Chord off (or press Rest) to move on.
+- **Sustain** lengthens the notes of the last step by one step and moves on.
+- **Quantize** snaps the playhead to the step grid (counted from the bar line) before each step.
+- The on-screen keyboard spans four octaves (− and + move it); click a key to enter a note.
+- Notes from a **MIDI keyboard** and from **Musical Typing** are entered while the window is
+  open, and still sound as usual.
+- Each step is one undo step (a chord's notes share it). Move the playhead yourself at any time
+  and steps continue from there. The notes just entered are selected.
+
+Key commands (Settings › Key Commands › Step Input; they work while the window is open):
+
+| Key | Does |
+|---|---|
+| 1 – 8 | Note value 1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64, 1/128 |
+| 9 / 0 | Dotted / Triplet |
+| N | Rest |
+| Shift+Backspace | Back (delete the last step) |
+| (unassigned) | Chord, Sustain Inserted Notes, Quantize Step Input |
+
+Logic uses ⌥⌘K for the Step Input Keyboard; in Fermata that opens the Marker List, so the
+window has Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS).
 
 ---
 
@@ -979,14 +1037,17 @@ The lane below the notes shows velocity or a controller. Drag the bar above it t
 
 - Muted notes are skipped. Controllers play with the notes, and the values in effect are sent
   when playback starts or jumps, so a region played from the middle sounds as it does from its
-  start.
+  start. Notes are chased too: starting (or jumping, or cycling back) in the middle of a long
+  note starts it, with its velocity after the region's playback parameters. Both can be turned
+  off in Settings › MIDI › Chase.
 - Stopping releases the sustain pedal and re-centres pitch bend.
 - Split, join and trim keep controllers consistent: the later part of a split starts with the
   values in effect at the cut.
 - A region's playback parameters (Quantize, Transpose and the rest; see
   [Region playback parameters](#region-playback-parameters)) apply as it plays. The Piano Roll
   shows the notes as stored; region menu › Apply Region Parameters writes them in.
-- The Piano Roll has no Step Input or Score yet, and controller points have no curve shapes.
+- Notes can be entered one step at a time with the [Step Input Keyboard](#step-input). The
+  Piano Roll has no Score yet, and controller points have no curve shapes.
 
 ### Event List
 
@@ -1921,7 +1982,7 @@ compensation rows needs **Apply Changes**.
 | Count-in | On (this project's switch, the same as Shift+K) and 1 to 4 bars | Off, 1 bar |
 | Pre-roll | 0 to 30 seconds, used when Count-in is off | 0 |
 | Overlapping Recordings › Audio | Put the new take on top; Create a new track; Replace what's underneath | On top |
-| Overlapping Recordings › MIDI | Create a new region; Merge into the existing region | New region |
+| Overlapping Recordings › MIDI | Create a new region; Merge into the existing region; Replace in the recorded range | New region |
 
 With a Recording Folder outside the project, Save As does not copy those recordings into the
 new project folder; the project refers to them where they are.
@@ -1952,6 +2013,7 @@ defaults.
 | MIDI Inputs | A checkbox per input, with its connection status | All on |
 | MIDI Thru | Play the selected instrument track live | On |
 | Velocity | As played; Soft (light touch plays louder); Hard (needs a firmer touch); Fixed velocity (1 to 127) | As played (fixed: 100) |
+| Chase | Notes; Controllers: when playback starts, jumps or cycles back inside a region, start the notes held there and send the controller values in effect | Both on |
 | Monitor | The last incoming messages (C3 = middle C) | |
 
 The velocity curve applies to MIDI inputs, not to Musical Typing.
@@ -2083,6 +2145,13 @@ shown.
 |---|---|
 | Ctrl+L | Learn Assignment for Last Touched Parameter (again: cancel) |
 | Ctrl+Shift+L | Controller Assignments… |
+
+### Step Input Keyboard
+
+| Key | Command |
+|---|---|
+| Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS) | Show/Hide Step Input Keyboard |
+| 1 – 8, 9, 0, N, Shift+Backspace | Note values, Dotted, Triplet, Rest, Back, while the window is open (see [Step Input](#step-input)) |
 
 ### Menu bar shortcuts (fixed)
 
@@ -2360,7 +2429,7 @@ blank, because WebKit then draws on the CPU.
 - **Automation:** folder stacks and Stereo Out have no automation of their own (a plug-in moved
   to Stereo Out leaves its lanes behind). Move Automation with Regions works along a track, not
   for regions moved onto another track or copied.
-- **Piano Roll:** no Step Input or Score, and controllers have no curve shapes.
+- **Piano Roll:** no Score, and controllers have no curve shapes.
 - **Event List:** lists MIDI regions only (not the regions of the project, or audio), on one
   track at a time. Fermata stores no MIDI channel, program changes, polyphonic aftertouch,
   release velocity or SysEx, so the Ch column always reads 1 and those types have no filter.

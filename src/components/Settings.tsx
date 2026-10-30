@@ -344,12 +344,22 @@ function RecordingPane({ close }: { close: () => void }) {
             onChange={(v) => setPrefs("recording", { audio_overlap: v })}
           />
         </Row>
-        <Row label="MIDI:">
+        <Row
+          label="MIDI:"
+          note={
+            r.midi_overlap === "replace"
+              ? "Notes and controllers from where recording starts (or the punch-in) to where it stops are replaced by what you play."
+              : r.replace
+                ? "Replace is on in the control bar: recordings replace what they overlap, audio and MIDI alike."
+                : undefined
+          }
+        >
           <Select
             value={r.midi_overlap}
             options={[
               ["new_region", "Create a new region"],
               ["merge", "Merge into the existing region"],
+              ["replace", "Replace in the recorded range"],
             ]}
             onChange={(v) => setPrefs("recording", { midi_overlap: v })}
           />
@@ -591,6 +601,16 @@ function MidiPane({ close }: { close: () => void }) {
             />
             {m.velocity === "fixed" && <NumberField value={m.fixed_velocity} min={1} max={127} onChange={(v) => setPrefs("midi", { fixed_velocity: Math.round(v) })} />}
             <VelocityGraph curve={m.velocity} fixed={m.fixed_velocity} />
+          </div>
+        </Row>
+        <Row label="Chase:" note="When playback starts, jumps or cycles back in the middle of a region, notes already held there start, and the controllers (sustain, modulation, pitch bend…) are set as they were.">
+          <div className="row-inline">
+            <Check checked={m.chase_notes ?? true} onChange={(v) => setPrefs("midi", { chase_notes: v })}>
+              Notes
+            </Check>
+            <Check checked={m.chase_controllers ?? true} onChange={(v) => setPrefs("midi", { chase_controllers: v })}>
+              Controllers
+            </Check>
           </div>
         </Row>
       </Section>

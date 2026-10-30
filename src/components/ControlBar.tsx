@@ -9,6 +9,7 @@ import { HSlider } from "./Controls";
 import { openMenuAt, type MenuItem } from "./Menu";
 import { transport } from "../transport";
 import { fmt, keyHint } from "../keymap";
+import { updateSettings, useSettings } from "../prefs";
 
 const KEYS = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
 
@@ -240,6 +241,7 @@ export function ControlBar() {
   const metronome = useStore((s) => s.snap?.project.metronome ?? false);
   const masterDb = useStore((s) => s.snap?.project.master.volume_db ?? 0);
   const showTyping = useStore((s) => s.showTyping);
+  const replace = useSettings((s) => s.prefs.recording.replace ?? false);
   const s = { showLibrary, showInspector, showBrowser, bottom };
   const p = { cycle: { enabled: cycleOn }, count_in: countIn, metronome, master: { volume_db: masterDb } };
   return (
@@ -270,6 +272,16 @@ export function ControlBar() {
             <svg width="18" height="16" viewBox="0 0 18 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 3.5H3v9h2M13 3.5h2v9h-2" />
               <path d="M6.5 8h5" strokeWidth="2.6" />
+            </svg>
+          </button>
+          <button
+            className={"mode-btn replace" + (replace ? " on" : "")}
+            title="Replace: recordings replace what they overlap, audio and MIDI"
+            onClick={() => updateSettings((st) => ({ ...st, prefs: { ...st.prefs, recording: { ...st.prefs.recording, replace: !replace } } }))}
+          >
+            <svg width="18" height="16" viewBox="0 0 18 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round">
+              <rect x="1.5" y="4" width="15" height="8" rx="1.5" strokeDasharray="2 1.6" />
+              <rect x="5.5" y="4" width="7" height="8" fill="currentColor" stroke="none" />
             </svg>
           </button>
           <button className={"mode-btn purple countin" + (p?.count_in ? " on" : "")} title={`Count-in (${keyHint("count-in")})`} onClick={() => act("set_count_in", { on: !p?.count_in })}>

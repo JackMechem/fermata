@@ -85,10 +85,11 @@ Goal: precise MIDI editing and hands-on control from hardware.
 
 - [x] MIDI learn and controller assignments for plug-in and mixer parameters
 - [x] Event List
-- [ ] Step Input (Musical Typing, MIDI keyboard, rests)
+- [x] Step Input (Musical Typing, MIDI keyboard, rests)
 - [x] Region playback parameters: non-destructive quantize, transpose, velocity, delay
-- [ ] Record MIDI in Replace mode
-- [ ] Controller curve shapes; chase notes that started before the playhead
+- [x] Record MIDI in Replace mode
+- [x] Chase notes that started before the playhead
+- [ ] Controller curve shapes
 
 ## Stage 5: Mixing and delivery
 

@@ -136,6 +136,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("global-tracks", "Show Global Tracks", None)?)
         .item(&item("overview", "Show Overview", None)?)
         .item(&item("musical-typing", "Musical Typing", Some("CmdOrCtrl+K"))?)
+        .item(&item("step-input", "Step Input Keyboard", None)?)
         .separator()
         .item(&item("show-hidden", "Show Hidden Tracks", None)?)
         .separator()

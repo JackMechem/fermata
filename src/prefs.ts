@@ -7,7 +7,7 @@ import { tempoMap } from "./tempo";
 import type { WheelScrolls } from "./wheel";
 
 export type AudioOverlap = "on_top" | "new_track" | "replace";
-export type MidiOverlap = "new_region" | "merge";
+export type MidiOverlap = "new_region" | "merge" | "replace";
 export type TakeNames = "track_number" | "track" | "project_track";
 export type VelocityCurve = "linear" | "soft" | "hard" | "fixed";
 export type Startup = "chooser" | "last_project" | "empty_project";
@@ -27,8 +27,18 @@ export interface Prefs {
     midi_overlap: MidiOverlap;
     take_names: TakeNames;
     folder: string | null;
+    /** The control bar's Replace button: every recording replaces what it overlaps. */
+    replace?: boolean;
   };
-  midi: { disabled_inputs: string[]; thru: boolean; velocity: VelocityCurve; fixed_velocity: number };
+  midi: {
+    disabled_inputs: string[];
+    thru: boolean;
+    velocity: VelocityCurve;
+    fixed_velocity: number;
+    /** Chase: Notes and Controllers when playback starts or jumps mid-region. */
+    chase_notes?: boolean;
+    chase_controllers?: boolean;
+  };
   editing: { fade_ms: number; move_automation?: MoveAutomation };
   /** Metronome settings for new projects. */
   click: ClickSettings;
@@ -90,8 +100,9 @@ const DEFAULTS: AppSettings = {
       midi_overlap: "new_region",
       take_names: "track_number",
       folder: null,
+      replace: false,
     },
-    midi: { disabled_inputs: [], thru: true, velocity: "linear", fixed_velocity: 100 },
+    midi: { disabled_inputs: [], thru: true, velocity: "linear", fixed_velocity: 100, chase_notes: true, chase_controllers: true },
     editing: { fade_ms: 0, move_automation: "never" },
     click: DEFAULT_CLICK,
     latency: { compensation: "all", low_latency: false, low_latency_limit_ms: 5 },

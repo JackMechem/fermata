@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { setState, useStore } from "../store";
 import { fmt } from "../keymap";
+import { emitLocalMidi } from "../stepInput";
 
 // Physical key -> semitone above the current octave's C.
 const NOTE_KEYS: Record<string, number> = {
@@ -24,6 +25,8 @@ const noteName = (n: number) => `${NAMES[n % 12]}${Math.floor(n / 12) - 2}`;
 
 function send(data: [number, number, number]) {
   invoke("midi_event", { data }).catch(() => {});
+  // Step Input enters what Musical Typing plays.
+  emitLocalMidi(data);
 }
 
 export function MusicalTyping() {

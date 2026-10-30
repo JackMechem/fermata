@@ -124,7 +124,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Cycle mode (C); create, move and resize the cycle area in the ruler (p. 94–96)
 - [x] Set locators by regions (U) (p. 95)
 - [x] Musical time and clock time display (p. 92)
-- [~] Chase events (p. 97). *Controllers, pitch bend and sustain are chased; notes that started earlier aren't.*
+- [x] Chase events (p. 97). *Notes and controllers (pitch bend, sustain, every CC), each switchable in Settings › MIDI › Chase; no program changes or SysEx.*
 - [~] Stop hung notes (p. 94). *Stopping releases the sustain pedal and re-centres pitch bend; no explicit panic command.*
 - [ ] Pause, fast forward and rewind, Play from Left Window Edge, Play from Selection (p. 88)
 - [ ] Transport shortcut menus on Play and Stop (p. 89)
@@ -459,16 +459,16 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 - [x] Autopunch mode with punch-in and punch-out locators (p. 196–198)
 - [ ] Set punch locators from the playhead (key commands)
-- [~] Replace mode (p. 199). *Audio "replace" is a setting; there's no Replace button, and MIDI can't replace.*
+- [x] Replace mode (p. 199). *The control bar's Replace button replaces with audio and MIDI; each also has a Replace setting in Settings › Recording.*
 - [x] Cycle recording into take folders (p. 193)
 - [ ] Record several audio takes to new tracks (p. 195)
 - [ ] Record to several software instrument tracks at once (p. 207)
 - [ ] Several MIDI devices to several instrument tracks (p. 208)
-- [ ] Record MIDI over an existing region (Replace) (p. 206)
+- [x] Record MIDI over an existing region (Replace) (p. 206)
 - [ ] MIDI cycle recording into take folders (p. 203)
 - [ ] Spot erase notes while recording (p. 204)
 - [ ] Note Repeat (p. 205)
-- [ ] Step input: musical typing, Step Input keyboard, MIDI keyboard, rests (p. 210–211)
+- [x] Step input: musical typing, Step Input keyboard, MIDI keyboard, rests (p. 210–211)
 - [ ] Discard recording and return to the last play position (⌘.)
 - [ ] Colour takes automatically; mark a take while recording (p. 218–220)
 - [ ] Flashback Capture for MIDI and audio (p. 220–222)

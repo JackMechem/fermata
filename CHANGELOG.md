@@ -38,6 +38,19 @@ All notable changes to Fermata are recorded here. The format follows
   controllers move their parameter like the mouse (written as automation in Touch, Latch and
   Write) and don't reach the instrument. The Controller Assignments window (Ctrl+Shift+L) lists,
   edits (Jump or Pickup, range) and deletes them; they're saved with the settings.
+- **Step Input Keyboard** (View › Step Input Keyboard, Ctrl+Alt+Shift+K, or the Piano Roll's
+  bar): enter notes one step at a time at the playhead, from its own keyboard, a MIDI keyboard
+  or Musical Typing, with note values 1/1 to 1/128 (dotted, triplet), velocities ppp to fff or
+  as played, Rest, Back, Chord, Sustain and Quantize, and key commands for them. Notes go into
+  the Piano Roll's region under the playhead, which grows or is made as needed; each step is
+  one undo step.
+- **Record MIDI in Replace mode:** Settings › Recording › Overlapping Recordings › MIDI ›
+  Replace clears the notes and controllers in the recorded range of the regions underneath,
+  and a **Replace** button in the control bar makes every recording, audio and MIDI, replace.
+  Merge now merges recorded controllers too, not only notes.
+- **Chase: Notes:** starting playback, jumping or cycling back in the middle of a long note
+  starts it, as in Logic. Settings › MIDI › Chase switches note and controller chase.
+
 - **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
   24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
   format is remembered with the other bounce options.

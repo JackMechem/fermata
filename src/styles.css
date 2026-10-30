@@ -6964,3 +6964,91 @@ canvas.pr-cursor-line {
   padding: 0 7px;
   font-size: 11px;
 }
+
+/* ---- Record in Replace mode ---------------------------------------------------------------- */
+
+.mode-btn.replace.on {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ---- Step Input Keyboard ------------------------------------------------------------------ */
+
+.si-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 12px 6px;
+}
+
+.si-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Buttons that belong together sit edge to edge, like Logic's segmented controls. */
+.si-seg {
+  display: flex;
+  border-radius: 5px;
+  box-shadow: var(--btn-shadow);
+}
+
+.si-btn {
+  height: 22px;
+  min-width: 30px;
+  padding: 0 7px;
+  border-radius: 5px;
+  background: var(--btn);
+  box-shadow: var(--btn-shadow);
+  color: var(--btn-text);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.si-seg > .si-btn {
+  border-radius: 0;
+  box-shadow: inset -1px 0 0 var(--edge);
+}
+
+.si-seg > .si-btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+
+.si-seg > .si-btn:last-child {
+  border-radius: 0 5px 5px 0;
+  box-shadow: none;
+}
+
+.si-btn:hover {
+  background: var(--btn-hi);
+}
+
+.si-btn.on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.si-dyn {
+  min-width: 34px;
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.si-octave {
+  margin-left: auto;
+}
+
+.si-keys {
+  height: 96px;
+}
+
+.si-keys .mt-white {
+  height: 96px;
+}
+
+.si-keys .mt-black {
+  height: 58px;
+}

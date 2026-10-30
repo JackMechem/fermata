@@ -11,7 +11,7 @@ use serde::Serialize;
 use super::{default_projects_root, untitled_dir, Session, AUDIO_DIR, AUTOSAVE_FILE, PROJECT_FILE};
 use crate::dsp::{ClickParams, Cmd};
 use crate::midi_io::{MidiLogEntry, MidiPort};
-use crate::model::{Id, Note, Project, Region, RegionContent};
+use crate::model::{CcEvent, Id, Note, Project, Region, RegionContent};
 use crate::prefs::{AudioOverlap, BitDepth, ClickSettings, Prefs};
 
 /// An autosave waiting to be written. Taking it (on the main thread, where plug-in states can
@@ -117,6 +117,8 @@ impl Session {
         }
         let thru = self.prefs.midi.thru;
         self.send(Cmd::MidiThru(thru));
+        let (notes, controllers) = (self.prefs.midi.chase_notes, self.prefs.midi.chase_controllers);
+        self.send(Cmd::Chase { notes, controllers });
         self.send(Cmd::Click(ClickParams::from_settings(&self.project.click)));
         // Settings › Audio › Plug-in Delay Compensation and Low Latency Mode.
         self.update_pdc();
@@ -148,7 +150,7 @@ impl Session {
         let (rs, re) = (region.start, region.start + region.length);
         let overlaps = |r: &Region| matches!(r.content, RegionContent::Audio { .. }) && r.start < re && r.start + r.length > rs;
         let any = self.project.track(track)?.regions.iter().any(overlaps);
-        let dest = match self.prefs.recording.audio_overlap {
+        let dest = match self.prefs.recording.audio_mode() {
             AudioOverlap::NewTrack if any => {
                 // A track with the same settings and plug-ins, right below, not record-enabled.
                 *self.duplicate_tracks(&[track], false).first()?
@@ -209,28 +211,51 @@ impl Session {
         Some(dest)
     }
 
-    /// Merges recorded notes (relative to `start`) into the MIDI region they overlap on
-    /// `track`, growing it to cover them. False when there is none to merge into.
-    pub(super) fn merge_midi_take(&mut self, track: Id, start: i64, end: i64, notes: &[Note]) -> bool {
+    /// Merges recorded notes and controllers (relative to `start`) into the MIDI region they
+    /// overlap on `track`, growing it to cover them. False when there is none to merge into.
+    pub(super) fn merge_midi_take(&mut self, track: Id, start: i64, end: i64, notes: &[Note], cc: &[CcEvent]) -> bool {
         let Some(t) = self.project.track_mut(track) else { return false };
         let Some(r) = t.regions.iter_mut().rev().find(|r| matches!(r.content, RegionContent::Midi { .. }) && r.start < end && r.start + r.length > start) else {
             return false;
         };
         let new_start = r.start.min(start);
         let new_end = (r.start + r.length).max(end);
-        let RegionContent::Midi { notes: existing, cc } = &mut r.content else { return false };
+        let RegionContent::Midi { notes: existing, cc: existing_cc } = &mut r.content else { return false };
         let shift_old = r.start - new_start;
         for n in existing.iter_mut() {
             n.start += shift_old;
         }
-        for c in cc.iter_mut() {
+        for c in existing_cc.iter_mut() {
             c.start += shift_old;
         }
         existing.extend(notes.iter().map(|n| Note { start: n.start + start - new_start, ..*n }));
         existing.sort_by_key(|n| n.start);
+        existing_cc.extend(cc.iter().map(|c| CcEvent { start: c.start + start - new_start, ..*c }));
+        existing_cc.sort_by_key(|c| c.start);
         r.start = new_start;
         r.length = new_end - new_start;
         true
+    }
+
+    /// Record in Replace mode: clears `range` (timeline samples) in every MIDI region on `track`
+    /// that it overlaps, drops regions left empty inside it, and merges the recording (relative
+    /// to `start`) into the region it overlaps. False when there is none to merge into, so the
+    /// recording becomes a region of its own. Only a region's own length counts, not its loop
+    /// repetitions; the stored notes are edited, not the ones its playback parameters make.
+    pub(super) fn replace_midi_take(&mut self, track: Id, range: (i64, i64), start: i64, end: i64, notes: &[Note], cc: &[CcEvent]) -> bool {
+        let (lo, hi) = range;
+        let Some(t) = self.project.track_mut(track) else { return false };
+        t.regions.retain_mut(|r| {
+            let (rs, re) = (r.start, r.start + r.length);
+            let RegionContent::Midi { notes, cc } = &mut r.content else { return true };
+            if rs >= hi || re <= lo {
+                return true;
+            }
+            crate::midi::erase_range(notes, cc, lo - rs, hi - rs, re - rs);
+            let emptied = notes.is_empty() && cc.is_empty() && rs >= lo && re <= hi;
+            !emptied
+        });
+        self.merge_midi_take(track, start, end, notes, cc)
     }
 
     /// Project Settings › Metronome.
@@ -504,12 +529,53 @@ mod tests {
             takes: None,
             params: Default::default(),
         });
-        assert!(s.merge_midi_take(t, 500, 1500, &[note(0), note(900)]));
+        assert!(s.merge_midi_take(t, 500, 1500, &[note(0), note(900)], &[]));
         let r = &s.project.track(t).unwrap().regions[0];
         assert_eq!((r.start, r.length), (500, 1500));
         let RegionContent::Midi { notes, .. } = &r.content else { unreachable!() };
         let starts: Vec<i64> = notes.iter().map(|n| n.start).collect();
         assert_eq!(starts, vec![0, 500, 900]);
-        assert!(!s.merge_midi_take(t, 5000, 6000, &[note(0)]));
+        assert!(!s.merge_midi_take(t, 5000, 6000, &[note(0)], &[]));
+    }
+
+    #[test]
+    fn midi_replace_clears_the_recorded_range() {
+        let (mut s, _scratch) = session("replace-midi");
+        let t = s.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();
+        let note = |start, pitch| Note { start, length: 10, pitch, velocity: 100, muted: false };
+        let modw = |start, value| CcEvent { start, kind: crate::model::CcKind::Controller(1), value };
+        let region = |id, start, length, notes: Vec<Note>, cc: Vec<CcEvent>| Region {
+            id,
+            name: "m".into(),
+            start,
+            length,
+            muted: false,
+            color: None,
+            content: RegionContent::Midi { notes, cc },
+            loop_end: None,
+            takes: None,
+            params: Default::default(),
+        };
+        let regions = &mut s.project.track_mut(t).unwrap().regions;
+        regions.push(region(500, 1000, 2000, vec![note(0, 60), note(400, 62), note(600, 64), note(1500, 66)], vec![modw(0, 5), modw(450, 90)]));
+        // A region wholly inside the range goes; one past it keeps what's outside.
+        regions.push(region(501, 3000, 200, vec![note(0, 70)], vec![]));
+        regions.push(region(502, 3200, 1000, vec![note(0, 71), note(900, 72)], vec![]));
+        let take = vec![note(100, 65)];
+        // Recorded from 1300 to 3300; the take's region spans 1000..4000.
+        assert!(s.replace_midi_take(t, (1300, 3300), 1000, 4000, &take, &[modw(100, 40)]));
+        let regs = &s.project.track(t).unwrap().regions;
+        assert_eq!(regs.iter().map(|r| r.id).collect::<Vec<_>>(), vec![500, 502]);
+        // The recording merges into the newest overlapping region, which grew to hold it.
+        let r = &regs[1];
+        assert_eq!((r.start, r.length), (1000, 3200));
+        let RegionContent::Midi { notes, .. } = &r.content else { unreachable!() };
+        assert_eq!(notes.iter().map(|n| (n.start, n.pitch)).collect::<Vec<_>>(), vec![(100, 65), (3100, 72)]);
+        let RegionContent::Midi { notes, cc } = &regs[0].content else { unreachable!() };
+        assert_eq!(notes.iter().map(|n| (n.start, n.pitch)).collect::<Vec<_>>(), vec![(0, 60)]);
+        // The region ends inside the range: the mod change there is just gone.
+        assert_eq!(cc, &vec![modw(0, 5)]);
+        // Nothing on the track there: no region to merge into.
+        assert!(!s.replace_midi_take(t, (9000, 9500), 9000, 10000, &take, &[]));
     }
 }

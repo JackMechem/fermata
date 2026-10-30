@@ -101,6 +101,8 @@ export interface State {
   clipboardStart: number | null;
   /** The Controller Assignments window (Control Surfaces). */
   showControllerAssignments: boolean;
+  /** The Step Input Keyboard is open (StepInput.tsx). */
+  showStepInput: boolean;
 }
 
 export interface MidiSelection {
@@ -154,6 +156,7 @@ let state: State = {
   marquee: null,
   clipboardStart: null,
   showControllerAssignments: false,
+  showStepInput: false,
 };
 
 const listeners = new Set<() => void>();
