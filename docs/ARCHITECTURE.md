@@ -307,6 +307,16 @@ samples at the project rate.
   Region Parameters, Join, MIDI file export), and `bounds` gives render ranges (Bounce in
   Place, Export Region, Freeze, the project end). The snapshot's `played` list carries the
   notes as they play for the Tracks area; the Piano Roll edits the stored notes.
+- **Pattern regions** (the Step Sequencer): `pattern: Some(Pattern)` on a MIDI region
+  (`pattern.rs`, session side in `session/patterns.rs`). A `Pattern` has a length in steps, a
+  step rate, swing, a loop switch and `PatternRow`s (pitch, mute, solo, an optional rate and
+  length of its own, and `Step`s: on, velocity, gate, tie; off steps with default values save
+  as `{}`). `regions_dsp` turns each pattern region into the plain MIDI region it plays
+  (`pattern::realize`, through the tempo map from the region's start) before anything else,
+  so playback parameters, loops, chase and every render work unchanged; `bake` realizes first,
+  so Join and MIDI export do too, and `push_tempo_regions` rebuilds pattern tracks on tempo
+  changes. The region's stored notes stay empty. The Step Sequencer sends the whole edited
+  pattern with `set_pattern` (keyed per drag, so a painted run is one undo step).
 
 ### Take folders and comps
 
@@ -1301,11 +1311,13 @@ it like any plug-in.
 | `session/backups.rs` | Backups on save, pruning, Revert to, Revert to Saved, the fallback on open. |
 | `session/templates.rs` | User project templates: save, list, rename, delete, new project from one. |
 | `session/track_alternatives.rs` | Track alternatives: new, duplicate, switch, rename, delete. |
+| `session/patterns.rs` | Pattern regions: create, `set_pattern`, convert to and from MIDI regions, realizing them for `regions_dsp`. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
 | `arrangement.rs` | The Arrangement track's arithmetic: tiling sections and the time maps (`Piece`, `Plan`) for moving, copying and deleting them; automation through a time map. Pure. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |
 | `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
+| `pattern.rs` | Step Sequencer patterns: the model, the notes a pattern plays (swing, ties, gates, per-row rates and lengths), `realize` and `from_notes`. |
 | `smf.rs` | Standard MIDI File reader and writer. |
 | `audio_io.rs` | Device enumeration and the duplex stream that drives the engine. |
 | `denormals.rs` | `NoDenormals`: flush-to-zero on the audio thread (x86_64 and aarch64). |
@@ -1388,6 +1400,7 @@ it like any plug-in.
 | `pianoRollDraw.ts` | Piano Roll canvas drawing. |
 | `eventList.ts` | The Event List's positions, lengths, typed values and edits; pure, tested. |
 | `stepInput.ts` | Step Input: step lengths through the tempo map, the chord/advance state machine (Rest, Back, Chord, Sustain, Quantize) and the region edits it makes; pure, tested. Also the hook Musical Typing reports its notes through. |
+| `stepSeq.ts` | The Step Sequencer's pattern edits, edit modes, General MIDI drum names, the playing step of each row and the Tracks-area miniature; pure, tested. |
 | `midiFiles.ts` | MIDI file import and export entry points. |
 | `audioEdit.ts` | Audio Track Editor state and operations: range selection, zoom, transients, keys. |
 | `audioRange.ts` | The Audio Track Editor's range arithmetic; pure, tested. |
@@ -1439,6 +1452,7 @@ it like any plug-in.
 | `AutomationHeader.tsx` | The automation mode pop-up. |
 | `MusicalTyping.tsx` | Musical Typing window. |
 | `StepInput.tsx` | The Step Input Keyboard: feeds `stepInput.ts` from its keyboard, MIDI inputs (`Tick::midi_in`) and Musical Typing, and sends the edits in order. |
+| `StepSequencer.tsx` | The Step Sequencer (bottom pane "steps"): the step grid, row headers, edit modes, Learn; edits ahead of the snapshot while they are on their way. |
 | `Dialogs.tsx` | New Tracks, the Settings window frame, Group Settings, the input level warning. |
 | `Settings.tsx` | Settings panes, Project Settings, the Recovery sheet. |
 | `ProjectChooser.tsx` | Project Chooser. |
@@ -1458,7 +1472,7 @@ it like any plug-in.
 
 | Path | Contents |
 |---|---|
-| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `stepInput.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
+| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `stepInput.ts`, `stepSeq.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
 | `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |

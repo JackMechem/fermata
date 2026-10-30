@@ -3,6 +3,7 @@ import { useStore } from "../store";
 import { AudioEditor } from "./AudioEditor";
 import { DetachButton } from "./DetachButton";
 import { PianoRoll } from "./PianoRoll";
+import { useEditorFollow } from "./StepSequencer";
 
 /**
  * The bottom editor pane (E). Follows the selection like Logic's main window editor: the Piano
@@ -22,6 +23,8 @@ export function Editor() {
       track = t;
     }
   }
+  // A pattern region opens in the Step Sequencer.
+  useEditorFollow(region, "editor");
   // No region selected: edit the selected track.
   if (!track) track = project?.tracks.find((t) => t.id === selectedTrack) ?? null;
   if (track?.kind === "instrument") return <PianoRoll track={track} region={region} />;

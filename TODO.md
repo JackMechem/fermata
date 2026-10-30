@@ -120,7 +120,8 @@ Goal: the larger Logic features that set a full DAW apart.
 - [ ] Flex Pitch
 - [x] Track alternatives; project alternatives and backups; user project templates
 - [x] Arrangement track; markers with their own lengths
-- [ ] Score Editor and Step Sequencer
+- [x] Step Sequencer: pattern regions, rows of steps, edit modes, polymeter, swing
+- [ ] Score Editor
 
 ## Stage 7: Formats and reach
 

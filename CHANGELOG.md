@@ -8,6 +8,14 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Step Sequencer:** pattern regions on software instrument tracks (Track › New Pattern
+  Region, or Create Pattern Region in an instrument track's right-click menu), edited as rows
+  of steps in a new editor tab beside the Piano Roll and Event List (also in its own window).
+  Note On, Velocity, Gate and Tie edit modes with click-and-drag painting, per-row pitch (with
+  the General MIDI drum names and Learn), mute, solo, step rate and length (polymeter),
+  pattern length, rate, swing and loop, and the playing step lit during playback. Pattern
+  regions show their steps in the Tracks area, play in every render, and convert to and from
+  MIDI regions.
 - **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
   fader offsets the level of every strip assigned to it without moving their faders (an
   outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be

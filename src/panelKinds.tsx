@@ -13,6 +13,7 @@ import { getState } from "./store";
 import { DetachButton } from "./components/DetachButton";
 import { Editor } from "./components/Editor";
 import { EventList, eventListTitle } from "./components/EventList";
+import { StepSequencer, stepSequencerTitle } from "./components/StepSequencer";
 import { FxWindows } from "./components/fx/FxWindow";
 import { PanelContent, PanelLead, PanelTools, panelExists, usePanelTitle } from "./components/fx/FxPanel";
 import { Mixer } from "./components/Panels";
@@ -83,6 +84,16 @@ registerPanelKind(
     render: () => <EventList />,
     size: { w: 640, h: 520 },
     own: ownBottom("list"),
+  }),
+);
+
+registerPanelKind(
+  "steps",
+  bottomPanel("steps", {
+    title: (_, s) => stepSequencerTitle(s),
+    render: () => <StepSequencer />,
+    size: { w: 980, h: 420 },
+    own: ownBottom("steps"),
   }),
 );
 

@@ -161,6 +161,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: Default::default(),
+            pattern: None,
         });
         s.project.next_id = 9001;
         assert!(!s.project.track(a).unwrap().regions.is_empty());

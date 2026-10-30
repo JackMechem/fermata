@@ -64,6 +64,44 @@ export interface Region {
   takes?: TakeFolder | null;
   /** Playback parameters (Region inspector); absent = the defaults. See regionParams.ts. */
   params?: RegionParams;
+  /** Present on pattern regions (Step Sequencer), which play the notes it makes. See stepSeq.ts. */
+  pattern?: Pattern | null;
+}
+
+/** One step of a pattern row (crates/engine/src/pattern.rs). Absent fields are the defaults:
+ *  off, velocity 100, gate 100 %, not tied. */
+export interface PatternStep {
+  on?: boolean;
+  velocity?: number;
+  /** Note length in percent of the step, 1–100. */
+  gate?: number;
+  /** Carries the note before on through this step. */
+  tie?: boolean;
+}
+
+export interface PatternRow {
+  pitch: number;
+  muted?: boolean;
+  solo?: boolean;
+  /** Steps per whole note (16 = 1/16, 24 = 1/16 triplet); absent = the pattern's. */
+  rate?: number | null;
+  /** Steps before the row repeats; absent = the pattern's length. */
+  length?: number | null;
+  /** Missing steps at the end are off. */
+  steps: PatternStep[];
+}
+
+/** A pattern region's pattern (Logic's Step Sequencer). */
+export interface Pattern {
+  /** Steps. */
+  length: number;
+  /** Steps per whole note. */
+  rate: number;
+  /** Percent; 0 = straight. */
+  swing: number;
+  /** Absent = true: repeats to the region's end. */
+  looped?: boolean;
+  rows: PatternRow[];
 }
 
 /** A region's playback parameters, applied as it plays (crates/engine/src/region_params.rs). */

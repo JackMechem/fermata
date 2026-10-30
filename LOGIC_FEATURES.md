@@ -774,18 +774,18 @@ smart tempo, samplers, virtual players, pattern tools, Live Loops and notation.
 
 ### Step Sequencer (p. 695–731)
 
-- [ ] Pattern regions and pattern cells (p. 696)
-- [ ] Turn steps on or off; add rows; Learn mode (p. 699–701)
-- [ ] Pattern length and step rate, including 5/4 and 7/8 (p. 702–703)
-- [ ] Edit modes per row: velocity, gate, note repeat, offset, chance, octave and more; subrows (p. 704–708)
+- [~] Pattern regions and pattern cells (p. 696). *Pattern regions only; no Live Loops cells.*
+- [x] Turn steps on or off; add rows; Learn mode (p. 699–701)
+- [x] Pattern length and step rate, including 5/4 and 7/8 (p. 702–703)
+- [~] Edit modes per row: velocity, gate, note repeat, offset, chance, octave and more; subrows (p. 704–708). *Note On, Velocity, Gate and Tie for all rows; no other modes or subrows.*
 - [ ] Randomise patterns and rows, with probability and range (p. 708–709)
 - [ ] Rows as chord degrees; follow the key and chords (p. 711–713)
 - [ ] Live and step recording of patterns (p. 713–715)
 - [ ] Pattern Browser: load, save, templates (p. 715–717)
-- [ ] Convert between MIDI and pattern regions (p. 717)
-- [ ] Mute, solo and rotate rows; playback modes (p. 718–719)
+- [x] Convert between MIDI and pattern regions (p. 717)
+- [~] Mute, solo and rotate rows; playback modes (p. 718–719). *Mute and solo; no rotate or playback modes (forward only).*
 - [ ] Step Sequencer with Drum Machine Designer (p. 697–698)
-- [ ] Step Sequencer inspector: pattern, row and step settings (p. 723–727)
+- [~] Step Sequencer inspector: pattern, row and step settings (p. 723–727). *Pattern length, rate, swing and loop on the bar; each row's pitch, rate and length in its header; no inspector.*
 
 ### Live Loops (p. 658–694)
 

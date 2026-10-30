@@ -334,6 +334,7 @@ impl Session {
                 loop_end: None,
                 takes: None,
                 params: Default::default(),
+                pattern: None,
             };
             let t = self.project.track_mut(id).unwrap();
             t.name = name;

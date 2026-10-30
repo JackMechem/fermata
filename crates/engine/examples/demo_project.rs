@@ -108,7 +108,7 @@ fn main() {
         notes.push(Note { start: i as i64 * 4 * beat + 2 * beat, length: beat, pitch: chord[2] + 12, velocity: 100, muted: false });
     }
     let id = s.project.alloc_id();
-    s.project.track_mut(keys).unwrap().regions.push(Region { id, name: "Pad".into(), start: 0, length: 4 * bar, muted: false, color: None, content: RegionContent::Midi { notes, cc: Vec::new() }, loop_end: None, takes: None, params: Default::default() });
+    s.project.track_mut(keys).unwrap().regions.push(Region { id, name: "Pad".into(), start: 0, length: 4 * bar, muted: false, color: None, content: RegionContent::Midi { notes, cc: Vec::new() }, loop_end: None, takes: None, params: Default::default(), pattern: None });
     if let Some(p) = s.plugins.iter().find(|p| p.name == "ZamCompX2").cloned() {
         s.set_plugin(drums_t, 0, &p.id).unwrap();
     }

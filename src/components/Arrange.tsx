@@ -22,6 +22,7 @@ import { timeWheel } from "../wheel";
 import { toggleOverview } from "./Overview";
 import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
 import { playedNotes } from "../regionParams";
+import { drawPatternMini } from "../stepSeq";
 import { dragOutcome, type Outcome } from "../dragModes";
 import { moveAutomationAnswer } from "../moveAutomation";
 import { activeTool, drawToolOverlay, escapeMarquee, notePointer, pressOnMarquee, toolHover, toolLeave, toolMouseDown, type ToolView } from "../trackTools";
@@ -150,6 +151,9 @@ export function drawRegion(
     else if (wave) drawWave(ctx, wave, r.content.offset + shift, x, w, bodyTop, bodyH, pps, content, visX0, visX1, undefined, waveScale);
     const [fi, fo] = fades ?? [r.content.fade_in, r.content.fade_out];
     drawFades(ctx, r, x - shift * pps, x, w, bodyTop, bodyH, fi, fo, pps, content, handles, ghost ? undefined : regionCrossfades(r.id));
+  } else if (showBody && r.pattern) {
+    // A pattern region: its rows, with a dot where each note it plays starts.
+    drawPatternMini(ctx, r.pattern, playedNotes(getState().snap?.played, r.id) ?? [], r.params?.transpose ?? 0, x - shift * pps, bodyTop, bodyH, pps, content, visX0, visX1);
   } else if (showBody && r.content.type === "midi") {
     // As they play: with the region's playback parameters (quantize, transpose, ...) applied.
     const notes = playedNotes(getState().snap?.played, r.id) ?? r.content.notes;
@@ -958,6 +962,8 @@ export function Arrange() {
       dragRef.current = null;
       setCrossfadeDrag(null);
       if (!moved) {
+        // Double-clicking a pattern region opens the Step Sequencer.
+        if (e.detail === 2 && r.pattern) setState({ bottom: "steps" });
         clickLocate(e, true);
         requestDraw();
         return;

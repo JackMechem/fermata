@@ -100,8 +100,9 @@ export function eventListTitle(s: State): string {
 
 // ---- the editors' switch and the menu bar ---------------------------------------------------
 
-/** Piano Roll / Event List, on the MIDI editors' bars. A panel's own window keeps its editor. */
-export function EditorTabs({ current }: { current: "editor" | "list" }) {
+/** Piano Roll / Event List / Step Sequencer, on the MIDI editors' bars. A panel's own window
+ *  keeps its editor. */
+export function EditorTabs({ current }: { current: "editor" | "list" | "steps" }) {
   if (ownPanel) return null;
   return (
     <div className="editor-tabs">
@@ -110,6 +111,9 @@ export function EditorTabs({ current }: { current: "editor" | "list" }) {
       </button>
       <button className={"filter" + (current === "list" ? " on" : "")} onClick={() => setState({ bottom: "list" })}>
         Event List
+      </button>
+      <button className={"filter" + (current === "steps" ? " on" : "")} onClick={() => setState({ bottom: "steps" })}>
+        Step Sequencer
       </button>
     </div>
   );

@@ -14,6 +14,7 @@ import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./pref
 import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
 import { EventList, eventListMenu } from "./components/EventList";
+import { StepSequencer } from "./components/StepSequencer";
 import { FxWindows } from "./components/fx/FxWindow";
 import { FxDock } from "./components/fx/FxDock";
 import { loadFxList } from "./fxHost";
@@ -204,6 +205,9 @@ function handleMenu(id: string) {
       break;
     case "same-settings":
       ops.duplicateTracks(false);
+      break;
+    case "new-pattern-region":
+      ops.newPatternRegion();
       break;
     case "delete-unused":
       ops.deleteUnusedTracks();
@@ -608,11 +612,12 @@ export default function App() {
         {s.showInspector && <Splitter pane="inspector" dir="x" sign={1} />}
         <div className="center">
           <TracksArea />
-          {/* The Event List takes the Editors' height, so switching between them doesn't jump. */}
-          {s.bottom !== "none" && <Splitter pane={s.bottom === "list" ? "editor" : s.bottom} dir="y" sign={-1} />}
+          {/* The Event List and the Step Sequencer take the Editors' height, so switching between them doesn't jump. */}
+          {s.bottom !== "none" && <Splitter pane={s.bottom === "list" || s.bottom === "steps" ? "editor" : s.bottom} dir="y" sign={-1} />}
           {s.bottom === "mixer" && <Mixer />}
           {s.bottom === "editor" && <Editor />}
           {s.bottom === "list" && <EventList />}
+          {s.bottom === "steps" && <StepSequencer />}
           {s.bottom === "fx" && <FxDock />}
         </div>
         {s.showBrowser && <Splitter pane="browser" dir="x" sign={-1} />}

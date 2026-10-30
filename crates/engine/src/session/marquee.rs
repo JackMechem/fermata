@@ -65,7 +65,7 @@ mod tests {
             let t = s.add_track(TrackKind::Audio, InputSel::Mono(0), None, None).unwrap();
             let id = s.project.alloc_id();
             let content = RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() };
-            s.project.track_mut(t).unwrap().regions.push(Region { id, name: "Tone".into(), start: 10_000, length: 48_000, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default() });
+            s.project.track_mut(t).unwrap().regions.push(Region { id, name: "Tone".into(), start: 10_000, length: 48_000, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default(), pattern: None });
             s.push_regions(t);
             tracks.push(t);
         }

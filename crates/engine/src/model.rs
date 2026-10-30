@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fades::{DragMode, FadeShape};
 use crate::prefs::{BitDepth, ClickSettings};
+use crate::pattern::Pattern;
 use crate::region_params::RegionParams;
 use crate::tempo::{SigEvent, TempoEvent};
 
@@ -215,6 +216,10 @@ pub struct Region {
     /// and so on), applied as the region plays. See [`crate::region_params`].
     #[serde(default, skip_serializing_if = "RegionParams::is_default")]
     pub params: RegionParams,
+    /// Makes a MIDI region a pattern region (Logic's Step Sequencer): it plays the notes its
+    /// pattern makes instead of `content`'s. See [`crate::pattern`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pattern: Option<Pattern>,
 }
 
 /// A loop can't repeat its region more often than this.
@@ -1085,6 +1090,7 @@ mod tests {
             loop_end,
             takes: None,
             params: Default::default(),
+            pattern: None,
         }
     }
 

@@ -103,7 +103,7 @@ The window is laid out like Logic Pro 11:
 | Library | far left | Y |
 | Inspector | left of the track headers | I |
 | Tracks area | centre | always |
-| Mixer, Editors or Event List | bottom (one at a time) | X (Mixer), E or P (Editors), D (List Editors) |
+| Mixer, Editors, Event List or Step Sequencer | bottom (one at a time) | X (Mixer), E or P (Editors), D (List Editors); the Step Sequencer from its tab or a pattern region |
 | Browser (All Files) | right | F |
 | Status line | bottom edge | always |
 
@@ -1129,6 +1129,53 @@ note selection is shared with the Piano Roll: notes selected in one are selected
   Event List in Separate Window; it can then sit beside the Piano Roll on another screen.
 
 Only the lines in view are drawn, so regions with thousands of events stay quick.
+
+### Step Sequencer
+
+Logic's Step Sequencer: drum patterns and riffs as rows of steps. It edits **pattern
+regions**, MIDI regions that play the notes their pattern makes.
+
+- **Creating a pattern region:** Track › New Pattern Region (on the selected software instrument
+  track, at the bar of the playhead), right-click an instrument track's empty space › Create
+  Pattern Region, or the button the Step Sequencer shows when no pattern region is selected. A
+  new one is a bar long, with sixteen 1/16 steps and rows for a General MIDI drum kit: Kick
+  (C1), Snare (D1), Clap (D♯1), Closed Hi-Hat (F♯1), Open Hi-Hat (A♯1), Low Tom, Hi-Mid Tom
+  and Crash. In the Tracks area a pattern region shows its rows, with a dot wherever a note
+  plays.
+- **Opening it:** double-click a pattern region, or click the **Step Sequencer** tab beside
+  Piano Roll and Event List on the editors' bar. Selecting a pattern region while the Piano
+  Roll is shown switches to the Step Sequencer, and selecting a MIDI region there switches
+  back. It edits the selected pattern region and can be opened in its own window with the
+  pop-out button.
+- **Steps:** the edit mode buttons under the bar choose what clicking does. **Note On** turns
+  steps on and off; **Tie** ties a step to the one before it, so that note plays on through
+  it. Drag across steps to set a whole run to what the first one got. **Velocity** and
+  **Gate** (the note's length in percent of a step) show a bar in every step: click or drag
+  along a row to set each step's bar to the pointer's height, which also turns it on. A
+  drag is one undo step. Turning a step on plays its note.
+- **Rows:** each row's header has **M** (mute) and **S** (solo), the row's name (click it to
+  choose a General MIDI drum or any note; **Learn** sets it from the next note played on a
+  MIDI keyboard or with Musical Typing), its own **step rate** and its own **length** in
+  steps. Rows of different lengths repeat on their own, so a three-step row against a
+  sixteen-step one makes a polymeter. Right-click a header to add a row below, duplicate,
+  clear or delete it; **+** on the bar adds one at the bottom.
+- **The pattern:** **Length** (1 to 64 steps), **Rate** (1/4 to 1/32 and their triplets) and
+  **Swing** (0 % is straight; every second step of a straight row moves up to half a step
+  later, about 66 % is the triplet feel) apply to every row that doesn't set its own.
+  Changing the length lengthens the region too, while it is exactly as long as the pattern.
+  With **Loop** on (the default) the pattern repeats to the region's end; off, it plays once.
+  Each row counts its steps from the region's start, and a looped region (the region's Loop)
+  starts the pattern over on every repetition.
+- **While playing**, the step each row is on is outlined.
+- **Functions** menu: Add Row, Clear Pattern, and **Convert to MIDI Region**, which writes the
+  notes the pattern plays into the region (also in the region's right-click menu). A MIDI
+  region's right-click menu has **Convert to Pattern Region**: a row for each pitch, each
+  note on the nearest 1/16 step (up to 64 steps) with its velocity, longer notes tied on.
+- The notes a pattern plays follow the tempo map and the region's playback parameters, and
+  play everywhere a MIDI region does: bounces, exports, Bounce in Place, Freeze, MIDI file
+  export and Join. Splitting or trimming the start of a pattern region starts its pattern
+  again at the new start; the Piano Roll and Event List don't show a pattern region's notes
+  (convert it to edit them there).
 
 ---
 

@@ -144,6 +144,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: Default::default(),
+            pattern: None,
         }
     }
 

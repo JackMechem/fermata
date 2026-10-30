@@ -9,8 +9,8 @@ import type { Marquee } from "./marquee";
 
 export type Snap = "smart" | "bar" | "beat" | "off";
 /** What the bottom section shows; "fx" is the docked plug-in panels (fxDock.ts), "list" the
- *  Event List (D). */
-export type BottomPane = "none" | "mixer" | "editor" | "fx" | "list";
+ *  Event List (D), "steps" the Step Sequencer. */
+export type BottomPane = "none" | "mixer" | "editor" | "fx" | "list" | "steps";
 export type SettingsTab = "general" | "audio" | "recording" | "metronome" | "midi" | "editing" | "plugins" | "keys" | "appearance";
 
 /** Resizable pane sizes in CSS pixels (widths, except the bottom panes' heights). */

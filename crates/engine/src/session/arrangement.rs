@@ -196,7 +196,7 @@ mod tests {
     fn region(s: &mut Session, t: Id, clip: Id, start: i64, length: i64) -> Id {
         let id = s.project.alloc_id();
         let content = RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() };
-        s.project.track_mut(t).unwrap().regions.push(Region { id, name: "R".into(), start, length, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default() });
+        s.project.track_mut(t).unwrap().regions.push(Region { id, name: "R".into(), start, length, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default(), pattern: None });
         s.push_regions(t);
         id
     }

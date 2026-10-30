@@ -7251,3 +7251,214 @@ canvas.pr-cursor-line {
 .output-header {
   border-top: 1px solid var(--edge);
 }
+
+/* ==== Step Sequencer (stepseq) ==== */
+
+/* Edit modes, pattern length, rate, swing and loop, under the local bar. */
+.ss-tools {
+  height: 28px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  background: var(--local-bar);
+  border-bottom: 1px solid var(--edge);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.ss-tools .lb-label {
+  margin-left: 8px;
+}
+
+.ss-modes {
+  margin-right: 4px;
+}
+
+.ss-add {
+  margin-left: 8px;
+}
+
+.ss-add:disabled {
+  opacity: 0.5;
+}
+
+.ss-learn {
+  color: var(--accent);
+  margin-left: 8px;
+}
+
+.ss-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.ss-body {
+  background: var(--bg);
+}
+
+.ss-rows {
+  min-width: max-content;
+  padding: 4px 0;
+}
+
+.ss-row {
+  display: flex;
+  height: 24px;
+  align-items: stretch;
+}
+
+/* Row headers stay in view while the steps scroll sideways. */
+.ss-head {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  width: 250px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 6px 0 8px;
+  background: var(--panel);
+  border-right: 1px solid var(--edge);
+  border-bottom: 1px solid var(--header-line);
+}
+
+.ss-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  height: 19px;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--text);
+  text-align: left;
+}
+
+.ss-name:hover {
+  background: var(--btn);
+}
+
+.ss-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.ss-note {
+  color: var(--faint);
+  font-size: 10.5px;
+  flex: none;
+}
+
+.ss-row.learning .ss-name {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.ss-opt {
+  flex: none;
+  min-width: 38px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--btn);
+  box-shadow: var(--btn-shadow);
+  color: var(--dim);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.ss-opt.set {
+  color: var(--accent);
+}
+
+.ss-opt:hover {
+  background: var(--btn-hi);
+}
+
+.ss-steps {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(var(--ss-cols), minmax(20px, 1fr));
+  gap: 2px;
+  padding: 2px 8px;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.ss-row.silent .ss-steps {
+  opacity: 0.45;
+}
+
+.ss-cell {
+  position: relative;
+  border-radius: 3px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+/* Every other beat's steps a shade lighter, so the grid reads in groups. */
+.ss-cell.alt {
+  background: var(--panel-3);
+}
+
+.ss-cell.on {
+  background: var(--accent);
+}
+
+/* A tie: a bar reaching back to the step before. */
+.ss-cell.tie::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 30%;
+  top: calc(50% - 2px);
+  height: 4px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+.ss-cell.on.tie::before {
+  background: var(--accent-ink);
+  opacity: 0.6;
+}
+
+/* Steps past a shorter row's length. */
+.ss-cell.out {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--panel-2);
+  cursor: default;
+}
+
+.ss-cell.play {
+  box-shadow: inset 0 0 0 1.5px var(--text);
+}
+
+/* Velocity and Gate: each step a bar, as tall as its value. */
+.mode-velocity .ss-cell.on,
+.mode-gate .ss-cell.on {
+  background: var(--accent-soft);
+}
+
+.ss-bar {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--faint);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.ss-cell.on .ss-bar {
+  background: var(--accent);
+  opacity: 1;
+}

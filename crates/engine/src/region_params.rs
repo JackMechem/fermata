@@ -261,6 +261,10 @@ pub fn pass(r: &Region, pass_len: i64, map: &TempoMap) -> Option<Pass> {
 /// they are on the timeline and are left out if they would now play. An audio region moves by
 /// its delay (losing whatever would fall before the project start).
 pub fn bake(r: &Region, map: &TempoMap) -> Region {
+    // A pattern region bakes as the notes its pattern plays.
+    if r.pattern.is_some() {
+        return bake(&crate::pattern::realize(r, map), map);
+    }
     let mut out = Region { params: RegionParams::default(), ..r.clone() };
     if r.params.is_default() {
         return out;
@@ -530,6 +534,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: p,
+            pattern: None,
         }
     }
 

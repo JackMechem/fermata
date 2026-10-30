@@ -112,13 +112,16 @@ impl Session {
         self.edit_regions(ids, |r, _| *r = rp::bake(r, &map));
     }
 
-    /// The notes of every MIDI region with playback parameters, as they play.
+    /// The notes of every MIDI region with playback parameters, and of every pattern region,
+    /// as they play.
     pub fn played_notes(&self) -> Vec<PlayedNotes> {
         let mut out = Vec::new();
         let mut map = None;
-        for r in self.project.tracks.iter().flat_map(|t| t.regions.iter()).filter(|r| !r.params.is_default()) {
-            let RegionContent::Midi { notes, .. } = &r.content else { continue };
+        for r in self.project.tracks.iter().flat_map(|t| t.regions.iter()).filter(|r| !r.params.is_default() || r.pattern.is_some()) {
             let map = map.get_or_insert_with(|| self.tempo_map());
+            // Pattern regions as their patterns play.
+            let r = &crate::pattern::realize(r, map);
+            let RegionContent::Midi { notes, .. } = &r.content else { continue };
             let mut notes = rp::apply(&r.params, notes, &[], r.start, map).0;
             notes.sort_by_key(|n| (n.start, n.pitch));
             out.push(PlayedNotes { region: r.id, notes });
@@ -127,9 +130,10 @@ impl Session {
     }
 
     /// Rebuilds the playback lists of tracks whose regions' parameters follow the tempo map
-    /// (quantize, delay in ticks), after the tempo or signature changed.
+    /// (quantize, delay in ticks) or that are pattern regions, after the tempo or signature
+    /// changed.
     pub(super) fn push_tempo_regions(&mut self) {
-        let ids: Vec<Id> = self.project.tracks.iter().filter(|t| t.regions.iter().any(|r| r.params.follows_tempo())).map(|t| t.id).collect();
+        let ids: Vec<Id> = self.project.tracks.iter().filter(|t| t.regions.iter().any(|r| r.params.follows_tempo() || r.pattern.is_some())).map(|t| t.id).collect();
         for id in ids {
             self.push_regions(id);
         }

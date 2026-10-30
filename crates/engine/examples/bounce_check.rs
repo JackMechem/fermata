@@ -130,7 +130,7 @@ fn main() {
     let inst = s.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();
     let bar = s.project.samples_per_bar().round() as i64;
     let notes = vec![Note { start: 0, length: bar / 2, pitch: 60, velocity: 100, muted: false }, Note { start: bar / 2, length: bar * 4, pitch: 64, velocity: 100, muted: false }];
-    let midi = Region { id: 0, name: "Chord".into(), start: 0, length: bar, muted: false, color: None, loop_end: None, takes: None, params: Default::default(), content: RegionContent::Midi { notes, cc: Vec::new() } };
+    let midi = Region { id: 0, name: "Chord".into(), start: 0, length: bar, muted: false, color: None, loop_end: None, takes: None, params: Default::default(), pattern: None, content: RegionContent::Midi { notes, cc: Vec::new() } };
     s.paste_regions(&[(inst, midi)], 0);
     s.update_track(a, TrackPatch { mute: Some(true), ..Default::default() });
     let pi = out.join("inst.wav");

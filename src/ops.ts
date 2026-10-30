@@ -286,6 +286,25 @@ async function createMidiRegion(track: Id, pos: number) {
   select(await actMade("create_midi_region", { track, start, length: Math.round(m.barStart(bar + 1)) - start, key: null }));
 }
 
+/** Create Pattern Region: a bar-long pattern region at the bar containing `pos`, selected and
+ *  open in the Step Sequencer. */
+export async function createPatternRegion(track: Id, pos: number) {
+  const p = project();
+  if (!p) return;
+  const m = tempoMap(p);
+  const bar = m.barAt(pos);
+  const start = Math.round(m.barStart(bar));
+  const made = await actMade("create_pattern_region", { track, start, length: Math.round(m.barStart(bar + 1)) - start });
+  if (made) setState({ selectedRegions: made, focus: "regions", bottom: "steps" });
+}
+
+/** Track › New Pattern Region: on the selected software instrument track, at the playhead. */
+export function newPatternRegion() {
+  const t = tracks().find((x) => x.id === getState().snap?.selected);
+  if (t?.kind === "instrument") createPatternRegion(t.id, playhead());
+  else toast("Select a software instrument track for the pattern region");
+}
+
 async function importAt(track: Track, pos: number) {
   const file = await open({ title: "Import Audio File", multiple: true });
   const paths = typeof file === "string" ? [file] : file ?? [];
@@ -413,6 +432,14 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
       },
       { label: "Export as MIDI File…", onClick: () => exportMidi(midi, midi.length === 1 ? regs.find((x) => x.id === midi[0])!.name : p.name) },
     );
+    // Pattern regions (Step Sequencer) and back.
+    const patterns = regs.filter((x) => x.pattern).map((x) => x.id);
+    const plain = regs.filter((x) => x.content.type === "midi" && !x.pattern).map((x) => x.id);
+    items.push(
+      patterns.length
+        ? { label: "Convert to MIDI Region", onClick: () => act("convert_patterns_to_midi", { ids: patterns }) }
+        : { label: "Convert to Pattern Region", onClick: () => act("convert_midi_to_patterns", { ids: plain }) },
+    );
   }
   items.push(
     { separator: true },
@@ -443,6 +470,7 @@ export function laneMenu(track: Track | null, pos: number): MenuItem[] {
   const items: MenuItem[] = [];
   if (track) items.push({ label: "Paste Here", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => pasteRegions({ track: track.id, pos }) });
   if (track?.kind === "instrument") items.push({ label: "Create MIDI Region", onClick: () => createMidiRegion(track.id, pos) });
+  if (track?.kind === "instrument") items.push({ label: "Create Pattern Region", onClick: () => createPatternRegion(track.id, pos) });
   if (track?.kind === "audio") items.push({ label: "Import Audio File Here…", onClick: () => importAt(track, pos) });
   if (track?.kind === "instrument") items.push({ label: "Import MIDI File Here…", onClick: () => importMidiAt(track, pos) });
   if (track) items.push({ label: "Select All on Track", onClick: () => selectOnTrack(track.id) });

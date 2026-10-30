@@ -487,6 +487,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: Default::default(),
+            pattern: None,
         };
         s.project.track_mut(t).unwrap().regions.push(audio(100, 0, 1000));
         s.place_take(t, audio(101, 400, 200)).unwrap();
@@ -528,6 +529,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: Default::default(),
+            pattern: None,
         });
         assert!(s.merge_midi_take(t, 500, 1500, &[note(0), note(900)], &[]));
         let r = &s.project.track(t).unwrap().regions[0];
@@ -555,6 +557,7 @@ mod tests {
             loop_end: None,
             takes: None,
             params: Default::default(),
+            pattern: None,
         };
         let regions = &mut s.project.track_mut(t).unwrap().regions;
         regions.push(region(500, 1000, 2000, vec![note(0, 60), note(400, 62), note(600, 64), note(1500, 66)], vec![modw(0, 5), modw(450, 90)]));

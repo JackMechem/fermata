@@ -337,6 +337,7 @@ mod tests {
             loop_end: None,
             takes: Some(f),
             params: Default::default(),
+            pattern: None,
         }
     }
 

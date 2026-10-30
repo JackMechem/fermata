@@ -17,6 +17,7 @@ pub mod fx;
 pub mod midi;
 pub mod midi_io;
 pub mod model;
+pub mod pattern;
 pub mod plugin_db;
 pub mod prefs;
 pub mod presets;

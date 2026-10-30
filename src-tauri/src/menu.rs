@@ -94,6 +94,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("new-aux", "New Aux", None)?)
         .item(&item("duplicate-track", "Duplicate Track", None)?)
         .item(&item("same-settings", "New Track with Same Settings", None)?)
+        .item(&item("new-pattern-region", "New Pattern Region", None)?)
         .separator()
         .item(&item("bounce-in-place", "Bounce in Place…", Some(BOUNCE_IN_PLACE_KEY))?)
         .item(&item("freeze-track", "Freeze Track", None)?)

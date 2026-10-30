@@ -1735,3 +1735,29 @@ pub fn delete_arrangement_marker(state: State<AppState>, id: Id, content: bool) 
 pub fn set_auto_lanes(state: State<AppState>, lanes: Vec<(Id, Vec<AutoParam>)>) -> Snapshot {
     edit(&state, "Automation Lanes", None, false, |s| s.set_auto_lanes(lanes))
 }
+
+/// Track › New Pattern Region, or Create Pattern Region in a lane's menu: a pattern region with
+/// the default drum kit on an instrument track.
+#[tauri::command]
+pub fn create_pattern_region(state: State<AppState>, track: Id, start: i64, length: i64) -> R<Made> {
+    edit_made(&state, "Create Pattern Region", false, |s| s.create_pattern_region(track, start, length).map(|id| vec![id]))
+}
+
+/// The Step Sequencer's edits: replaces a pattern region's pattern. `key` merges a burst of
+/// edits (the steps a drag paints) into one undo step.
+#[tauri::command]
+pub fn set_pattern(state: State<AppState>, id: Id, pattern: daw_engine::pattern::Pattern, label: String, key: Option<String>) -> R<Snapshot> {
+    try_edit(&state, &label, key, false, |s| s.set_pattern(id, pattern))
+}
+
+/// Convert to MIDI Region: pattern regions become the MIDI regions they play.
+#[tauri::command]
+pub fn convert_patterns_to_midi(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
+    edit(&state, "Convert to MIDI Region", None, false, |s| s.convert_patterns_to_midi(&ids))
+}
+
+/// Convert to Pattern Region: MIDI regions become pattern regions on a sixteenth-note grid.
+#[tauri::command]
+pub fn convert_midi_to_patterns(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
+    edit(&state, "Convert to Pattern Region", None, false, |s| s.convert_midi_to_patterns(&ids))
+}

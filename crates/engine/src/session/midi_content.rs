@@ -161,7 +161,7 @@ impl Session {
                 .collect();
             let cc = part.cc.iter().map(|c| CcEvent { start: to_samples(c.start) - rstart, kind: c.kind, value: c.value }).collect();
             let rid = self.project.alloc_id();
-            self.project.track_mut(tid).unwrap().regions.push(Region { id: rid, name, start: rstart, length, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None, params: Default::default() });
+            self.project.track_mut(tid).unwrap().regions.push(Region { id: rid, name, start: rstart, length, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None, params: Default::default(), pattern: None });
             self.push_regions(tid);
             made.push(rid);
         }

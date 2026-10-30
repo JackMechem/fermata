@@ -70,6 +70,7 @@ pub use templates::{delete_template, list_templates, rename_template, templates_
 mod track_alternatives;
 mod arrangement;
 mod auto_lanes;
+mod patterns;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -602,6 +603,9 @@ impl Session {
         let map = self.params_map(t);
         let delayed = map.as_ref().and_then(|m| Self::delay_audio(t, m));
         let regions = delayed.as_deref().unwrap_or(&t.regions);
+        // Pattern regions play the notes their patterns make (see `session/patterns.rs`).
+        let patterns = self.realize_patterns(regions);
+        let regions = patterns.as_deref().unwrap_or(regions);
         let xfade = (crate::takes::COMP_XFADE_MS * self.project.sample_rate as f64 / 1000.0).round() as i64;
         let crossfades = crate::fades::crossfades(regions, |c| self.clips.get(&c).map(|c| c.frames() as i64));
         // Loop repetitions first, then the region bodies, so bodies always win.
@@ -1169,6 +1173,7 @@ impl Session {
                 loop_end: None,
                 takes: None,
                 params: Default::default(),
+                pattern: None,
             };
             // Cycle passes become a take folder; Autopunch trims to the punch range.
             let Some(region) = self.shape_take(plan, track, region, take.start, frames as i64) else {
@@ -1231,7 +1236,7 @@ impl Session {
                 let id = self.project.alloc_id();
                 if let (false, Some(t)) = (merged, self.project.track_mut(track)) {
                     let name = t.name.clone();
-                    t.regions.push(Region { id, name, start, length: end - start, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None, params: Default::default() });
+                    t.regions.push(Region { id, name, start, length: end - start, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None, params: Default::default(), pattern: None });
                 }
                 touched.push(track);
             }
@@ -2148,7 +2153,7 @@ impl Session {
         }
         let id = self.project.alloc_id();
         let name = self.project.track(track).unwrap().name.clone();
-        self.project.track_mut(track).unwrap().regions.push(Region { id, name, start: start.max(0), length: length.max(1), muted: false, color: None, content: RegionContent::Midi { notes: Vec::new(), cc: Vec::new() }, loop_end: None, takes: None, params: Default::default() });
+        self.project.track_mut(track).unwrap().regions.push(Region { id, name, start: start.max(0), length: length.max(1), muted: false, color: None, content: RegionContent::Midi { notes: Vec::new(), cc: Vec::new() }, loop_end: None, takes: None, params: Default::default(), pattern: None });
         self.push_regions(track);
         self.dirty = true;
         Ok(id)
@@ -2281,7 +2286,7 @@ impl Session {
             let color = picked[0].color.clone();
             let t = self.project.track_mut(track).unwrap();
             t.regions.retain(|r| !ids.contains(&r.id));
-            t.regions.push(Region { id, name, start: lo, length: hi - lo, muted: false, color, content, loop_end: None, takes: None, params: Default::default() });
+            t.regions.push(Region { id, name, start: lo, length: hi - lo, muted: false, color, content, loop_end: None, takes: None, params: Default::default(), pattern: None });
             self.push_regions(track);
             made.push(id);
         }
@@ -2339,7 +2344,7 @@ impl Session {
         let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
         let fade = self.default_fade(frames);
         let t = self.project.track_mut(track).unwrap();
-        t.regions.push(Region { id, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None, params: Default::default() });
+        t.regions.push(Region { id, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None, params: Default::default(), pattern: None });
         self.push_regions(track);
         self.dirty = true;
         Ok(id)
@@ -2383,7 +2388,7 @@ impl Session {
                     let fade = self.default_fade(frames);
                     let t = self.project.track_mut(id).unwrap();
                     t.name = name.clone();
-                    t.regions.push(Region { id: rid, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None, params: Default::default() });
+                    t.regions.push(Region { id: rid, name, start: start.max(0), length: frames, muted: false, color: None, content: RegionContent::Audio { clip: clip_id, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() }, loop_end: None, takes: None, params: Default::default(), pattern: None });
                     self.push_regions(id);
                     self.select_track(Some(id));
                 }

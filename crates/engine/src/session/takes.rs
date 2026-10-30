@@ -273,6 +273,7 @@ impl Session {
                     loop_end: None,
                     takes: None,
                     params: Default::default(),
+                    pattern: None,
                 });
             }
         }
@@ -335,6 +336,7 @@ impl Session {
                     loop_end: None,
                     takes: None,
                     params: Default::default(),
+                    pattern: None,
                 };
                 if let Some(d) = self.project.track_mut(dst) {
                     d.name = t.name.clone();
@@ -386,6 +388,7 @@ impl Session {
             loop_end: None,
             takes: Some(folder),
             params: Default::default(),
+            pattern: None,
         };
         let t = self.project.track_mut(track).unwrap();
         let at = t.regions.iter().position(|r| ids.contains(&r.id)).unwrap_or(t.regions.len());
