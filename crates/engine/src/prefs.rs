@@ -227,12 +227,26 @@ pub struct EditingPrefs {
     /// Fade-in and fade-out given to new audio regions (recordings and imports), in
     /// milliseconds, to avoid clicks at their edges; 0 = none.
     pub fade_ms: f32,
+    /// Whether a region's automation moves with it (Logic's Move Automation with Regions).
+    pub move_automation: MoveAutomation,
 }
 
 impl Default for EditingPrefs {
     fn default() -> Self {
-        EditingPrefs { fade_ms: 0.0 }
+        EditingPrefs { fade_ms: 0.0, move_automation: MoveAutomation::Never }
     }
+}
+
+/// Settings › Editing › Move Automation with Regions: whether moving a region along its track
+/// takes the track's automation under it along (see `auto_move.rs`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveAutomation {
+    #[default]
+    Never,
+    Always,
+    /// The Tracks area asks on each move that would take automation along.
+    Ask,
 }
 
 /// Plug-in Delay Compensation, as in Logic's Settings › Audio › General.

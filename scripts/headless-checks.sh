@@ -30,6 +30,7 @@ CHECKS=(
   "takes_check tone dir"
   "recovery_check tone dir"
   "crossfade_check tone dir"
+  "dragmode_check tone dir"
   "midi_check dir"
   "countin_check dir"
   "tempo_check dir"

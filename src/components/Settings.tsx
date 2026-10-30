@@ -14,6 +14,7 @@ import {
   useRecoveries,
   useSettings,
   type ClickLocates,
+  type MoveAutomation,
   type Nudge,
   type Prefs,
   type Recovery,
@@ -638,6 +639,12 @@ const WHEEL_SCROLLS: [WheelScrolls, string][] = [
   ["horizontal", "Horizontally (time)"],
 ];
 
+const MOVE_AUTOMATION: [MoveAutomation, string][] = [
+  ["never", "Never"],
+  ["always", "Always"],
+  ["ask", "Ask"],
+];
+
 const NUDGES: [Nudge, string][] = [
   ["bar", "Bar"],
   ["beat", "Beat"],
@@ -651,6 +658,7 @@ const NUDGES: [Nudge, string][] = [
 function EditingPane({ close }: { close: () => void }) {
   const ui = useSettings((s) => s.ui);
   const fade = useSettings((s) => s.prefs.editing.fade_ms);
+  const moveAutomation = useSettings((s) => s.prefs.editing.move_automation) ?? "never";
   return (
     <>
       <Section title="Regions">
@@ -675,6 +683,12 @@ function EditingPane({ close }: { close: () => void }) {
             <NumberField value={fade} min={0} max={100} step={0.5} resolution={0.1} onChange={(v) => setPrefs("editing", { fade_ms: v })} />
             <span className="dim">ms</span>
           </div>
+        </Row>
+        <Row
+          label="Move Automation with Regions:"
+          note="Whether moving a region along its track takes the track's automation under it along, replacing the automation where it lands. Ask asks on each move that would."
+        >
+          <Select value={moveAutomation} options={MOVE_AUTOMATION} onChange={(v) => setPrefs("editing", { move_automation: v })} />
         </Row>
       </Section>
       <Section title="Scrolling">

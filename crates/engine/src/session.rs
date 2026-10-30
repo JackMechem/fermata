@@ -53,6 +53,7 @@ mod insert_order;
 mod crossfades;
 mod region_params;
 pub use region_params::{PlayedNotes, RegionParamsPatch};
+mod drag_modes;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";

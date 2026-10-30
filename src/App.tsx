@@ -44,6 +44,7 @@ import { MarkerList } from "./components/MarkerList";
 import { packTakeFolder } from "./takes";
 import { installDetach, receiveSnapshot, toggleDetached } from "./detach";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { moveAutomationAnswer } from "./moveAutomation";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -370,7 +371,10 @@ function nudgeRegions(dir: number) {
   if (!s.snap || !s.selectedRegions.length) return;
   // A bar or beat as long as it is where the selection starts.
   const at = Math.min(...s.snap.project.tracks.flatMap((t) => t.regions.filter((r) => s.selectedRegions.includes(r.id)).map((r) => r.start)));
-  act("nudge_regions", { ids: s.selectedRegions, delta: Math.round(dir * nudgeSamples(s.snap.project, Number.isFinite(at) ? at : 0)) });
+  const ids = s.selectedRegions;
+  const delta = Math.round(dir * nudgeSamples(s.snap.project, Number.isFinite(at) ? at : 0));
+  const moves = s.snap.project.tracks.flatMap((t) => t.regions.filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, start: Math.max(0, r.start + delta) })));
+  moveAutomationAnswer(s.snap.project, moves).then((automation) => act("nudge_regions", { ids, delta, automation }));
 }
 
 function onKey(e: KeyboardEvent) {

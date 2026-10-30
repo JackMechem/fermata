@@ -372,7 +372,7 @@ pub fn set_track_group(state: State<AppState>, ids: Vec<Id>, group: Option<Id>) 
 
 #[tauri::command]
 pub fn paste_regions(state: State<AppState>, items: Vec<(Id, Region)>, offset: i64, label: Option<String>) -> R<Made> {
-    edit_made(&state, label.as_deref().unwrap_or("Paste"), false, |s| Ok(s.paste_regions(&items, offset)))
+    edit_made(&state, label.as_deref().unwrap_or("Paste"), false, |s| Ok(s.drag_paste_regions(&items, offset)))
 }
 
 #[tauri::command]
@@ -461,18 +461,18 @@ pub fn reorder_tracks(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
 }
 
 #[tauri::command]
-pub fn move_region(state: State<AppState>, id: Id, start: i64, track: Option<Id>) -> Snapshot {
-    edit(&state, "Move Region", None, false, |s| s.move_region(id, start, track))
+pub fn move_region(state: State<AppState>, id: Id, start: i64, track: Option<Id>, automation: Option<bool>) -> Snapshot {
+    edit(&state, "Move Region", None, false, |s| s.drag_move_regions(&[daw_engine::session::RegionMove { id, start, track }], automation))
 }
 
 #[tauri::command]
 pub fn resize_region(state: State<AppState>, id: Id, start: i64, length: i64) -> Snapshot {
-    edit(&state, "Resize Region", None, false, |s| s.resize_region(id, start, length))
+    edit(&state, "Resize Region", None, false, |s| s.drag_resize_region(id, start, length))
 }
 
 #[tauri::command]
 pub fn delete_regions(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
-    edit(&state, if ids.len() > 1 { "Delete Regions" } else { "Delete Region" }, None, false, |s| s.delete_regions(&ids))
+    edit(&state, if ids.len() > 1 { "Delete Regions" } else { "Delete Region" }, None, false, |s| s.drag_delete_regions(&ids))
 }
 
 #[tauri::command]
@@ -1023,9 +1023,9 @@ pub fn set_project_notes(state: State<AppState>, notes: String) -> Snapshot {
 
 /// Moves regions by `delta` samples (Nudge Left / Right).
 #[tauri::command]
-pub fn nudge_regions(state: State<AppState>, ids: Vec<Id>, delta: i64) -> Snapshot {
+pub fn nudge_regions(state: State<AppState>, ids: Vec<Id>, delta: i64, automation: Option<bool>) -> Snapshot {
     let key = format!("nudge:{ids:?}");
-    edit(&state, "Nudge", Some(key), false, |s| s.nudge_regions(&ids, delta))
+    edit(&state, "Nudge", Some(key), false, |s| s.drag_nudge_regions(&ids, delta, automation))
 }
 
 /// Whether the project at `path` has an autosave newer than its last save.
@@ -1219,8 +1219,8 @@ pub fn pack_take_folder(state: State<AppState>, ids: Vec<Id>) -> R<Made> {
 
 /// Moves several regions as one undo step (a multi-region drag).
 #[tauri::command]
-pub fn move_regions(state: State<AppState>, moves: Vec<daw_engine::session::RegionMove>) -> Snapshot {
-    edit(&state, if moves.len() == 1 { "Move Region" } else { "Move Regions" }, None, false, |s| s.move_regions(&moves))
+pub fn move_regions(state: State<AppState>, moves: Vec<daw_engine::session::RegionMove>, automation: Option<bool>) -> Snapshot {
+    edit(&state, if moves.len() == 1 { "Move Region" } else { "Move Regions" }, None, false, |s| s.drag_move_regions(&moves, automation))
 }
 
 /// Drops the undo history (after the Project Chooser has set up a template).

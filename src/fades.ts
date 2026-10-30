@@ -5,7 +5,7 @@ import type { Id, Region, RegionContent } from "./api";
 
 export type FadeInType = "fade" | "speed_up";
 export type FadeOutType = "out" | "x" | "eqp" | "xs" | "slow_down";
-export type DragMode = "overlap" | "xfade";
+export type DragMode = "overlap" | "xfade" | "no_overlap" | "shuffle_r" | "shuffle_l";
 
 /** fades::FadeShape. Curves run from -1 to 1 (the inspector shows -100 to 100). */
 export interface FadeShape {

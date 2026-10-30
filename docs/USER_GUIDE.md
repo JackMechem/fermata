@@ -435,11 +435,37 @@ The pointer changes over a region's hot zones:
 - Moves, trims and loop ends follow the **Snap** setting (Smart, Bar, Beat or Off). Smart
   snaps to sixteenths, beats or bars depending on the zoom. Fades are never snapped.
 - A moved region comes to the front, so it plays over whatever it now overlaps.
-- **Drag mode** (the **Drag** pop-up in the tracks area's bar, next to Snap): **Overlap** (the
-  default) leaves overlapping regions as they are; **X-Fade** crossfades audio regions that a
-  move, trim, nudge, paste or Alt-drag copy leaves overlapping, over the overlap (type X), and
-  removes such a crossfade when an edit pulls the two apart. The mode is saved with the
+- **Drag mode** (the **Drag** pop-up in the tracks area's bar, next to Snap) decides what
+  moves, trims, nudges, deletes, pastes and Alt-drag copies do to the other regions on the
+  track. It applies to audio and MIDI regions, each edit stays one undo step, and while you
+  drag, the regions are drawn where the drop will leave them. The mode is saved with the
   project and isn't an undo step.
+  - **Overlap** (the default) leaves overlapping regions as they are.
+  - **No Overlap:** of two regions an edit leaves overlapping, the one that starts first is
+    shortened to end where the other starts, whichever of them you moved. A region dropped
+    into the middle of a longer one cuts the longer one off there (its tail is not kept); a
+    region dropped over the start of a shorter one is itself cut off there; a region dropped
+    exactly at another's start replaces it. Lengthening a region stops at its neighbour.
+  - **X-Fade** crossfades audio regions that an edit leaves overlapping, over the overlap
+    (type X), and removes such a crossfade when an edit pulls the two apart.
+  - **Shuffle L** keeps the regions on a track butted together. Deleting a region pulls the
+    regions after it left by its length. Trimming either edge keeps the region's start in
+    place and moves the regions after it by as much as it grew or shrank. A region dropped on
+    another goes before it if it lands on that region's first half and after it on the second
+    half, so dragging a region across its neighbour swaps the two; dropped in a gap, it snaps
+    to the end of the region before it (or stays put if there is none). Regions after it move
+    only as far as needed to make room, and the place it left closes up. Several regions
+    dragged together move as one block. Pastes and copies go in the same way.
+  - **Shuffle R** is the mirror image: deleting pulls the regions *before* the gap right, a
+    trim keeps the region's end in place, and a dropped region snaps to the start of the
+    region after it (judged by where its end lands). Where that would push regions before the
+    start of the project, the whole track's regions move right instead.
+- **Move Automation with Regions** (Settings › Editing): with **Always**, moving a region
+  along its track (drag or nudge) takes the track's automation under it along, replacing the
+  automation where it lands; the place it left is bridged with a straight line, and the curve
+  elsewhere is unchanged. **Ask** asks (Move / Don't Move) when a move would take automation
+  along. **Never** (the default) leaves automation where it is. Moves onto another track,
+  copies, and neighbours that a Shuffle mode moves leave their automation behind.
 - **Nudge:** Alt+Left / Alt+Right move the selected regions by the Nudge Value (Settings ›
   Editing; 1/16 note by default). A run of nudges is one undo step.
 - Regions on a frozen track can be selected but not changed.
@@ -1649,6 +1675,7 @@ The velocity curve applies to MIDI inputs, not to Musical Typing.
 | Nudge Value | Bar, Beat, 1/8 note, 1/16 note, 1/32 note, 10 ms, 1 ms | 1/16 note |
 | Click Moves Playhead | Anywhere in the tracks; Empty space only; Never (a click without a drag moves the playhead there, snapped to the grid) | Anywhere |
 | Anti-click Fades | 0 to 100 ms, for new recordings and imports | 0 |
+| Move Automation with Regions | Never; Always; Ask (whether moving a region along its track takes its automation along) | Never |
 | Mouse Wheel Scrolls | Vertically (tracks); Horizontally (time), for a mouse with one wheel: the wheel scrolls through time in the Tracks area and Piano Roll, and Shift+wheel scrolls vertically | Vertically |
 
 ### Plug-ins
@@ -1982,9 +2009,10 @@ blank, because WebKit then draws on the CPU.
 - **Tempo:** moving regions in the tracks area is in samples, not bars, across tempo changes;
   Move MIDI Regions with Tempo doesn't move automation or markers, isn't applied to base-tempo
   edits in Project Settings, and isn't remembered between sessions.
-- **Editing:** no Marquee tool, Fade tool or region gain drag. Drag modes are Overlap and
-  X-Fade only (no No Overlap or Shuffle). Apply Last Fade, fade marquee selections and the
-  Crossfade Time and Curve settings aren't implemented.
+- **Editing:** no Marquee tool, Fade tool or region gain drag. The Shuffle and No Overlap
+  modes don't apply to range edits in the Audio Track Editor, Repeat, or Move to New Track.
+  Apply Last Fade, fade marquee selections and the Crossfade Time and Curve settings aren't
+  implemented.
 - **Crossfades** are only between plain audio regions: not take folders, looping regions or
   muted regions (those fade out as Out). A crossfade's handle can't be grabbed where the
   incoming region is drawn over it (an overlap with the newer region on top); use the
@@ -2013,7 +2041,8 @@ blank, because WebKit then draws on the CPU.
 - **Markers** have no length editing (a marker reaches the next one); there is no Arrangement
   track.
 - **Automation:** folder stacks and Stereo Out have no automation of their own (a plug-in moved
-  to Stereo Out leaves its lanes behind), and lanes don't move with regions.
+  to Stereo Out leaves its lanes behind). Move Automation with Regions works along a track, not
+  for regions moved onto another track or copied.
 - **Piano Roll:** no Step Input, Event List or Score, and controllers have no curve shapes.
 - **Undo:** the metronome and count-in switches and the project sample rate are not undoable,
   and switching the metronome doesn't mark the project as edited.

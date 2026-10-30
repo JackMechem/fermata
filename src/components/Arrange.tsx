@@ -22,6 +22,8 @@ import { timeWheel } from "../wheel";
 import { toggleOverview } from "./Overview";
 import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
 import { playedNotes } from "../regionParams";
+import { dragOutcome, type Outcome } from "../dragModes";
+import { moveAutomationAnswer } from "../moveAutomation";
 
 // ---- peaks ----------------------------------------------------------------------------------
 
@@ -426,6 +428,8 @@ export function Arrange() {
     // Regions
     const drag = dragRef.current;
     const spbSnap = (v: number) => snapPos(project, v, getState().snapMode, getState().pxPerBeat);
+    // In the No Overlap and Shuffle drag modes, where the drag will leave every region.
+    let outcome: Map<Id, Outcome> | null = null;
     // Where each region draws, with any drag in progress applied.
     const place = (r: Region, i: number, still = false) => {
       let start = r.start;
@@ -449,13 +453,42 @@ export function Arrange() {
           length = drag.length;
         }
       }
+      const o = still ? undefined : outcome?.get(r.id);
+      if (o?.start !== undefined) {
+        if (loop != null) loop += o.start - start;
+        start = o.start;
+      }
+      const gone = o?.len !== undefined && o.len <= 0;
+      if (o?.len !== undefined && o.len < length) {
+        length = Math.max(0, o.len);
+        loop = null;
+      } else if (o?.len !== undefined) loop = start + o.len;
       // A looping region's fade-out is drawn where the loop ends.
       if (r.content.type === "audio" && loopEnd(start, length, loop) > start + length) fades = [fades?.[0] ?? r.content.fade_in, 0];
       const y = layout.tops[ti] - vp.top + 1;
       // Open take folders' rows sit below the lane; regions keep the lane's own height.
       const th = layout.heights[ti] - layout.takeRows[ti];
-      return { start, length, loop, ti, shift, fades, y, th, hidden: project.tracks[ti].hidden };
+      return { start, length, loop, ti, shift, fades, y, th, hidden: project.tracks[ti].hidden, gone };
     };
+    const mode = project.drag_mode ?? "overlap";
+    if (drag && !drag.copy && mode !== "overlap" && mode !== "xfade") {
+      const lanes = new Map(project.tracks.map((t) => [t.id, t.regions.map((r) => ({ id: r.id, start: r.start, len: regionEnd(r) - r.start }))]));
+      const grabbed = project.tracks.flatMap((t) => t.regions).find((r) => r.id === drag.grabbed);
+      if (drag.kind === "move") {
+        const moved = project.tracks.flatMap((t, i) =>
+          t.regions
+            .filter((r) => drag.ids.includes(r.id))
+            .map((r) => {
+              const g = place(r, i);
+              return { id: r.id, track: project.tracks[g.ti].id, start: g.start };
+            }),
+        );
+        outcome = dragOutcome(mode, lanes, { kind: "move", moved });
+      } else if (grabbed && (drag.kind === "left" || drag.kind === "right") && drag.start !== undefined && drag.length !== undefined) {
+        const len = loopEnd(drag.start, drag.length, grabbed.loop_end) - drag.start;
+        outcome = dragOutcome(mode, lanes, { kind: "resize", id: drag.grabbed, start: drag.start, len });
+      }
+    }
     // Loop repetitions first: region bodies cover them, as they do in playback.
     // A copy drag (Alt) leaves the originals in place and draws the copies where they'll land.
     const passes = (r: Region) => (drag?.copy && drag.ids.includes(r.id) ? [true, false] : [false]);
@@ -463,6 +496,7 @@ export function Arrange() {
       for (const r of t.regions) for (const still of passes(r)) {
         if (!isLooped(r) && !(drag?.kind === "loop" && drag.grabbed === r.id)) continue;
         const g = place(r, i, still);
+        if (g.gone) continue;
         const x0 = (g.start + g.length) * pps - vp.left;
         const x1 = loopEnd(g.start, g.length, g.loop) * pps - vp.left;
         if (g.th === 0 || x0 > W || x1 < 0 || g.y > H || g.y + g.th < 0) continue;
@@ -473,10 +507,10 @@ export function Arrange() {
     });
     project.tracks.forEach((t, i) => {
       for (const r of t.regions) for (const still of passes(r)) {
-        const { start, length, shift, fades, y, th, hidden } = place(r, i, still);
+        const { start, length, shift, fades, y, th, hidden, gone } = place(r, i, still);
         const x = start * pps - vp.left;
         const w = Math.max(2, length * pps);
-        if (th === 0 || x > W || x + w < 0 || y > H || y + th < 0) continue;
+        if (gone || th === 0 || x > W || x + w < 0 || y > H || y + th < 0) continue;
         const sel = selectedRegions.includes(r.id);
         ctx.globalAlpha = hidden ? 0.4 : 1;
         drawRegion(ctx, r, t, x, y, w, th - 3, sel, pps, W, shift, fades, r.content.type === "audio" && (sel || hoverRef.current === r.id) && !t.frozen);
@@ -915,7 +949,8 @@ export function Arrange() {
           const items = moves.map((m) => [m.track, m.reg]);
           actMade("paste_regions", { items, offset: Math.round(delta), label: "Copy Regions" }).then((made) => made && setState({ selectedRegions: made }));
         } else {
-          act("move_regions", { moves: moves.map(({ id, start, track }) => ({ id, start, track })) });
+          const plain = moves.map(({ id, start, track }) => ({ id, start, track }));
+          moveAutomationAnswer(project, plain).then((automation) => act("move_regions", { moves: plain, automation }));
         }
       } else if (d.loopEnd !== undefined) {
         const end = Math.round(d.loopEnd);

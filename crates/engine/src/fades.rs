@@ -107,6 +107,15 @@ pub enum DragMode {
     /// Moving, trimming or pasting audio regions so they overlap crossfades the overlap.
     #[serde(rename = "xfade")]
     XFade,
+    /// Regions can't overlap: the earlier of two overlapping regions is shortened to where
+    /// the later one starts (see `drag_modes.rs`).
+    NoOverlap,
+    /// The mirror image of Shuffle L: regions are pushed and pulled rightwards, an edited
+    /// region's end stays put and the regions before it move.
+    ShuffleR,
+    /// Regions stay butted together: deleting one pulls the regions after it left, an edited
+    /// region's start stays put and the regions after it move.
+    ShuffleL,
 }
 
 /// Fade gain at `x`, from 0 (silent) to 1 (full level), for curve `c` in -1..1.

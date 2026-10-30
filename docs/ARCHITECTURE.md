@@ -439,6 +439,20 @@ Details of each stage:
   through it too (`dsp::mix_regions`). The X-Fade drag mode (`Project::drag_mode`) is applied by
   `auto_crossfade` at the end of `move_region(s)`, `resize_region`, `nudge_regions` and
   `paste_regions`. The snapshot carries `crossfades` for drawing.
+- **No Overlap and Shuffle drag modes** are pure functions on a lane of `(id, start, sounding
+  length)` spans in `drag_modes.rs` (the rules are written out there; Shuffle R is Shuffle L
+  run on mirrored time). `session/drag_modes.rs` applies them on top of the plain edits: the
+  Tauri commands for user edits call `drag_move_regions`, `drag_nudge_regions`,
+  `drag_resize_region`, `drag_delete_regions` and `drag_paste_regions`, which snapshot the
+  lanes, run the plain edit and then rearrange or shorten regions. Internal edits (range
+  edits, Bounce in Place, Repeat, Move to New Track) call the plain ones and are left alone.
+  `src/dragModes.ts` mirrors the rules so the Tracks area can draw a drag's outcome.
+- **Move Automation with Regions** (`prefs.editing.move_automation`) is applied by the same
+  move and nudge calls: `auto_move.rs` carries each moved region's stretch of every lane on
+  its track to the new place, bridging the old one, and the track's lanes are resent with
+  `push_automation`; undo restores them through `restore()`'s automation diff. The commands
+  take an optional `automation` answer, which the frontend's Ask dialog
+  (`src/moveAutomation.ts`) passes.
 - **Audio tracks being recorded** are silent (or, with Autopunch, silent only inside the punch
   range, so the old take is heard before and after). Input is heard when the I button is on,
   or on armed tracks when Auto Input Monitoring is on.

@@ -18,6 +18,7 @@ import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { fmt } from "../keymap";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { DetachButton } from "./DetachButton";
+import { moveAutomationAnswer } from "../moveAutomation";
 
 /** Ruler height, with the cycle strip at its top. */
 const RULER = 24;
@@ -686,7 +687,11 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
         setCrossfadeDrag(null);
         requestDraw();
         if (!moved) return;
-        if (kind === "move" && d.start !== undefined && d.start !== r.start) act("move_region", { id: r.id, start: d.start, track: null });
+        if (kind === "move" && d.start !== undefined && d.start !== r.start) {
+          const start = d.start;
+          const project = getState().snap?.project;
+          if (project) moveAutomationAnswer(project, [{ id: r.id, start }]).then((automation) => act("move_region", { id: r.id, start, track: null, automation }));
+        }
         else if (d.fade !== undefined) act("set_region_fades", { ids: [r.id], fadeIn: kind === "fadeIn" ? d.fade : null, fadeOut: kind === "fadeOut" ? d.fade : null });
         else if (d.start !== undefined && d.length !== undefined) act("resize_region", { id: r.id, start: Math.round(d.start), length: Math.round(d.length) });
       },

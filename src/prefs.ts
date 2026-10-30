@@ -14,6 +14,7 @@ export type Startup = "chooser" | "last_project" | "empty_project";
 export type Nudge = "bar" | "beat" | "8" | "16" | "32" | "ms10" | "ms1";
 export type PdcMode = "all" | "off";
 export type ClickLocates = "anywhere" | "empty" | "off";
+export type MoveAutomation = "never" | "always" | "ask";
 
 /** Session behaviour (crates/engine/src/prefs.rs). */
 export interface Prefs {
@@ -28,7 +29,7 @@ export interface Prefs {
     folder: string | null;
   };
   midi: { disabled_inputs: string[]; thru: boolean; velocity: VelocityCurve; fixed_velocity: number };
-  editing: { fade_ms: number };
+  editing: { fade_ms: number; move_automation?: MoveAutomation };
   /** Metronome settings for new projects. */
   click: ClickSettings;
   /** Settings › Audio: plug-in delay compensation and Low Latency Mode. */
@@ -91,7 +92,7 @@ const DEFAULTS: AppSettings = {
       folder: null,
     },
     midi: { disabled_inputs: [], thru: true, velocity: "linear", fixed_velocity: 100 },
-    editing: { fade_ms: 0 },
+    editing: { fade_ms: 0, move_automation: "never" },
     click: DEFAULT_CLICK,
     latency: { compensation: "all", low_latency: false, low_latency_limit_ms: 5 },
   },

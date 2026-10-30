@@ -404,7 +404,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Split at the marquee or locators (p. 320)
 - [x] Rubber-band region selection in the Tracks area (p. 299)
 - [ ] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300)
-- [~] Drag modes (p. 295). *Overlap and X-Fade; no No Overlap, Shuffle R or Shuffle L.*
+- [x] Drag modes (p. 295): Overlap, No Overlap, X-Fade, Shuffle R and Shuffle L.
 - [ ] Alignment guides (p. 290)
 - [ ] Full snap modes and relative snap (p. 290–292)
 - [ ] Horizontal auto zoom (p. 292)
@@ -626,7 +626,8 @@ Audio File Editor (p. 499–523)
 - [ ] Relative automation (p. 629–630)
 - [ ] Automation curves (p. 59)
 - [ ] Copy and move automation, within and between tracks (p. 637)
-- [ ] Move automation with regions (p. 638)
+- [~] Move automation with regions (p. 638). *Never, Always and Ask, along a track; not onto
+  another track or for copies.*
 - [ ] Stepped automation and vertical lines (p. 638–639)
 - [ ] Points at region, marquee and selection borders (p. 632)
 - [ ] Delete redundant, visible, orphaned or all automation (key commands, p. 640)
@@ -1088,8 +1089,7 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 1. **Plug-in editor windows on Windows and macOS.** Without them, Fermata is effectively a
    Linux-only DAW for anyone using plug-ins. *macOS is done; Windows is not.*
 2. **Crossfades, fade curves and drag modes** (X-Fade and Shuffle). These are the basis of
-   clean audio editing and comping. *Fades, crossfades and the X-Fade mode are done; Shuffle
-   and No Overlap are not.*
+   clean audio editing and comping. *Done: fades, crossfades and all five drag modes.*
 3. **Marquee tool and Tracks-area Tool menu** (Scissors, Glue, Fade, Pencil, Eraser): the
    everyday editing workflow.
 4. **Plug-in presets and channel strip settings**, with compare and copy/paste. Without them,

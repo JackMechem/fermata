@@ -26,6 +26,12 @@ All notable changes to Fermata are recorded here. The format follows
   project (regions, playhead, cycle, markers, project end) with a box for the visible area:
   drag it to scroll, drag its edges to zoom, click elsewhere to jump there (View › Show
   Overview).
+- **Drag modes No Overlap, Shuffle R and Shuffle L** (the Drag pop-up in the Tracks area):
+  No Overlap shortens a region that an edit overlaps; the Shuffle modes keep a track's regions
+  butted together, closing gaps on delete and trim and swapping neighbours on a drag. Drags
+  are drawn where they will land.
+- **Settings › Editing › Move Automation with Regions** (Never, Always, Ask): a region moved
+  along its track takes the automation under it along, in the same undo step.
 - **Scroll to Playhead** button beside Catch (Alt+\`); a second Stop also brings the playhead into view.
 - **Settings › Editing › Mouse Wheel Scrolls:** Horizontally (time) makes a mouse's vertical
   wheel scroll through time in the Tracks area and Piano Roll, with Shift for vertical.

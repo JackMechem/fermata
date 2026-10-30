@@ -21,7 +21,15 @@ import type { DragMode } from "../fades";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 /** Logic's Drag pop-up; only Overlap and X-Fade so far. */
-const DRAG_LABELS: Record<DragMode, string> = { overlap: "Overlap", xfade: "X-Fade" };
+/** In the order of Logic's Drag pop-up. */
+const DRAG_LABELS: Record<DragMode, string> = { overlap: "Overlap", no_overlap: "No Overlap", xfade: "X-Fade", shuffle_r: "Shuffle R", shuffle_l: "Shuffle L" };
+const DRAG_TIPS: Record<DragMode, string> = {
+  overlap: "Overlap: regions keep their borders; the one moved last plays where they overlap",
+  no_overlap: "No Overlap: a region that an edit overlaps is shortened where the next one starts",
+  xfade: "X-Fade crossfades audio regions that a move, trim or paste leaves overlapping",
+  shuffle_r: "Shuffle R: regions stay butted together, closing gaps towards the right",
+  shuffle_l: "Shuffle L: regions stay butted together, closing gaps towards the left",
+};
 
 export function editMenu(): MenuItem[] {
   const sel = getState().selectedRegions;
@@ -161,7 +169,7 @@ export function TracksArea() {
           <span className="lb-label">Drag:</span>
           <button
             className="popup"
-            title="X-Fade crossfades audio regions that a move, trim or paste leaves overlapping"
+            title={DRAG_TIPS[dragMode]}
             onMouseDown={(e) =>
               openMenuAt(
                 e.currentTarget,

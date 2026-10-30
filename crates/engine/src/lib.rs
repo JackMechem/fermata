@@ -2,10 +2,12 @@
 
 pub mod audio_file;
 pub mod audio_io;
+pub mod auto_move;
 pub mod automation;
 pub mod clip;
 pub mod decode;
 pub mod denormals;
+pub mod drag_modes;
 pub mod dsp;
 pub mod eq;
 pub mod fades;

@@ -655,7 +655,7 @@ pub struct Project {
     /// is at bar 1 and `sig_num/sig_den` mirror it.
     #[serde(default)]
     pub signatures: Vec<SigEvent>,
-    /// The Tracks area's drag mode: whether overlapping audio regions crossfade.
+    /// The Tracks area's drag mode (Logic's Drag pop-up): what edits do to the regions they meet.
     #[serde(default)]
     pub drag_mode: DragMode,
 }
