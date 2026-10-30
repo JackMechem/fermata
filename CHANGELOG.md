@@ -24,6 +24,11 @@ All notable changes to Fermata are recorded here. The format follows
   value or double-click to type it, filter by event type, add events at the playhead with +,
   delete with Backspace; the event at the playhead is highlighted and Catch follows it. The
   note selection is shared with the Piano Roll, and the list can have a window of its own.
+- **More built-in effects:** **Chorus**, **Flanger**, **Phaser** and **Tremolo** (Modulation;
+  the Tremolo syncs to the tempo, locked to the bar), **Overdrive** and **Distortion**
+  (Distortion; Soft, Hard, Tube and Fuzz curves, 4× oversampled, level-compensated drive) and
+  **Gain** (Utility: gain, phase invert, swap, mono, balance). Each has its panel, automation,
+  factory presets and freeze and bounce support.
 - **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
   and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
   Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps

@@ -5,13 +5,16 @@ import type { Id } from "./api";
 import { CompressorPanel } from "./components/fx/Compressor";
 import { DeEsserPanel } from "./components/fx/DeEsser";
 import { DelayPanel } from "./components/fx/Delay";
+import { DistortionPanel, OverdrivePanel } from "./components/fx/Distortion";
+import { GainPanel } from "./components/fx/Gain";
 import { GatePanel } from "./components/fx/Gate";
 import { LimiterPanel } from "./components/fx/Limiter";
 import { LoudnessPanel } from "./components/fx/Loudness";
+import { ChorusPanel, FlangerPanel, PhaserPanel, TremoloPanel } from "./components/fx/Modulation";
 import { ReverbPanel } from "./components/fx/Reverb";
 import { TunerPanel } from "./components/fx/Tuner";
 
-export type FxUnit = "none" | "db" | "ms" | "hz" | "ratio" | "percent" | "semitones" | "note";
+export type FxUnit = "none" | "db" | "ms" | "hz" | "ratio" | "percent" | "semitones" | "note" | "deg";
 
 export type FxParamKind = { type: "continuous" } | { type: "toggle" } | { type: "choice"; labels: string[] };
 
@@ -68,4 +71,11 @@ export const FX_PANELS: Record<string, ComponentType<FxPanelProps>> = {
   "builtin:delay": DelayPanel,
   "builtin:tuner": TunerPanel,
   "builtin:loudness": LoudnessPanel,
+  "builtin:chorus": ChorusPanel,
+  "builtin:flanger": FlangerPanel,
+  "builtin:phaser": PhaserPanel,
+  "builtin:tremolo": TremoloPanel,
+  "builtin:overdrive": OverdrivePanel,
+  "builtin:distortion": DistortionPanel,
+  "builtin:gain": GainPanel,
 };

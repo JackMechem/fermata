@@ -150,7 +150,7 @@ const SHED_SECS: f64 = 0.25;
 
 /// What a built-in effect is told about the transport.
 fn fx_context(t: &TransportInfo) -> crate::fx::FxContext {
-    crate::fx::FxContext { sample_rate: t.sample_rate as f32, tempo: t.tempo, playing: t.playing }
+    crate::fx::FxContext { sample_rate: t.sample_rate as f32, tempo: t.tempo, playing: t.playing, position: t.position_quarters }
 }
 
 impl Plugin {

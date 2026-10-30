@@ -259,7 +259,7 @@ mod tests {
     use super::*;
 
     const SR: f32 = 48000.0;
-    const CTX: FxContext = FxContext { sample_rate: SR, tempo: 120.0, playing: true };
+    const CTX: FxContext = FxContext { sample_rate: SR, tempo: 120.0, playing: true, position: 0.0 };
 
     fn tone(db: f32, freq: f32, n: usize) -> Vec<f32> {
         let a = db_to_gain(db);

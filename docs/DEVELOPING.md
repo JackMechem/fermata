@@ -162,6 +162,7 @@ folder is kept when anything failed.
 | Example | Arguments | What it checks |
 |---|---|---|
 | `fx_check` | audio file, scratch dir | Every built-in effect in the registry: it loads and processes, parameters set, save, reload, undo and duplicate, automation drives it, latency reaches PDC, side-chains key it (live and in isolated renders), meters reach the tick, freezing bakes it in; plug-in and Channel EQ copy and paste, presets. The VST3 paste checks need **ZaMaximX2**, and print `SKIP` without it. |
+| `fx_play_check` | audio file, scratch dir | The modulation, distortion and Gain effects: each plays live, renders sanely, and a bounce of its frozen track matches the live bounce; a synced Tremolo locks to the song position; the Distortion's oversampling latency is compensated (at 0 % mix it is the dry signal, in time); Gain's invert and mono switches null a centred source. |
 | `insert_order_check` | audio file, scratch dir | Reordering Audio FX inserts: the engine runs the new order, instances keep running (same ids, nothing reloaded), undo and redo restore it, moving or copying to another strip makes room there. |
 | `stack_check` | audio file, scratch dir | Track stacks (folder and summing), groups and region edits, by the levels the meters report. |
 | `loop_check` | audio file, scratch dir | Looping regions (playback, trim, move, convert, split, join) and hidden tracks. |

@@ -20,6 +20,15 @@ test("readouts carry their units", () => {
   assert.equal(formatValue(spec({ unit: "percent" }), 0.25), "25 %");
   assert.equal(formatValue(spec({ kind: { type: "toggle" } }), 1), "On");
   assert.equal(formatValue(spec({ kind: { type: "choice", labels: ["Split", "Wide"] } }), 1), "Wide");
+  assert.equal(formatValue(spec({ unit: "deg", max: 180 }), 89.6), "90°");
+});
+
+test("degrees tidy to whole degrees and parse with or without the sign", () => {
+  const deg = spec({ unit: "deg", min: 0, max: 180 });
+  assert.equal(tidy(deg, 44.4), 44);
+  assert.equal(parseValue(deg, "90°"), 90);
+  assert.equal(parseValue(deg, "120 deg"), 120);
+  assert.equal(parseValue(deg, "400"), 180);
 });
 
 test("log controls map frequencies evenly by octave and match the engine", () => {

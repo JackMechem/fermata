@@ -622,7 +622,7 @@ mod tests {
     const SR: f32 = 48000.0;
 
     fn ctx(sr: f32) -> FxContext {
-        FxContext { sample_rate: sr, tempo: 120.0, playing: true }
+        FxContext { sample_rate: sr, tempo: 120.0, playing: true, position: 0.0 }
     }
 
     fn midi_hz(m: f64) -> f64 {

@@ -25,6 +25,7 @@ export function FxKnob({
   onTouch,
   size = 46,
   label,
+  format = formatValue,
 }: {
   spec: FxParamSpec;
   value: number;
@@ -33,6 +34,8 @@ export function FxKnob({
   size?: number;
   /** Overrides the parameter's name. */
   label?: string;
+  /** Overrides the readout (a pan as "L 35", say); typing a value still parses plain units. */
+  format?: (spec: FxParamSpec, v: number) => string;
 }) {
   const pos = useRef(toNorm(spec, value));
   const [editing, setEditing] = useState(false);
@@ -78,7 +81,7 @@ export function FxKnob({
   return (
     <div className="fx-knob" style={{ minWidth: Math.max(size + 16, 64) }}>
       <div className="fx-label">{label ?? spec.name}</div>
-      <div className="knob" style={{ width: size, height: size }} onMouseDown={down} onDoubleClick={() => onChange(spec.default)} title={`${spec.name}: ${formatValue(spec, value)}`}>
+      <div className="knob" style={{ width: size, height: size }} onMouseDown={down} onDoubleClick={() => onChange(spec.default)} title={`${spec.name}: ${format(spec, value)}`}>
         <svg width={size} height={size}>
           <path d={arc(-SWEEP, SWEEP)} className="knob-ring" />
           {Math.abs(a1 - a0) > 0.5 && <path d={arc(Math.min(a0, a1), Math.max(a0, a1))} className="knob-arc" />}
@@ -104,7 +107,7 @@ export function FxKnob({
         />
       ) : (
         <div className="fx-value" onDoubleClick={() => setEditing(true)} title="Double-click to type a value">
-          {formatValue(spec, value)}
+          {format(spec, value)}
         </div>
       )}
     </div>

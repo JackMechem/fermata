@@ -5,7 +5,7 @@ use std::time::Instant;
 fn main() {
     let block: usize = std::env::args().nth(1).and_then(|s| s.parse().ok()).unwrap_or(512);
     let sr = 48000.0f32;
-    let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true };
+    let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true, position: 0.0 };
     let budget = block as f64 / sr as f64 * 1e3;
     println!("block {block}: budget {budget:.2} ms");
     for info in fx::registry() {

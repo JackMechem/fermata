@@ -835,7 +835,7 @@ mod tests {
     const SR: f32 = 48_000.0;
 
     fn ctx(tempo: f64) -> FxContext {
-        FxContext { sample_rate: SR, tempo, playing: true }
+        FxContext { sample_rate: SR, tempo, playing: true, position: 0.0 }
     }
 
     /// A delay with clean, wet-only settings and sync off.

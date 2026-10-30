@@ -411,7 +411,7 @@ fn main() {
     let kinds_ok = json.as_array().unwrap().iter().flat_map(|e| e["params"].as_array().unwrap().iter()).all(|p| {
         let unit = p["unit"].as_str().unwrap_or("?");
         let kind = &p["kind"];
-        ["none", "db", "ms", "hz", "ratio", "percent", "semitones", "note"].contains(&unit)
+        ["none", "db", "ms", "hz", "ratio", "percent", "semitones", "note", "deg"].contains(&unit)
             && match kind["type"].as_str() {
                 Some("continuous") | Some("toggle") => true,
                 Some("choice") => kind["labels"].as_array().map(|l| !l.is_empty()).unwrap_or(false),

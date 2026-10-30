@@ -570,7 +570,7 @@ mod tests {
     }
 
     fn play_on(fx: &mut Loudness, sr: f32, freq: f64, segments: &[(f64, f64)]) -> [f32; MAX_METERS] {
-        let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true };
+        let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true, position: 0.0 };
         let mut n = 0usize;
         let (mut l, mut r) = (vec![0.0f32; 1024], vec![0.0f32; 1024]);
         for &(db, secs) in segments {
@@ -695,7 +695,7 @@ mod tests {
         // A sine at fs/4 sampled 45° off its peaks: every sample is at 0.707 of the true peak.
         let sr = 48000.0;
         let mut fx = Loudness::new(sr);
-        let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true };
+        let ctx = FxContext { sample_rate: sr, tempo: 120.0, playing: true, position: 0.0 };
         let amp = 0.5f64;
         for b in 0..20 {
             // A sine switched on abruptly really does overshoot between samples, so measure
@@ -757,7 +757,7 @@ mod tests {
         near(m[I], -30.0, 0.1, "integrated after reset");
 
         // Stopping keeps the reading; the next play start clears it.
-        let stopped = FxContext { sample_rate: 48000.0, tempo: 120.0, playing: false };
+        let stopped = FxContext { sample_rate: 48000.0, tempo: 120.0, playing: false, position: 0.0 };
         let (mut l, mut r) = (vec![0.0f32; 1024], vec![0.0f32; 1024]);
         fx.process(&mut l, &mut r, None, &stopped);
         fx.reset();
@@ -779,7 +779,7 @@ mod tests {
     #[test]
     fn passes_audio_bit_exact() {
         let mut fx = Loudness::new(44100.0);
-        let ctx = FxContext { sample_rate: 44100.0, tempo: 120.0, playing: true };
+        let ctx = FxContext { sample_rate: 44100.0, tempo: 120.0, playing: true, position: 0.0 };
         let mut seed = 99u32;
         let input: Vec<f32> = (0..8192)
             .map(|_| {

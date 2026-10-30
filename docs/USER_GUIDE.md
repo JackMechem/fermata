@@ -1156,8 +1156,10 @@ above Fermata's windows like Logic's and hide while another app is in front.
 ### Built-in effects
 
 Fermata's own effects load in any Audio FX slot like a plug-in: **Compressor**, **Limiter**,
-**Noise Gate** and **De-Esser** (Dynamics), **Reverb**, **Delay**, and **Tuner** and **Loudness
-Meter** (Metering). They are listed first, by category, in the slot menu and the Library.
+**Noise Gate** and **De-Esser** (Dynamics), **Reverb**, **Delay**, **Chorus**, **Flanger**,
+**Phaser** and **Tremolo** (Modulation), **Overdrive** and **Distortion** (Distortion), **Gain**
+(Utility), and **Tuner** and **Loudness Meter** (Metering). They are listed first, by category,
+in the slot menu and the Library.
 
 - **The panel:** click the effect's name in its slot to open its panel; click again, press Esc
   or click × to close it. There is one panel per slot. The panel's header has the power (bypass)
@@ -1183,8 +1185,9 @@ Meter** (Metering). They are listed first, by category, in the slot menu and the
 - **Automation:** every parameter appears in the track's automation lane menu under the effect's
   name, and Touch, Latch and Write record moves of the panel's knobs. While automation plays,
   the panel follows it.
-- **Latency:** an effect with lookahead reports it to [delay compensation](#plug-in-delay-compensation),
-  so the track stays in time; the slot's tooltip shows it.
+- **Latency:** an effect with lookahead or oversampling reports it to [delay
+  compensation](#plug-in-delay-compensation), so the track stays in time; the slot's tooltip
+  shows it.
 - **Freeze** renders built-in effects like any plug-in; their settings come back on unfreeze.
 - **Side Chain:** pick a track in the Side Chain pop-up and its post-fader output, instead of
   the effect's own input, drives the detector: a kick opening a gate on a bass, a vocal ducking
@@ -1303,6 +1306,96 @@ Logic's Stereo Delay and Tape Delay in one effect.
 - Changing the time never clicks: the clean modes crossfade, Tape glides.
 - 11 factory presets, including Quarter Note, Dotted Eighth, Slapback, Tape Echo and Dub
   Delay.
+
+#### Chorus
+
+A short delay swept by an LFO and mixed with the dry signal, after Logic's Chorus.
+
+- **Rate** (0.05 to 10 Hz) and **Intensity** (how far the LFO sweeps the delay, up to 6 ms
+  above **Delay**, which is 2 to 40 ms).
+- **Spread** offsets the right side's LFO from the left's (up to 180°), so even a mono source
+  comes out wide; **Mix** goes from dry (0 %) to only the chorused copy (100 %, a vibrato).
+- The picture shows the delay over two LFO cycles, left solid and right faded, with a dot where
+  the LFO is while it plays.
+- Factory presets: Classic Chorus, Subtle Width, Lush Pad, 80s Clean Guitar, Doubler, Bass
+  Chorus and Vibrato.
+
+#### Flanger
+
+A very short swept delay with feedback: the comb of notches that sweeps up and down the
+spectrum, after Logic's Flanger.
+
+- **Rate** (0.02 to 10 Hz), **Intensity** (sweeps the delay up by as much as three octaves from
+  **Delay**, 0.1 to 5 ms), **Feedback** (−100 to 100 %; negative values give a hollower sound),
+  **Spread** and **Mix** (50 % for the deepest notches).
+- Even at ±100 % feedback the repeats die away; nothing runs off.
+- Factory presets include Classic Flange, Jet Plane, Hollow Metal and Drum Bus Swirl.
+
+#### Phaser
+
+All-pass filters swept by an LFO and mixed with the dry signal, after Logic's Phaser.
+
+- **Rate**, **Depth** (sweeps up to two octaves either side of **Frequency**, 100 Hz to 4 kHz),
+  **Stages** (4, 6, 8 or 12: more stages, more notches), **Feedback** (−100 to 100 %, for a
+  more resonant sweep), **Spread** and **Mix**.
+- Changing the number of stages crossfades, so it doesn't click.
+- Factory presets include Classic Four-Stage, Slow Swirl, Funky Keys and Deep Twelve.
+
+#### Tremolo
+
+The level moves up and down with an LFO, after Logic's Tremolo.
+
+- **Sync** (on by default) sets the rate as a note value (1/1 to 1/32, dotted and triplet) at
+  the project tempo; while playing, the LFO is locked to the bar, its peak on the beat, so
+  bounces and freezes line up with what you heard. Off, **Rate** is 0.05 to 20 Hz.
+- **Depth:** 0 % leaves the sound untouched; 100 % dips to silence.
+- **Waveform:** Sine, Triangle or Square; **Smoothing** rounds the square's edges (they never
+  click, even at 0 %).
+- **Stereo Phase** offsets the right side's LFO (0 to 180°); at 180° the sound moves from side
+  to side, an auto-pan.
+- Factory presets include Eighth Notes, Vintage Amp, Sixteenth Chop, Auto-Pan and Helicopter.
+
+#### Overdrive
+
+A pedal-style soft clipper, after Logic's Overdrive.
+
+- **Drive** (0 to 40 dB), **Tone** (a low-pass after the clipping, 500 Hz to 20 kHz) and
+  **Output**.
+- The clipping is slightly asymmetric for a little even-harmonic warmth, and a gentle low cut
+  before it keeps the low end tight.
+- Factory presets: Edge of Breakup, Classic Overdrive, Warm Bass, Bright Crunch, Thick Lead
+  and Vocal Grit.
+
+#### Distortion
+
+Drive into a waveshaper, after Logic's Distortion.
+
+- **Type:** **Soft** (smooth), **Hard** (clips flat), **Tube** (asymmetric, adds even
+  harmonics) or **Fuzz** (very asymmetric and hard). Changing it crossfades.
+- **Drive** (0 to 60 dB), **Tone** (low-pass), **Output** and **Mix** (blend in the dry signal
+  for parallel distortion; the two stay in time).
+- **Drive is level-compensated:** a signal around −18 dBFS comes out at about that level
+  however hard you drive it, so Drive changes the character more than the loudness. The panel's
+  curve is drawn to fit the box for the same reason: it shows how hard and how asymmetrically
+  the signal clips.
+- Both distortion effects run 4× oversampled so the harmonics they add don't fold back as
+  harsh aliasing. That adds 38 samples of latency, which delay compensation makes up for.
+- Factory presets include Warm Saturation, Crunch, Hard Clip, Tube Grit, Fuzz Box and Parallel
+  Drum Smash.
+
+#### Gain
+
+Level, polarity and channel tools with no latency, after Logic's Gain.
+
+- **Gain** (−96 to +24 dB).
+- **Phase Invert** **Left** and **Right** flip each side's polarity.
+- **Swap L/R** exchanges the sides; **Mono** is Off, **L+R** (the average of both on each
+  side), **Left** or **Right** (that side on both).
+- **Balance** turns the opposite side down, never boosting.
+- In that order: invert, swap, mono, balance, then gain. So Phase Invert Right with Mono L+R
+  plays only what differs between the sides (and cancels a centred source).
+- Every switch glides for a few milliseconds instead of clicking; at its defaults Gain passes
+  the signal bit for bit.
 
 #### Tuner
 

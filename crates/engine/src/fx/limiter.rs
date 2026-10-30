@@ -447,7 +447,7 @@ mod tests {
     use super::*;
 
     const SR: f32 = 48000.0;
-    const CTX: FxContext = FxContext { sample_rate: SR, tempo: 120.0, playing: true };
+    const CTX: FxContext = FxContext { sample_rate: SR, tempo: 120.0, playing: true, position: 0.0 };
 
     fn limiter(settings: &[(u32, f32)]) -> Limiter {
         let mut lim = Limiter::new(SR);

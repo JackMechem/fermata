@@ -1010,7 +1010,9 @@ events, converting ticks through the file's own map. The UI is
 `crates/engine/src/fx/mod.rs` defines what every built-in effect implements:
 
 - **`Effect`**: `set_param`, `param`, `process(l, r, key, ctx)` (in place, at most `MAX_BLOCK`
-  frames, `key` being the side-chain signal or `None`), `reset`, and optionally `latency`
+  frames, `key` being the side-chain signal or `None`; `ctx` has the sample rate, tempo,
+  whether the transport plays and the song position in beats, which tempo-synced LFOs lock
+  to), `reset`, and optionally `latency`
   (lookahead, for PDC), `tail_secs` (for freeze and render tails) and `meters`. Every buffer is
   allocated in the constructor; `process`, `set_param` and `reset` must not allocate, lock or
   block.
@@ -1022,7 +1024,9 @@ events, converting ticks through the file's own map. The UI is
   choice index). Ids are stable forever, because projects and automation lanes store them.
 - Shared building blocks: `fx/biquad.rs` (an f64 RBJ biquad), `fx/dyn_common.rs` (smoothing,
   gain computers, side-chain filter, saturators, true-peak estimation for the Compressor and
-  Limiter) and the delay line and note values in `fx/delay.rs`, which the Reverb reuses.
+  Limiter), the delay line and note values in `fx/delay.rs`, which the Reverb and the
+  modulation effects reuse, `fx/lfo.rs` (LFO, smoother, feedback guard) and `fx/oversample.rs`
+  (4× half-band oversampling for the distortion effects, with a fixed latency they report).
 
 To add an effect: write `fx/<name>.rs` with `pub fn info() -> EffectInfo` and
 `pub const PRESETS`, list it in `registry()` and `factory_presets()`, and optionally add a panel
@@ -1113,6 +1117,9 @@ it like any plug-in.
 | `fx/compressor.rs`, `limiter.rs`, `gate.rs`, `deesser.rs` | Compressor (five circuits), Limiter, Noise Gate, De-Esser. |
 | `fx/reverb.rs`, `delay.rs` | Reverb (Dattorro plate and a 16-line FDN) and Delay (Stereo, Ping-Pong, Tape, Digital). |
 | `fx/tuner.rs`, `loudness.rs` | Tuner (McLeod pitch method) and Loudness Meter (BS.1770 / EBU R128). |
+| `fx/chorus.rs`, `flanger.rs`, `phaser.rs`, `tremolo.rs` | Modulation: Chorus and Flanger (one swept delay, `ModDelay`, in `chorus.rs`), Phaser (all-pass chain), Tremolo (synced to the song position). |
+| `fx/overdrive.rs`, `distortion.rs`, `gain.rs` | Overdrive and Distortion (`DriveCore` in `distortion.rs`: 4× oversampled waveshaper, compensated drive, tone, mix), Gain (a smoothed 2×2 channel matrix). |
+| `fx/lfo.rs`, `oversample.rs` | LFO and smoothing for the modulation effects; half-band FIR oversampling. |
 | `fx/biquad.rs`, `dyn_common.rs` | Shared filter and dynamics building blocks. |
 | `presets.rs` | Factory presets of the Channel EQ, user preset files. |
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |

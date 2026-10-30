@@ -960,14 +960,14 @@ sustain, modulation and expression.
 
 ### Bundled audio effects (Logic Pro Effects guide)
 
-Fermata has a built-in eight-band **Channel EQ** with analyzer, and eight built-in effects (Compressor, Limiter, Noise Gate, De-Esser, Reverb, Delay, Tuner, Loudness Meter); everything else comes from VST3.
+Fermata has a built-in eight-band **Channel EQ** with analyzer, and fifteen built-in effects (Compressor, Limiter, Noise Gate, De-Esser, Reverb, Delay, Chorus, Flanger, Phaser, Tremolo, Overdrive, Distortion, Gain, Tuner, Loudness Meter); everything else comes from VST3.
 
 - [~] EQ: Channel EQ, Linear Phase EQ, Match EQ, Single Band EQ, Vintage Console, Graphic and Tube EQs. *Channel EQ only.*
 - [~] Dynamics: Compressor (with circuit models), Limiter, Adaptive Limiter, Multipressor, Noise Gate, Expander, Enveloper, DeEsser 2. *Compressor with five circuits, Limiter (with an Adaptive mode), Noise Gate and De-Esser; no Multipressor, Expander or Enveloper.*
 - [~] Reverb: ChromaVerb, Space Designer (convolution), Quantec Room Simulator, SilverVerb. *One algorithmic Reverb (plate and five room types); no convolution.*
 - [~] Delay: Delay Designer, Echo, Stereo Delay, Tape Delay, Sample Delay. *One Delay with Stereo, Ping-Pong, Tape and Digital modes; no Delay Designer or Sample Delay.*
-- [ ] Modulation: Chorus, Ensemble, Flanger, Phaser, Microphaser, Modulation Delay, Ringshifter, Rotor Cabinet, Scanner Vibrato, Spreader, Tremolo
-- [ ] Distortion and saturation: ChromaGlow, Bitcrusher, Clip Distortion, Distortion, Distortion II, Overdrive, Phase Distortion
+- [~] Modulation: Chorus, Ensemble, Flanger, Phaser, Microphaser, Modulation Delay, Ringshifter, Rotor Cabinet, Scanner Vibrato, Spreader, Tremolo. *Chorus, Flanger, Phaser and Tremolo (tempo-synced); no Ensemble, Modulation Delay, Ringshifter, Rotor Cabinet, Scanner Vibrato or Spreader.*
+- [~] Distortion and saturation: ChromaGlow, Bitcrusher, Clip Distortion, Distortion, Distortion II, Overdrive, Phase Distortion. *Overdrive, and a Distortion with Soft, Hard, Tube and Fuzz curves (4× oversampled); no ChromaGlow, Bitcrusher or Phase Distortion.*
 - [ ] Amps and pedals: Amp Designer, Bass Amp Designer, Pedalboard
 - [ ] Filters: AutoFilter, EVOC 20 Filterbank and TrackOscillator, Fuzz-Wah, Spectral Gate, Step FX
 - [ ] Pitch: Pitch Correction, Pitch Shifter, Vocal Transformer
@@ -975,7 +975,7 @@ Fermata has a built-in eight-band **Channel EQ** with analyzer, and eight built-
 - [~] Metering: Level Meter, Loudness Meter, MultiMeter, Correlation Meter, BPM Counter, Tuner. *Loudness Meter and Tuner; no Level Meter, MultiMeter, Correlation Meter or BPM Counter.*
 - [ ] Specialised: Exciter, SubBass, Denoiser, Grooveshifter, Phat FX
 - [ ] Performance effects: Remix FX, Beat Breaker (with Cutoff, Resonance and Pan modes and randomise, p. 10)
-- [ ] Utility: Gain, Multichannel Gain, Test Oscillator, I/O
+- [~] Utility: Gain, Multichannel Gain, Test Oscillator, I/O. *Gain (with phase invert, swap, mono and balance); no Multichannel Gain, Test Oscillator or I/O.*
 - [ ] Multichannel versions for surround (p. 1002–1003)
 
 ### Sound content and loops (p. 62–64, 248–267)
@@ -1100,8 +1100,8 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
    instruments are standard in modern mixing. *Side-chains work for the built-in Compressor,
    Noise Gate and De-Esser; VST3 side-chains and multi-output instruments are missing.*
 6. **A bundled effects core:** Compressor, Limiter, Noise Gate, reverb, delay and a tuner. A new
-   project should be mixable without third-party plug-ins. *Done, with a De-Esser and Loudness
-   Meter; modulation and distortion effects are next.*
+   project should be mixable without third-party plug-ins. *Done, with a De-Esser, Loudness
+   Meter, modulation (Chorus, Flanger, Phaser, Tremolo), Overdrive, Distortion and Gain.*
 7. **Event List and Step Input**, for precise MIDI editing and for entering notes without
    playing them.
 8. **Track alternatives and project alternatives/backups**, so engineers can try ideas safely.

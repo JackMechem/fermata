@@ -6736,3 +6736,67 @@ canvas.pr-cursor-line {
 .el-space {
   position: relative;
 }
+
+/* ==== More built-in effects: modulation, distortion and Gain (components/fx/Modulation.tsx,
+   Distortion.tsx, Gain.tsx) ==== */
+
+/* The picture on top takes the spare height; the groups below share the width. */
+.fx-panel.fxm {
+  flex-direction: column;
+  min-width: 580px;
+  max-width: 900px;
+}
+
+.fxm-graph {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 112px;
+  border-radius: 6px;
+  background: var(--field);
+  box-shadow: var(--field-shadow);
+  overflow: hidden;
+}
+
+.fxm-graph canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+/* The transfer curve stays square, so it needs a little more height to read. */
+.fxm-curve {
+  min-height: 140px;
+}
+
+.fxm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.fxm-row > .fx-group {
+  flex: 1 1 auto;
+}
+
+.fxm-rate {
+  align-items: center;
+  justify-content: center;
+}
+
+.fxm-note-ms {
+  cursor: default;
+}
+
+/* A control that does nothing with the current settings (Smoothing without the Square wave). */
+.fxm-off {
+  opacity: 0.45;
+}
+
+.fxm-pedal .fx-group-body {
+  justify-content: space-evenly;
+}
+
+.fx-panel.fxm-gain {
+  min-width: 480px;
+  max-width: 720px;
+}

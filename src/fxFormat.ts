@@ -29,6 +29,8 @@ export function formatValue(spec: FxParamSpec, v: number): string {
       return `${Math.round(v * 100)} %`;
     case "semitones":
       return `${v > 0.05 ? "+" : ""}${v.toFixed(1)} st`.replace("-", "−");
+    case "deg":
+      return `${Math.round(v)}°`;
     default:
       return fixed(v, Math.abs(v) < 10 ? 2 : 1);
   }
@@ -83,6 +85,9 @@ export function tidy(spec: FxParamSpec, v: number): number {
     case "ratio":
       step = a >= 10 ? 1 : 0.1;
       break;
+    case "deg":
+      step = 1;
+      break;
     default:
       step = a >= 10 ? 0.1 : 0.01;
   }
@@ -103,7 +108,7 @@ export function parseValue(spec: FxParamSpec, text: string): number | null {
     if (t === "on") return 1;
     if (t === "off") return 0;
   }
-  const m = t.match(/^(-?\d*\.?\d+)\s*(k|khz|hz|ms|s|db|%|:1|st)?$/);
+  const m = t.match(/^(-?\d*\.?\d+)\s*(k|khz|hz|ms|s|db|%|:1|st|°|deg)?$/);
   if (!m) return null;
   let v = parseFloat(m[1]);
   const suffix = m[2] ?? "";

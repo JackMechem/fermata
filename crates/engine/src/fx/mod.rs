@@ -16,14 +16,23 @@
 //!   never renumber.
 
 pub mod biquad;
+pub mod chorus;
 pub mod compressor;
 pub mod deesser;
 pub mod delay;
+pub mod distortion;
 mod dyn_common;
+pub mod flanger;
+pub mod gain;
 pub mod gate;
+mod lfo;
 pub mod limiter;
 pub mod loudness;
+pub mod overdrive;
+mod oversample;
+pub mod phaser;
 pub mod reverb;
+pub mod tremolo;
 pub mod tuner;
 
 /// The largest block `process` is called with (the engine's `MAX_BLOCK`).
@@ -45,6 +54,8 @@ pub enum Unit {
     Semitones,
     /// Beats or notes for tempo-synced values; the panel formats them via the choice labels.
     Note,
+    /// An angle in degrees, such as an LFO's stereo phase offset.
+    Degrees,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,6 +88,9 @@ pub struct FxContext {
     /// The tempo at the block start, in BPM.
     pub tempo: f64,
     pub playing: bool,
+    /// The song position at the block's first sample, in quarter-note beats, so tempo-synced
+    /// LFOs can lock to the bar while the transport plays.
+    pub position: f64,
 }
 
 /// A side-chain (key) input: another track's signal feeding the detector.
@@ -116,7 +130,8 @@ pub struct EffectInfo {
     /// The plug-in id used in insert slots and saved projects, for example "builtin:compressor".
     pub id: &'static str,
     pub name: &'static str,
-    /// The Library and slot menu category: "Dynamics", "Reverb", "Delay", "Metering".
+    /// The Library and slot menu category: "Dynamics", "Reverb", "Delay", "Modulation",
+    /// "Distortion", "Utility", "Metering".
     pub category: &'static str,
     pub params: &'static [ParamSpec],
     /// Names of the meter values the effect reports, in order.
@@ -145,6 +160,13 @@ pub fn registry() -> Vec<EffectInfo> {
         delay::info(),
         tuner::info(),
         loudness::info(),
+        chorus::info(),
+        flanger::info(),
+        phaser::info(),
+        tremolo::info(),
+        overdrive::info(),
+        distortion::info(),
+        gain::info(),
     ]
 }
 
@@ -164,6 +186,13 @@ pub fn factory_presets(id: &str) -> &'static [FactoryPreset] {
         "builtin:delay" => delay::PRESETS,
         "builtin:tuner" => tuner::PRESETS,
         "builtin:loudness" => loudness::PRESETS,
+        "builtin:chorus" => chorus::PRESETS,
+        "builtin:flanger" => flanger::PRESETS,
+        "builtin:phaser" => phaser::PRESETS,
+        "builtin:tremolo" => tremolo::PRESETS,
+        "builtin:overdrive" => overdrive::PRESETS,
+        "builtin:distortion" => distortion::PRESETS,
+        "builtin:gain" => gain::PRESETS,
         _ => &[],
     }
 }

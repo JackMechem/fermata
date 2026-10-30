@@ -1028,7 +1028,7 @@ mod tests {
     const SR: f32 = 48_000.0;
 
     fn ctx() -> FxContext {
-        FxContext { sample_rate: SR, tempo: 120.0, playing: true }
+        FxContext { sample_rate: SR, tempo: 120.0, playing: true, position: 0.0 }
     }
 
     fn wet_only(room: usize) -> Reverb {

@@ -104,8 +104,9 @@ Goal: finish a mix and deliver it without leaving Fermata.
 - [x] FLAC and AIFF bounce; export the selected tracks
 - [ ] MP3 and AAC bounce (needs an encoder whose licence suits)
 - [ ] Delay compensation changes while playing without clicks
-- [ ] More built-in effects: modulation (chorus, flanger, phaser, tremolo), distortion, a Gain
-      utility, a linear-phase EQ
+- [x] More built-in effects: modulation (chorus, flanger, phaser, tremolo), distortion, a Gain
+      utility
+- [ ] A linear-phase EQ
 
 ## Stage 6: Advanced production
 

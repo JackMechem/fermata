@@ -73,6 +73,7 @@ fn unit_name(u: Unit) -> &'static str {
         Unit::Percent => "percent",
         Unit::Semitones => "semitones",
         Unit::Note => "note",
+        Unit::Degrees => "deg",
     }
 }
 
@@ -344,6 +345,7 @@ fn unit_label(u: Unit) -> &'static str {
         Unit::Hz => "Hz",
         Unit::Percent => "%",
         Unit::Semitones => "st",
+        Unit::Degrees => "°",
         _ => "",
     }
 }
