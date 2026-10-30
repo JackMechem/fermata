@@ -175,7 +175,7 @@ mod tests {
     }
 
     fn probe(k: usize, key: Option<Id>) -> InsertDsp {
-        InsertDsp { uid: 900 + k as Id, bypass: false, plugin: Plugin::Builtin(Box::new(BuiltinDsp::new(&probe_info(k), SR as f32, &[], key))) }
+        InsertDsp { uid: 900 + k as Id, bypass: false, plugin: Plugin::Builtin(Box::new(BuiltinDsp::new(&probe_info(k), SR as f32, &[]))), key: KeyRoute::new(key, false) }
     }
 
     fn blocks(k: usize) -> usize {

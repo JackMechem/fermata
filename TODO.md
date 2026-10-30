@@ -95,7 +95,7 @@ Goal: a VST3 user on Windows or macOS gets the same workflow as on Linux.
 - [ ] VST3 editors under native Wayland (they run through XWayland now)
 - [ ] HiDPI scaling for plug-in editors (`IPlugViewContentScaleSupport`)
 - [ ] ASIO on Windows
-- [ ] Side-chain inputs for VST3 plug-ins (their side-chain buses stay inactive)
+- [x] Side-chain inputs for VST3 plug-ins
 - [ ] Multi-output instruments
 
 ## Stage 3: Audio editing

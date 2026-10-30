@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
 use crate::fx::{EffectInfo, Effect, FxContext, Key, ParamKind, ParamSpec, MAX_METERS};
-use crate::model::Id;
 
 /// A plain value (in the parameter's units) from a normalized 0..1 one.
 pub fn to_plain(spec: &ParamSpec, norm: f32) -> f32 {
@@ -129,23 +128,17 @@ pub struct BuiltinDsp {
     fx: Box<dyn Effect>,
     specs: &'static [ParamSpec],
     shared: Arc<FxShared>,
-    /// The track whose output keys the effect (the slot's side-chain) and, kept up to date by
-    /// `Engine::resolve_routes`, its index in the engine's list.
-    pub(super) key: Option<Id>,
-    pub(super) key_idx: Option<usize>,
     meter_buf: [f32; MAX_METERS],
     /// Reset and not yet run: parameter changes (automation at the start of playback or of a
     /// render) snap instead of gliding, so the first block already plays the automated value.
     fresh: bool,
-    /// The key is the source's signal before its fader (`PluginSlot::sidechain_pre`).
-    pub(crate) key_pre: bool,
 }
 
 impl BuiltinDsp {
     /// Instantiates an effect with the given parameter values (plain units; missing ones keep
     /// their defaults). Allocates: call off the audio thread.
-    pub fn new(info: &EffectInfo, sample_rate: f32, values: &[(u32, f32)], key: Option<Id>) -> BuiltinDsp {
-        let mut b = BuiltinDsp { fx: (info.new)(sample_rate), specs: info.params, shared: Arc::new(FxShared::new(info)), key, key_idx: None, meter_buf: [0.0; MAX_METERS], fresh: true, key_pre: false };
+    pub fn new(info: &EffectInfo, sample_rate: f32, values: &[(u32, f32)]) -> BuiltinDsp {
+        let mut b = BuiltinDsp { fx: (info.new)(sample_rate), specs: info.params, shared: Arc::new(FxShared::new(info)), meter_buf: [0.0; MAX_METERS], fresh: true };
         for &(id, v) in values {
             b.set(id, v);
         }
@@ -272,7 +265,7 @@ mod tests {
     fn dynamics_report_gain_reduction_without_their_panel() {
         let ctx = FxContext { sample_rate: 48000.0, tempo: 120.0, playing: true, position: 0.0 };
         let comp = crate::fx::find("builtin:compressor").unwrap();
-        let mut b = BuiltinDsp::new(&comp, 48000.0, &[(crate::fx::compressor::param::THRESHOLD, -40.0)], None);
+        let mut b = BuiltinDsp::new(&comp, 48000.0, &[(crate::fx::compressor::param::THRESHOLD, -40.0)]);
         let shared = b.shared();
         assert_eq!(shared.take_gain_reduction(), Some(0.0));
         for _ in 0..20 {
@@ -284,10 +277,10 @@ mod tests {
         assert_eq!(shared.take_gain_reduction(), Some(0.0), "taking it starts again");
         // An effect that doesn't reduce gain has no such meter.
         let reverb = crate::fx::find("builtin:reverb").unwrap();
-        assert_eq!(BuiltinDsp::new(&reverb, 48000.0, &[], None).shared().take_gain_reduction(), None);
+        assert_eq!(BuiltinDsp::new(&reverb, 48000.0, &[]).shared().take_gain_reduction(), None);
         for id in ["builtin:limiter", "builtin:noise-gate", "builtin:deesser"] {
             let info = crate::fx::find(id).unwrap();
-            assert!(BuiltinDsp::new(&info, 48000.0, &[], None).shared().take_gain_reduction().is_some(), "{id}");
+            assert!(BuiltinDsp::new(&info, 48000.0, &[]).shared().take_gain_reduction().is_some(), "{id}");
         }
     }
 }

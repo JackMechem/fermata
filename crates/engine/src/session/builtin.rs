@@ -12,7 +12,8 @@
 //!   plays before the receiver (`Project::process_order` treats it like a send), loops are
 //!   refused, and offline renders of a track bring its key sources along (`key_sources`).
 //!   The key is taken where the source leaves its plug-ins, before its compensation delay,
-//!   so it lines up with the receiver when the source's own plug-ins add no latency.
+//!   so it lines up with the receiver when the source's own plug-ins add no latency. VST3s
+//!   with an aux input are keyed the same way (see `vst_key.rs`).
 //! - Meters and live values reach the UI in the tick, only for the slots whose panel is open
 //!   (`watch_builtin`).
 
@@ -117,10 +118,9 @@ fn store_value(slot: &mut PluginSlot, id: u32, v: f32) {
 }
 
 impl Session {
-    /// A built-in effect instance for a slot, with its saved values and side-chain.
+    /// A built-in effect instance for a slot, with its saved values.
     pub(super) fn instantiate_builtin(&mut self, info: &EffectInfo, slot: &PluginSlot) -> Plugin {
-        let mut b = BuiltinDsp::new(info, self.sample_rate() as f32, &slot.params, slot.sidechain);
-        b.key_pre = slot.sidechain_pre;
+        let b = BuiltinDsp::new(info, self.sample_rate() as f32, &slot.params);
         let shared = b.shared();
         shared.set_watched(self.fx_watch.contains(&slot.uid));
         self.fx.insert(slot.uid, shared);
@@ -211,8 +211,9 @@ impl Session {
         fx::find(&s.plugin_id)?.param(id).map(|p| p.name.to_string())
     }
 
-    /// Keys a built-in effect's side-chain from `source`'s post-fader output, or (None) back
-    /// to its own input. Refuses sources that would make a feedback loop.
+    /// Keys an insert's side-chain (a built-in effect's, or a VST3's aux input) from `source`'s
+    /// post-fader output, or (None) back to its own input. Refuses sources that would make a
+    /// feedback loop.
     pub fn set_sidechain(&mut self, track: Id, slot: usize, source: Option<Id>) -> Result<()> {
         self.check_unfrozen(&[track])?;
         if let Some(src) = source {
@@ -229,32 +230,42 @@ impl Session {
             }
         }
         let s = self.slot_ref(track, slot).and_then(|s| s.as_mut()).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
-        let info = fx::find(&s.plugin_id).ok_or_else(|| anyhow!("{} isn't a built-in effect", s.name))?;
-        if !info.sidechain && source.is_some() {
-            return Err(anyhow!("{} has no side-chain input", info.name));
+        let (uid, name) = (s.uid, s.name.clone());
+        if source.is_some() && !self.takes_key(track, slot) {
+            return Err(anyhow!("{name} has no side-chain input"));
         }
-        s.sidechain = source;
-        let uid = s.uid;
-        self.send(Cmd::Sidechain { track, uid, source });
-        // The key source must now play before this track.
-        self.send(Cmd::Order(self.project.process_order()));
-        self.update_pdc();
+        self.apply_sidechain(track, slot, uid, source);
+        // update_pdc has brought a VST3's aux input along, unless that failed.
+        if source.is_some() && self.controllers.get(&uid).is_some_and(|c| !c.key_active()) {
+            self.apply_sidechain(track, slot, uid, None);
+            return Err(anyhow!("{name} couldn't switch to its side-chain input"));
+        }
         self.dirty = true;
         Ok(())
     }
 
-    /// Takes a built-in effect's side-chain key before (`pre`) or after the source's fader.
+    fn apply_sidechain(&mut self, track: Id, slot: usize, uid: Id, source: Option<Id>) {
+        if let Some(Some(s)) = self.slot_ref(track, slot) {
+            s.sidechain = source;
+        }
+        self.send(Cmd::Sidechain { track, uid, source });
+        // The key source must now play before this track.
+        self.send(Cmd::Order(self.project.process_order()));
+        self.update_pdc();
+    }
+
+    /// Takes an insert's side-chain key before (`pre`) or after the source's fader.
     /// The key leaves the source at the same point either way, so delay compensation is
     /// unchanged.
     pub fn set_sidechain_pre(&mut self, track: Id, slot: usize, pre: bool) -> Result<()> {
         self.check_unfrozen(&[track])?;
         let s = self.slot_ref(track, slot).and_then(|s| s.as_mut()).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
-        let info = fx::find(&s.plugin_id).ok_or_else(|| anyhow!("{} isn't a built-in effect", s.name))?;
-        if !info.sidechain {
-            return Err(anyhow!("{} has no side-chain input", info.name));
+        let (uid, name) = (s.uid, s.name.clone());
+        if !self.takes_key(track, slot) {
+            return Err(anyhow!("{name} has no side-chain input"));
         }
+        let Some(Some(s)) = self.slot_ref(track, slot) else { return Ok(()) };
         s.sidechain_pre = pre;
-        let uid = s.uid;
         self.send(Cmd::SidechainPre { track, uid, pre });
         self.dirty = true;
         Ok(())
@@ -297,9 +308,16 @@ impl Session {
         t.inserts.iter().flatten().filter_map(|s| self.fx.get(&s.uid)).map(|f| f.tail_secs() as f64).fold(0.0, f64::max)
     }
 
-    /// Undo and redo for an instance that stays loaded: sends the values and side-chain that
-    /// differ between `had` and `want`.
+    /// Undo and redo for an instance that stays loaded: sends the side-chain and a built-in
+    /// effect's values that differ between `had` and `want`. A VST3's aux input follows in
+    /// `sync_vst_keys`.
     pub(super) fn restore_builtin(&mut self, track: Id, had: &PluginSlot, want: &PluginSlot) {
+        if had.sidechain != want.sidechain {
+            self.send(Cmd::Sidechain { track, uid: want.uid, source: want.sidechain });
+        }
+        if had.sidechain_pre != want.sidechain_pre {
+            self.send(Cmd::SidechainPre { track, uid: want.uid, pre: want.sidechain_pre });
+        }
         let Some(info) = fx::find(&want.plugin_id) else { return };
         if had.params != want.params {
             for p in info.params {
@@ -308,12 +326,6 @@ impl Session {
                     self.send(Cmd::FxParam { track, uid: want.uid, id: p.id, value: v });
                 }
             }
-        }
-        if had.sidechain != want.sidechain {
-            self.send(Cmd::Sidechain { track, uid: want.uid, source: want.sidechain });
-        }
-        if had.sidechain_pre != want.sidechain_pre {
-            self.send(Cmd::SidechainPre { track, uid: want.uid, pre: want.sidechain_pre });
         }
     }
 

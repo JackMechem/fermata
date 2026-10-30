@@ -89,6 +89,7 @@ mod zero_crossings;
 mod region_gain;
 mod musical_moves;
 mod track_off;
+mod vst_key;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -759,14 +760,14 @@ impl Session {
             Plugin::Synth(Box::new(BasicSynth::new(sr as f32)))
         } else {
             let desc = self.find_plugin(&slot.plugin_id).ok_or_else(|| anyhow!("plug-in not found: {}", slot.name))?.clone();
-            let (proc, ctrl) = vst3_host::instantiate(&desc, sr, MAX_BLOCK).map_err(|e| anyhow!(e))?;
+            let (proc, ctrl) = vst3_host::instantiate_keyed(&desc, sr, MAX_BLOCK, slot.sidechain.is_some()).map_err(|e| anyhow!(e))?;
             if let Some(st) = &slot.state {
                 ctrl.load_state(&decode_state(st));
             }
             self.controllers.insert(slot.uid, ctrl);
             Plugin::Vst(Box::new(proc))
         };
-        Ok(InsertDsp { uid: slot.uid, bypass: slot.bypass, plugin })
+        Ok(InsertDsp { uid: slot.uid, bypass: slot.bypass, plugin, key: KeyRoute::new(slot.sidechain, slot.sidechain_pre) })
     }
 
     fn build_track(&mut self, t: &Track) -> Box<TrackDsp> {

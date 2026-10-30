@@ -24,4 +24,4 @@ mod macos;
 
 pub use module::PluginDescriptor;
 pub use host::Gesture;
-pub use plugin::{instantiate, MidiEvent, ParamInfo, PluginController, PluginProcessor, PluginState, TransportInfo};
+pub use plugin::{instantiate, instantiate_keyed, BusLayout, KeyInput, MidiEvent, ParamInfo, PluginController, PluginProcessor, PluginState, TransportInfo};

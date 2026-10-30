@@ -12,7 +12,8 @@ import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { OutputSlot, SendsSection } from "./Sends";
 import { StripLatencyBadge, useSlotLatency } from "./Latency";
 import { refuseFrozen } from "../freeze";
-import { fxInfo, isBuiltinFx, loadPlugin, slotMenu, toggleFxPanel } from "../fxHost";
+import { fxInfo, isBuiltinFx, loadPlugin, slotMenu, slotSideChainItems, toggleFxPanel } from "../fxHost";
+import { keyName } from "../sideChain";
 import { startSlotDrag } from "../slotDrag";
 import { fxKey, usePanelShown } from "../fxDockState";
 import { clipResetTargets, isClip, peakText, reducesGain } from "../stripMeters";
@@ -48,6 +49,8 @@ export function PluginSlotView({
   // A VST3 that isn't installed here: the slot keeps its settings for where it is.
   const missing = useStore((s) => !!plugin && !!s.snap?.missing?.includes(plugin.uid));
   const rate = useStore((s) => s.snap?.project.sample_rate ?? 48000);
+  // A VST3 keyed by another track: built-in effects show theirs in the panel.
+  const keyedBy = useStore((s) => (plugin && s.snap?.key_inputs?.includes(plugin.uid) ? keyName(s.snap.project.tracks, plugin) : null));
   const menu = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (e.button !== 0 || refuseFrozen([trackId])) return;
@@ -58,7 +61,7 @@ export function PluginSlotView({
       remove: () => api.removePlugin(trackId, slot),
     });
     const r = (e.currentTarget as HTMLElement).closest(".slot")!.getBoundingClientRect();
-    openMenu(r.right - 4, r.top, items);
+    openMenu(r.right - 4, r.top, [...slotSideChainItems(trackId, slot, plugin), ...items]);
   };
   // Right-click: Copy and Paste Plug-in.
   const context = (e: React.MouseEvent) => {
@@ -78,7 +81,7 @@ export function PluginSlotView({
   }
   const open = openEditors.includes(plugin.uid) || fxOpen;
   return (
-    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "") + (missing ? " missing" : "")} {...target} onContextMenu={context}>
+    <div className={"slot filled" + (plugin.bypass ? " bypassed" : "") + (open ? " editing" : "") + (instrument ? " instrument" : "") + (frozen ? " frozen" : "") + (missing ? " missing" : "") + (keyedBy ? " keyed" : "")} {...target} onContextMenu={context}>
       <button
         className="slot-power"
         title={plugin.bypass ? "Turn on" : "Bypass"}
@@ -92,7 +95,7 @@ export function PluginSlotView({
       </button>
       <span
         className="slot-name"
-        title={missing ? `${plugin.name} — not installed on this computer; its settings are kept with the project` : `${plugin.name}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : instrument ? " — click to open" : " — click to open, drag to move (Alt to copy)"}`}
+        title={missing ? `${plugin.name} — not installed on this computer; its settings are kept with the project` : `${plugin.name}${keyedBy ? ` — side chain: ${keyedBy}` : ""}${latency ? ` — latency ${latency} samples (${((latency * 1000) / rate).toFixed(1)} ms)` : ""}${frozen ? " — frozen" : instrument ? " — click to open" : " — click to open, drag to move (Alt to copy)"}`}
         onMouseDown={(e) => {
           e.stopPropagation();
           if (e.button !== 0) return;

@@ -44,6 +44,8 @@ pub struct Snapshot {
     crossfades: Vec<Crossfade>,
     /// Instance ids of VST3 slots whose plug-in isn't installed (or didn't load).
     missing: Vec<Id>,
+    /// Instance ids of loaded VST3 inserts with a side-chain input.
+    key_inputs: Vec<Id>,
     /// The notes of MIDI regions with playback parameters as they play, for drawing.
     played: Vec<PlayedNotes>,
 }
@@ -66,6 +68,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         warning: None,
         crossfades: s.crossfades(),
         missing: s.missing_plugins().iter().map(|p| p.uid).collect(),
+        key_inputs: s.vst_key_inputs(),
         played: s.played_notes(),
     }
 }
@@ -1314,7 +1317,7 @@ pub fn builtin_params(state: State<AppState>, uid: Id) -> Vec<(u32, f32)> {
     with(&state, |s| s.builtin_params(uid))
 }
 
-/// Keys a built-in effect's side-chain from a track (null: its own input); refuses loops.
+/// Keys an insert's side-chain from a track (null: its own input); refuses loops.
 #[tauri::command]
 pub fn set_sidechain(state: State<AppState>, track: Id, slot: i64, source: Option<Id>) -> R<Snapshot> {
     try_edit(&state, "Side Chain", None, false, |s| s.set_sidechain(track, slot_index(slot), source))
@@ -1589,7 +1592,7 @@ pub fn set_vca_parent(state: State<AppState>, id: Id, parent: Option<Id>) -> R<S
     try_edit(&state, "Assign VCA", None, false, |s| s.set_vca_parent(id, parent))
 }
 
-/// Takes a built-in effect's side-chain key before (`pre`) or after the source's fader.
+/// Takes an insert's side-chain key before (`pre`) or after the source's fader.
 #[tauri::command]
 pub fn set_sidechain_pre(state: State<AppState>, track: Id, slot: i64, pre: bool) -> R<Snapshot> {
     try_edit(&state, "Side Chain", None, false, |s| s.set_sidechain_pre(track, slot_index(slot), pre))

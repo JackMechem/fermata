@@ -19,6 +19,12 @@ All notable changes to Fermata are recorded here. The format follows
   muted track keeps using. Its plug-ins stay loaded and carry on when it's back on, without a
   tail or a click. A stack's Off reaches its subtracks. An Off track can't record, and doesn't
   appear in bounces or exports. It is saved with the project.
+- **Side-chain inputs for VST3 plug-ins:** a plug-in with an aux input (LSP's Sidechain
+  Compressor and Gate, say) gets a **Side Chain** item in its slot's menus, with the same choice
+  of source and Pre / Post as a built-in effect's pop-up. With a source its aux input turns on
+  and hears that track; with none it stays off and the plug-in uses its internal key. It works
+  through Off tracks, Freeze, bounces, undo, duplicating and channel strip settings, and is
+  saved with the project.
 
 ### Fixed
 

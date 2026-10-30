@@ -76,8 +76,8 @@ pub struct PluginSlot {
     /// missing here play at their defaults.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub params: Vec<(u32, f32)>,
-    /// The track whose post-fader output keys a built-in effect's side-chain (None: the
-    /// effect's detector listens to its own input).
+    /// The track whose post-fader output keys the plug-in's side-chain (None: a built-in
+    /// effect's detector listens to its own input, a VST3's aux input stays inactive).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidechain: Option<Id>,
     /// The side-chain key is taken before the source's fader (still silenced by its mute)

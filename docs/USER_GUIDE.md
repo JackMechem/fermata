@@ -1073,7 +1073,7 @@ heavy tracks you aren't listening to.
   keeps its own switch, which counts again when the stack is back on.
 - **Auxes:** an Off aux passes nothing. Tracks sending to it play on and just lose that send.
   Stereo Out has no power button.
-- **Side-chains:** an effect keyed from an Off track hears silence.
+- **Side-chains:** an effect or VST3 keyed from an Off track hears silence.
 - **Mute and Solo** work independently: an Off track that is unmuted stays silent, and comes back
   with whatever Mute and Solo are set to.
 - **Recording:** an Off track can't record or monitor its input. It keeps its R button, and
@@ -1682,6 +1682,16 @@ and macOS, `%APPDATA%\fermata\channel-strips` on Windows).
   tracks selected, **Paste to Selected Tracks** does them all. Each paste is one undo step, and
   the copy survives opening another project. Instruments paste only into instrument slots,
   effects only into Audio FX slots.
+- **Side chain:** a VST3 with a side-chain input (LSP's Sidechain Compressor and Gate, say) has
+  a **Side Chain** item at the top of its slot's menus, the arrow and the right-click, since its
+  editor is a window of its own. Pick a track and it keys the plug-in, as with a [built-in
+  effect](#built-in-effects): the same list, **Pre Fader** / **Post Fader**, refused loops,
+  bounces and freezes that play the source along. The slot shows **SC**, and its tooltip the
+  source. **None** turns the input off again. Choosing a source or None makes the plug-in stop
+  for a moment: it fades to its dry signal and back, and its tail is lost. Changing from one
+  source to another doesn't. Many such plug-ins have their own setting for where the key comes
+  from (LSP's is "Sidechain type": External); it has to be set to external to hear this input,
+  and what it does with no source is up to the plug-in. Instruments can't be keyed.
 - Plug-in settings are saved in the project and restored on undo.
 - Settings › Plug-ins (the Plug-in Manager) lists every scanned plug-in and lets you switch
   some off, so they don't appear in the Library and slot menus (projects that use them still

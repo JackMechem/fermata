@@ -573,7 +573,7 @@ mod tests {
     fn an_instance_starts_at_its_saved_values() {
         // As the session makes one: no waiting for the worker once it plays.
         let info = info();
-        let mut b = crate::dsp::BuiltinDsp::new(&info, SR, &[(gain(4), 12.0), (freq(4), 1000.0)], None);
+        let mut b = crate::dsp::BuiltinDsp::new(&info, SR, &[(gain(4), 12.0), (freq(4), 1000.0)]);
         let sine: Vec<f32> = (0..8192).map(|i| 0.25 * (std::f32::consts::TAU * 1000.0 * i as f32 / SR).sin()).collect();
         let (mut l, mut r) = (sine.clone(), sine);
         for (bl, br) in l.chunks_mut(512).zip(r.chunks_mut(512)) {

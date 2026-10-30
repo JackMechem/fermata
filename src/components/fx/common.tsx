@@ -7,7 +7,8 @@ import type { FxParamSpec } from "../../fx";
 import { clampValue, formatValue, fromNorm, parseValue, tidy, toNorm } from "../../fxFormat";
 import { findFxSlot } from "../../fxHost";
 import { useStore } from "../../store";
-import { openMenuAt, type MenuItem } from "../Menu";
+import { openMenuAt } from "../Menu";
+import { keySourceItems } from "../../sideChain";
 import { useFxLearn } from "../../learn";
 
 export { formatValue, toNorm, fromNorm, tidy, parseValue, clampValue };
@@ -215,12 +216,7 @@ export function FxSideChain({ uid }: { uid: Id }) {
   const setPre = (on: boolean) => on !== pre && act("set_sidechain_pre", { track: at.track, slot: at.slot, pre: on });
   const name = source === null ? "None" : project.tracks.find((t) => t.id === source)?.name ?? "None";
   const open = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const items: MenuItem[] = [{ label: "None", checked: source === null, onClick: () => set(null) }, { separator: true }];
-    for (const t of project.tracks) {
-      if (t.id === at.track || t.kind === "folder") continue;
-      items.push({ label: t.name, checked: t.id === source, onClick: () => set(t.id) });
-    }
-    openMenuAt(e.currentTarget, items);
+    openMenuAt(e.currentTarget, keySourceItems(project.tracks, at.track, source, set));
   };
   return (
     <span className="fx-sidechain">

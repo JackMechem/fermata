@@ -78,6 +78,47 @@ fn check(name: &str, ok: bool) {
 
 const BLOCK: usize = 256;
 
+fn lsp_compressor() -> Option<vst3_host::PluginDescriptor> {
+    let bundles = vst3_host::scan::find_bundles(&vst3_host::scan::default_search_paths());
+    let lsp = bundles.iter().filter(|b| b.to_string_lossy().contains("lsp-plugins")).flat_map(|b| vst3_host::scan::scan_bundle(b).unwrap_or_default());
+    lsp.into_iter().find(|d| d.name == "Sidechain Compressor Stereo")
+}
+
+/// A VST3's key and its gate around a change of its buses, on the processor directly: the
+/// `Cmd::VstGate`s arrive on the audio thread, the `setActive` in between runs off it.
+fn vst_gate(d: &vst3_host::PluginDescriptor) {
+    let (mut p, mut c) = vst3_host::instantiate_keyed(d, 48000.0, BLOCK, false).unwrap();
+    let t = vst3_host::TransportInfo { sample_rate: 48000.0, tempo: 120.0, sig_num: 4, sig_den: 4, ..Default::default() };
+    let (mut l, mut r) = (vec![0.1f32; BLOCK], vec![0.1f32; BLOCK]);
+    let key = vec![0.5f32; BLOCK];
+    let mut run = |p: &mut vst3_host::PluginProcessor, keyed: bool, blocks: usize| {
+        for _ in 0..blocks {
+            COUNTING.with(|c| c.set(true));
+            p.process_keyed(&mut l, &mut r, keyed.then_some((&key[..], &key[..])), &[], &t);
+            COUNTING.with(|c| c.set(false));
+        }
+    };
+    run(&mut p, false, 100);
+    let mark = ALLOCS.load(Ordering::Relaxed);
+    for on in [true, false, true] {
+        COUNTING.with(|c| c.set(true));
+        p.close_gate();
+        COUNTING.with(|c| c.set(false));
+        run(&mut p, !on, 4);
+        COUNTING.with(|c| c.set(true));
+        p.shut_gate();
+        COUNTING.with(|c| c.set(false));
+        run(&mut p, !on, 1);
+        c.set_key_active(on).unwrap();
+        COUNTING.with(|c| c.set(true));
+        p.open_gate(0);
+        COUNTING.with(|c| c.set(false));
+        run(&mut p, on, 50);
+    }
+    let n = ALLOCS.load(Ordering::Relaxed) - mark;
+    check(&format!("a VST3's key and its gate allocate nothing ({n})"), n == 0);
+}
+
 fn main() {
     let scratch = PathBuf::from(std::env::args().nth(1).expect("scratch dir"));
     let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
@@ -104,6 +145,15 @@ fn main() {
     check("the counter sees an allocation", ALLOCS.swap(0, Ordering::Relaxed) == 1 && v.capacity() == SHOW);
     drop(v);
     SHOWN.store(0, Ordering::Relaxed);
+    // A real VST3 keyed by another track, where one is installed.
+    let lsp = lsp_compressor();
+    let vst_key = lsp.as_ref().map(|d| {
+        s.set_plugins(vec![d.clone()]);
+        let u = s.set_plugin(w.a2, 6, &d.id).unwrap();
+        s.set_sidechain(w.a2, 6, Some(w.a1)).unwrap();
+        check("the VST3 hears its key", s.vst_key_active(u) == Some(true));
+        u
+    });
     let latency = s.pdc_total();
 
     let engine = s.engine_for_checks();
@@ -191,6 +241,15 @@ fn main() {
         run(&mut guard, 4, true);
         s.idle();
     }
+    if vst_key.is_some() {
+        // Between sources and from before to after the fader the bus stays as it is.
+        s.set_sidechain_pre(w.a2, 6, true).unwrap();
+        run(&mut guard, 50, true);
+        s.set_sidechain(w.a2, 6, Some(w.inst)).unwrap();
+        run(&mut guard, 50, true);
+        s.set_sidechain(w.a2, 6, Some(w.a1)).unwrap();
+        run(&mut guard, 50, true);
+    }
     let edits = ALLOCS.load(Ordering::Relaxed) - mark;
     check(&format!("edits while playing allocate nothing inside process ({edits})"), edits == 0);
 
@@ -211,6 +270,10 @@ fn main() {
     check(&format!("it played something (peak {peak:.3})"), peak > 0.01);
     drop(guard);
     s.stop();
+    match &lsp {
+        Some(d) => vst_gate(d),
+        None => println!("SKIP the VST3 side-chain: LSP's Sidechain Compressor isn't installed"),
+    }
 
     if FAILED.load(Ordering::Relaxed) {
         std::process::exit(1);

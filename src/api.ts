@@ -18,7 +18,7 @@ export interface PluginSlot {
   bypass: boolean;
   /** A built-in effect's values: [parameter id, plain value]; missing ids are at their default. */
   params?: [number, number][];
-  /** The track keying a built-in effect's side-chain. */
+  /** The track keying the plug-in's side-chain (a built-in effect's, or a VST3's aux input). */
   sidechain?: Id | null;
   /** The side-chain key is taken before the source's fader (absent: after it). */
   sidechain_pre?: boolean;
@@ -409,6 +409,8 @@ export interface Snapshot {
   audio: AudioStatus;
   midi_inputs: string[];
   open_editors: Id[];
+  /** Instance ids of loaded VST3 inserts with a side-chain input. */
+  key_inputs?: Id[];
   /** Track that live MIDI (hardware or Musical Typing) plays. */
   midi_target: string | null;
   /** Labels of the next undo / redo steps. */

@@ -33,7 +33,7 @@ use super::*;
 
 /// The latest latency a plug-in may report before it is treated as broken (about ten seconds
 /// at 48 kHz).
-const MAX_PLUGIN_LATENCY: u32 = 1 << 19;
+pub(super) const MAX_PLUGIN_LATENCY: u32 = 1 << 19;
 /// Delay lines are allocated with room for at least this many frames, so small latency
 /// changes don't need a new one.
 const MIN_LINE: usize = 8192 - MAX_BLOCK;
@@ -171,6 +171,8 @@ impl Session {
     /// up again. Cheap when nothing changed: only tracks whose compensation moved get a
     /// command. Called whenever routing, plug-ins or the settings change.
     pub(super) fn update_pdc(&mut self) {
+        // A side-chain change activates a VST3's aux input, which may change its latency.
+        self.sync_vst_keys();
         let on = self.prefs.latency.compensation == PdcMode::All;
         let low_latency = self.prefs.latency.low_latency;
         let sr = self.sample_rate();

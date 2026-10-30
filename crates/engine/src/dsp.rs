@@ -181,6 +181,36 @@ pub struct InsertDsp {
     pub uid: Id,
     pub bypass: bool,
     pub plugin: Plugin,
+    /// Where its side-chain key comes from.
+    pub key: KeyRoute,
+}
+
+/// An insert's side-chain source (`PluginSlot::sidechain`), for built-in effects and VST3s alike.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KeyRoute {
+    /// The track whose output keys the plug-in.
+    pub source: Option<Id>,
+    /// The source's index in the engine's list, kept up to date by `Engine::resolve_routes`.
+    idx: Option<usize>,
+    /// The key is the source's signal before its fader (`PluginSlot::sidechain_pre`).
+    pub pre: bool,
+}
+
+impl KeyRoute {
+    pub fn new(source: Option<Id>, pre: bool) -> KeyRoute {
+        KeyRoute { source, idx: None, pre }
+    }
+}
+
+/// What `Session::sync_vst_keys` tells a VST3's processor while it changes the plug-in's buses.
+#[derive(Debug, Clone, Copy)]
+pub enum VstGate {
+    /// Fade to dry and stop.
+    Close,
+    /// Stop now, for a plug-in that isn't running or didn't finish fading.
+    Shut,
+    /// Run again, fading in after this many frames (its latency).
+    Open(u32),
 }
 
 pub enum RegionDsp {
@@ -280,7 +310,7 @@ pub struct TrackDsp {
     /// Plug-in delay compensation (see `pdc.rs`).
     pdc: PdcParams,
     delay: Option<Box<DelayLine>>,
-    /// Another strip's built-in effect is keyed by this track: its post-fader output is kept
+    /// Another strip's insert is keyed by this track: its post-fader output is kept
     /// here for the block (set by `resolve_routes`).
     keyed: bool,
     key_l: Vec<f32>,
@@ -437,10 +467,12 @@ pub enum Cmd {
     Autopunch { range: Option<(i64, i64)>, capture: (i64, i64) },
     /// Sets a built-in effect's parameter (plain units) on a track (or MASTER_ID).
     FxParam { track: Id, uid: Id, id: u32, value: f32 },
-    /// Which track keys a built-in effect's side-chain (None: it listens to its input).
+    /// Which track keys an insert's side-chain (None: it listens to its input).
     Sidechain { track: Id, uid: Id, source: Option<Id> },
     /// Whether a built-in effect's side-chain key is taken before the source's fader.
     SidechainPre { track: Id, uid: Id, pre: bool },
+    /// A VST3 stops or starts, around a change of its buses.
+    VstGate { track: Id, uid: Id, gate: VstGate },
     /// Settings › MIDI › Chase: whether starting or jumping mid-region starts the notes held
     /// over the playhead, and sends the controller values in effect there.
     Chase { notes: bool, controllers: bool },
@@ -777,7 +809,7 @@ pub fn mix_regions(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32]
     play_audio(regions, pos, l, r, (0, 0));
 }
 
-/// The side-chain signal for a built-in effect keyed by the track at `idx` (played earlier in
+/// The side-chain signal for an insert keyed by the track at `idx` (played earlier in
 /// the block): its post-fader output (or with `pre`, its signal before the fader), or None when
 /// there is none (no source, or one an isolated render leaves out).
 fn key_signal<'a>(tracks: &'a [Box<TrackDsp>], idx: Option<usize>, pre: bool, iso: Option<&Isolate>, n: usize) -> crate::fx::Key<'a> {
@@ -918,7 +950,7 @@ impl Engine {
         self.resolve_keys();
     }
 
-    /// Finds each built-in effect's side-chain source. A key must come from a track played
+    /// Finds each insert's side-chain source. A key must come from a track played
     /// earlier in the list (Stereo Out's plug-ins can be keyed by any track); others hear
     /// nothing.
     fn resolve_keys(&mut self) {
@@ -931,13 +963,12 @@ impl Engine {
             let count = if i < n { self.tracks[i].inserts.len() } else { self.master_inserts.len() };
             for k in 0..count {
                 let slots = if i < n { &self.tracks[i].inserts } else { &self.master_inserts };
-                let Some(InsertDsp { plugin: Plugin::Builtin(b), .. }) = &slots[k] else { continue };
-                let key = b.key;
-                let pre = b.key_pre;
-                let idx = key.and_then(|id| self.tracks[..i].iter().position(|t| t.id == id));
+                let Some(ins) = &slots[k] else { continue };
+                let KeyRoute { source, pre, .. } = ins.key;
+                let idx = source.and_then(|id| self.tracks[..i].iter().position(|t| t.id == id));
                 let slots = if i < n { &mut self.tracks[i].inserts } else { &mut self.master_inserts };
-                if let Some(InsertDsp { plugin: Plugin::Builtin(b), .. }) = &mut slots[k] {
-                    b.key_idx = idx;
+                if let Some(ins) = &mut slots[k] {
+                    ins.key.idx = idx;
                 }
                 if let Some(j) = idx {
                     if pre {
@@ -961,10 +992,15 @@ impl Engine {
         }
     }
 
+    /// The insert `uid` on a track's (or Stereo Out's) inserts.
+    fn insert_mut(&mut self, track: Id, uid: Id) -> Option<&mut InsertDsp> {
+        let slots = if track == MASTER_ID { &mut self.master_inserts } else { &mut self.track_mut(track)?.inserts };
+        slots.iter_mut().flatten().find(|i| i.uid == uid)
+    }
+
     /// The built-in effect `uid` on a track's (or Stereo Out's) inserts.
     fn builtin_mut(&mut self, track: Id, uid: Id) -> Option<&mut BuiltinDsp> {
-        let slots = if track == MASTER_ID { &mut self.master_inserts } else { &mut self.track_mut(track)?.inserts };
-        slots.iter_mut().flatten().find(|i| i.uid == uid).and_then(|i| match &mut i.plugin {
+        self.insert_mut(track, uid).and_then(|i| match &mut i.plugin {
             Plugin::Builtin(b) => Some(&mut **b),
             _ => None,
         })
@@ -1224,16 +1260,27 @@ impl Engine {
                 }
             }
             Cmd::Sidechain { track, uid, source } => {
-                if let Some(b) = self.builtin_mut(track, uid) {
-                    b.key = source;
+                if let Some(i) = self.insert_mut(track, uid) {
+                    i.key.source = source;
                 }
                 self.resolve_keys();
             }
             Cmd::SidechainPre { track, uid, pre } => {
-                if let Some(b) = self.builtin_mut(track, uid) {
-                    b.key_pre = pre;
+                if let Some(i) = self.insert_mut(track, uid) {
+                    i.key.pre = pre;
                 }
                 self.resolve_keys();
+            }
+            Cmd::VstGate { track, uid, gate } => {
+                if let Some(InsertDsp { plugin: Plugin::Vst(p), bypass, .. }) = self.insert_mut(track, uid) {
+                    match gate {
+                        // A bypassed plug-in isn't running, so nothing would finish the fade.
+                        VstGate::Close if *bypass => p.shut_gate(),
+                        VstGate::Close => p.close_gate(),
+                        VstGate::Shut => p.shut_gate(),
+                        VstGate::Open(settle) => p.open_gate(settle),
+                    }
+                }
             }
             Cmd::Chase { notes, controllers } => self.chase = (notes, controllers),
         }
@@ -1685,11 +1732,10 @@ impl Engine {
             for (k, slot) in t.inserts.iter_mut().enumerate().filter(|_| fx) {
                 let Some(ins) = slot else { continue };
                 if !ins.bypass && ll_skip & (1 << k) == 0 {
+                    let key = key_signal(before, ins.key.idx, ins.key.pre, iso, n);
                     match &mut ins.plugin {
-                        Plugin::Builtin(b) => {
-                            let key = key_signal(before, b.key_idx, b.key_pre, iso, n);
-                            b.process(l, r, key, &fx_context(&transport));
-                        }
+                        Plugin::Builtin(b) => b.process(l, r, key, &fx_context(&transport)),
+                        Plugin::Vst(p) => p.process_keyed(l, r, key, &[], &transport),
                         p => p.process(l, r, &[], &transport),
                     }
                     check_output(&self.status, ins, l, r);
@@ -1846,8 +1892,10 @@ impl Engine {
         let (bl, br) = (&mut self.bus_l[..n], &mut self.bus_r[..n]);
         for ins in self.master_inserts.iter_mut().flatten().filter(|_| master_fx) {
             if !ins.bypass {
+                let key = key_signal(&self.tracks, ins.key.idx, ins.key.pre, None, n);
                 match &mut ins.plugin {
-                    Plugin::Builtin(b) => b.process(bl, br, key_signal(&self.tracks, b.key_idx, b.key_pre, None, n), &fx_context(&transport)),
+                    Plugin::Builtin(b) => b.process(bl, br, key, &fx_context(&transport)),
+                    Plugin::Vst(p) => p.process_keyed(bl, br, key, &[], &transport),
                     p => p.process(bl, br, &[], &transport),
                 }
                 check_output(&self.status, ins, bl, br);

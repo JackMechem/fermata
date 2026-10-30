@@ -5,7 +5,7 @@
 // platform is a no-op on the other.
 #![cfg_attr(target_env = "msvc", allow(clippy::unnecessary_cast))]
 
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use vst3::Steinberg::Vst::*;
@@ -20,6 +20,22 @@ use crate::util::{unhex, utf16};
 
 /// Parameter changes the host can queue for one `process` call (automation).
 const MAX_QUEUED: usize = 512;
+
+/// How long a plug-in crossfades with its dry signal around a side-chain change.
+const GATE_FADE_SECS: f64 = 0.005;
+
+/// A side-chain signal for one block: left and right.
+pub type KeyInput<'a> = Option<(&'a [f32], &'a [f32])>;
+
+/// One of a plug-in's audio buses, as it reports it.
+#[derive(Debug, Clone)]
+pub struct BusLayout {
+    pub name: String,
+    pub input: bool,
+    pub aux: bool,
+    pub default_active: bool,
+    pub channels: usize,
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct MidiEvent {
@@ -67,6 +83,8 @@ struct Shared {
     separate_controller: bool,
     connections: Option<(ComPtr<IConnectionPoint>, ComPtr<IConnectionPoint>)>,
     _handler: ComWrapper<ComponentHandler>,
+    /// The audio thread has stopped calling the processor (see `Gate`).
+    parked: AtomicBool,
 }
 
 unsafe impl Send for Shared {}
@@ -108,6 +126,21 @@ impl Bus {
     }
 }
 
+/// Whether the processor runs. Activating a bus means `setActive(false)` and back on the main
+/// thread, which `process` must stay out of. The audio thread can't wait for that, so the signal
+/// crossfades to dry, the plug-in stops, its dry signal passes while the main thread works, and
+/// it crossfades back. See `Session::sync_vst_keys`.
+#[derive(Debug, Clone, Copy)]
+enum Gate {
+    Open,
+    /// Frames left of the fade to dry.
+    Closing(u32),
+    Shut,
+    /// Frames to wait before the fade back, so a latent plug-in's first output has arrived,
+    /// and frames left of the fade.
+    Opening { settle: u32, left: u32 },
+}
+
 /// The audio-thread half. `process` never allocates.
 pub struct PluginProcessor {
     _shared: Arc<Shared>,
@@ -129,6 +162,13 @@ pub struct PluginProcessor {
     pub is_instrument: bool,
     /// Host parameter changes (automation) for the next block: id, sample offset, value.
     queued: Vec<(ParamID, i32, f64)>,
+    /// The input bus that takes a side-chain key (see `KeyBus`).
+    key_bus: Option<usize>,
+    gate: Gate,
+    gate_frames: u32,
+    /// The input while a fade needs it.
+    dry_l: Vec<f32>,
+    dry_r: Vec<f32>,
 }
 
 unsafe impl Send for PluginProcessor {}
@@ -143,6 +183,10 @@ pub struct PluginController {
     /// The plug-in said its latency changed (`restartComponent(kLatencyChanged)`) since the
     /// last `take_latency_changed`.
     latency_changed: bool,
+    /// The input bus that takes a side-chain key, and whether it's active. None when the plug-in
+    /// has no aux input, or refused to activate it.
+    key_bus: Option<usize>,
+    key_active: bool,
 }
 
 unsafe impl Send for PluginController {}
@@ -151,10 +195,26 @@ fn channel_count(arr: SpeakerArrangement) -> usize {
     arr.count_ones() as usize
 }
 
-pub fn instantiate(
+/// The first aux input after the main one, which is where a plug-in takes its side-chain.
+unsafe fn find_aux_input(component: &ComPtr<IComponent>, n_in: usize) -> Option<usize> {
+    (1..n_in).find(|&i| {
+        let mut info: BusInfo = std::mem::zeroed();
+        component.getBusInfo(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, i as i32, &mut info) == kResultOk && info.busType == BusTypes_::kAux as BusType
+    })
+}
+
+/// A plug-in without a side-chain key: see `instantiate_keyed`.
+pub fn instantiate(desc: &PluginDescriptor, sample_rate: f64, max_block: usize) -> Result<(PluginProcessor, PluginController), String> {
+    instantiate_keyed(desc, sample_rate, max_block, false)
+}
+
+/// Loads a plug-in, with its aux input active (`keyed`) or not. Without a key the aux bus stays
+/// inactive, whatever the plug-in's default, so the plug-in uses its internal key.
+pub fn instantiate_keyed(
     desc: &PluginDescriptor,
     sample_rate: f64,
     max_block: usize,
+    keyed: bool,
 ) -> Result<(PluginProcessor, PluginController), String> {
     let module = load_module(&desc.path)?;
     let cid = unhex(&desc.cid).ok_or("bad class id")?;
@@ -244,7 +304,31 @@ pub fn instantiate(
         if let Some(a) = out_arr.first_mut() {
             *a = SpeakerArr::kStereo;
         }
-        processor.setBusArrangements(in_arr.as_mut_ptr(), n_in as i32, out_arr.as_mut_ptr(), n_out as i32);
+        // The side-chain: stereo if the plug-in takes it, else mono, else what it has. A plug-in
+        // that refuses a layout may have adapted to something else, so what it reads back as is
+        // what the buffers are sized for.
+        let mut key_bus = find_aux_input(&component, n_in);
+        let mut accepted = false;
+        let keep = key_bus.map(|k| in_arr[k]);
+        for arr in [SpeakerArr::kStereo, SpeakerArr::kMono].into_iter().filter(|_| key_bus.is_some()) {
+            in_arr[key_bus.unwrap()] = arr;
+            accepted = processor.setBusArrangements(in_arr.as_mut_ptr(), n_in as i32, out_arr.as_mut_ptr(), n_out as i32) == kResultOk
+                && current(BusDirections_::kInput as i32, key_bus.unwrap()) == arr;
+            if accepted {
+                break;
+            }
+        }
+        if !accepted {
+            if let (Some(k), Some(arr)) = (key_bus, keep) {
+                in_arr[k] = arr;
+            }
+            if processor.setBusArrangements(in_arr.as_mut_ptr(), n_in as i32, out_arr.as_mut_ptr(), n_out as i32) != kResultOk {
+                log::warn!("{}: setBusArrangements refused stereo main buses", desc.name);
+            }
+        }
+        if key_bus.is_some_and(|k| channel_count(current(BusDirections_::kInput as i32, k)) == 0) {
+            key_bus = None;
+        }
 
         let inputs: Vec<Bus> = (0..n_in)
             .map(|i| Bus::new(channel_count(current(BusDirections_::kInput as i32, i)), max_block))
@@ -258,6 +342,14 @@ pub fn instantiate(
         }
         if n_out > 0 {
             component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kOutput as i32, 0, 1);
+        }
+        for i in 1..n_in {
+            let on = keyed && key_bus == Some(i);
+            let r = component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, i as i32, on as TBool);
+            if on && r != kResultOk {
+                log::warn!("{}: the side-chain bus didn't activate", desc.name);
+                key_bus = None;
+            }
         }
         let n_ev_in = component.getBusCount(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32);
         if n_ev_in > 0 {
@@ -294,6 +386,7 @@ pub fn instantiate(
             separate_controller,
             connections,
             _handler: handler,
+            parked: AtomicBool::new(false),
         });
 
         let blank = AudioBusBuffers { numChannels: 0, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: std::ptr::null_mut() } };
@@ -315,8 +408,13 @@ pub fn instantiate(
             started: false,
             is_instrument: desc.is_instrument || n_in == 0,
             queued: Vec::with_capacity(MAX_QUEUED),
+            key_bus,
+            gate: Gate::Open,
+            gate_frames: (GATE_FADE_SECS * sample_rate).max(1.0) as u32,
+            dry_l: vec![0.0; max_block],
+            dry_r: vec![0.0; max_block],
         };
-        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false };
+        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false, key_bus, key_active: keyed && key_bus.is_some() };
         Ok((proc_half, ctrl_half))
     }
 }
@@ -350,6 +448,70 @@ impl PluginProcessor {
         }
     }
 
+    /// Starts fading to dry, after which `process` stops running the plug-in. A plug-in that
+    /// isn't running now (its track is off) stops at once.
+    pub fn close_gate(&mut self) {
+        if matches!(self.gate, Gate::Open | Gate::Opening { .. }) {
+            if self.started {
+                self.gate = Gate::Closing(self.gate_frames);
+            } else {
+                self.shut_gate();
+            }
+        }
+    }
+
+    /// Stops the plug-in now, fade or no fade: for one `process` isn't being called for
+    /// (bypassed), or hasn't finished fading in time. The main thread may use the component
+    /// after this.
+    pub fn shut_gate(&mut self) {
+        if self.started {
+            unsafe {
+                vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(0);
+            }
+            self.started = false;
+        }
+        self.gate = Gate::Shut;
+        self._shared.parked.store(true, Ordering::Release);
+    }
+
+    /// Runs the plug-in again, fading in after `settle` frames (its latency).
+    pub fn open_gate(&mut self, settle: u32) {
+        if matches!(self.gate, Gate::Shut | Gate::Closing(_)) {
+            self._shared.parked.store(false, Ordering::Release);
+            self.gate = Gate::Opening { settle, left: self.gate_frames };
+        }
+    }
+
+    /// Mixes what a plug-in just produced with its dry input (in `dry_l`, `dry_r`) as a gate
+    /// fades.
+    fn fade_gate(&mut self, left: &mut [f32], right: &mut [f32]) {
+        let len = self.gate_frames as f32;
+        for i in 0..left.len() {
+            let wet = match &mut self.gate {
+                Gate::Closing(frames) => {
+                    *frames = frames.saturating_sub(1);
+                    *frames as f32 / len
+                }
+                Gate::Opening { settle, .. } if *settle > 0 => {
+                    *settle -= 1;
+                    0.0
+                }
+                Gate::Opening { left, .. } => {
+                    *left = left.saturating_sub(1);
+                    1.0 - *left as f32 / len
+                }
+                _ => 1.0,
+            };
+            left[i] = self.dry_l[i] + (left[i] - self.dry_l[i]) * wet;
+            right[i] = self.dry_r[i] + (right[i] - self.dry_r[i]) * wet;
+        }
+        match self.gate {
+            Gate::Closing(0) => self.shut_gate(),
+            Gate::Opening { settle: 0, left: 0 } => self.gate = Gate::Open,
+            _ => {}
+        }
+    }
+
     /// Parameter edits from the controller (its editor window) wait for the next `process`.
     pub fn has_edits(&self) -> bool {
         !self.edits_rx.is_empty()
@@ -357,9 +519,20 @@ impl PluginProcessor {
 
     /// Processes one stereo block in place. `left`/`right` must be at most `max_block` long.
     pub fn process(&mut self, left: &mut [f32], right: &mut [f32], midi: &[MidiEvent], t: &TransportInfo) {
+        self.process_keyed(left, right, None, midi, t);
+    }
+
+    /// `process`, with a side-chain key for the plug-in's aux input (None: silence there). The
+    /// key must be at least as long as the block.
+    pub fn process_keyed(&mut self, left: &mut [f32], right: &mut [f32], key: KeyInput, midi: &[MidiEvent], t: &TransportInfo) {
         let n = left.len().min(right.len()).min(self.max_block);
-        if n == 0 {
+        if n == 0 || matches!(self.gate, Gate::Shut) {
             return;
+        }
+        let fading = !matches!(self.gate, Gate::Open);
+        if fading {
+            self.dry_l[..n].copy_from_slice(&left[..n]);
+            self.dry_r[..n].copy_from_slice(&right[..n]);
         }
         unsafe {
             if !self.started {
@@ -404,6 +577,22 @@ impl PluginProcessor {
                     b[..n].fill(0.0);
                 }
             }
+            let mut key_silence = true;
+            if let (Some(bus), Some((kl, kr))) = (self.key_bus.and_then(|k| self.inputs.get_mut(k)), key) {
+                key_silence = false;
+                match bus.channels {
+                    0 => {}
+                    1 => {
+                        for i in 0..n {
+                            bus.buffers[0][i] = 0.5 * (kl[i] + kr[i]);
+                        }
+                    }
+                    _ => {
+                        bus.buffers[0][..n].copy_from_slice(&kl[..n]);
+                        bus.buffers[1][..n].copy_from_slice(&kr[..n]);
+                    }
+                }
+            }
             for bus in self.outputs.iter_mut() {
                 for b in bus.buffers.iter_mut() {
                     b[..n].fill(0.0);
@@ -413,6 +602,9 @@ impl PluginProcessor {
                 abb.numChannels = bus.channels as i32;
                 abb.silenceFlags = 0;
                 abb.__field0.channelBuffers32 = bus.ptrs.as_mut_ptr();
+            }
+            if let (Some(abb), true) = (self.key_bus.and_then(|k| self.in_abb.get_mut(k)), key_silence) {
+                abb.silenceFlags = (1u64 << abb.numChannels.clamp(0, 63)) - 1;
             }
             for (abb, bus) in self.out_abb.iter_mut().zip(self.outputs.iter_mut()) {
                 abb.numChannels = bus.channels as i32;
@@ -470,6 +662,9 @@ impl PluginProcessor {
                     right[..n].copy_from_slice(&bus.buffers[0][..n]);
                 }
                 _ => {}
+            }
+            if fading {
+                self.fade_gate(&mut left[..n], &mut right[..n]);
             }
 
             let tx = &mut self.out_tx;
@@ -575,6 +770,73 @@ impl PluginController {
     /// Whether the plug-in reported a new latency since the last call (checked in `idle`).
     pub fn take_latency_changed(&mut self) -> bool {
         std::mem::take(&mut self.latency_changed)
+    }
+
+    /// Whether the plug-in has an aux input a side-chain key can reach.
+    pub fn has_key_input(&self) -> bool {
+        self.key_bus.is_some()
+    }
+
+    /// Whether the aux input is active: the plug-in hears the key rather than its internal one.
+    pub fn key_active(&self) -> bool {
+        self.key_active
+    }
+
+    /// Whether the audio thread has stopped running the processor (see `Gate`).
+    pub fn parked(&self) -> bool {
+        self.shared.parked.load(Ordering::Acquire)
+    }
+
+    /// Activates or deactivates the aux input, which VST3 only allows on an inactive component:
+    /// `setActive(false)`, the bus, `setActive(true)`. Its parameters and state stay; its
+    /// delay lines and tails may not. The processor's gate must be shut first (`parked`), or
+    /// the instance not yet in use. Errors, with the side-chain gone, if the plug-in refuses.
+    pub fn set_key_active(&mut self, on: bool) -> Result<(), String> {
+        let Some(bus) = self.key_bus.filter(|_| on != self.key_active) else { return Ok(()) };
+        let refused = unsafe {
+            self.shared.component.setActive(0);
+            let r = self.shared.component.activateBus(MediaTypes_::kAudio as i32, BusDirections_::kInput as i32, bus as i32, on as TBool);
+            if self.shared.component.setActive(1) != kResultOk {
+                log::warn!("{}: setActive failed", self.desc.name);
+            }
+            on && r != kResultOk
+        };
+        if refused {
+            self.key_bus = None;
+            return Err(format!("{} refused its side-chain input", self.desc.name));
+        }
+        self.key_active = on;
+        Ok(())
+    }
+
+    /// The plug-in's audio buses as it reports them now.
+    pub fn audio_buses(&self) -> Vec<BusLayout> {
+        // C enums are i32 in the MSVC bindings and u32 elsewhere; `as _` fits both.
+        let default_active: u32 = BusInfo_::BusFlags_::kDefaultActive as _;
+        let mut out = Vec::new();
+        for dir in [BusDirections_::kInput as i32, BusDirections_::kOutput as i32] {
+            let count = unsafe { self.shared.component.getBusCount(MediaTypes_::kAudio as i32, dir) };
+            for i in 0..count {
+                unsafe {
+                    let mut info: BusInfo = std::mem::zeroed();
+                    if self.shared.component.getBusInfo(MediaTypes_::kAudio as i32, dir, i, &mut info) != kResultOk {
+                        continue;
+                    }
+                    let mut arr: SpeakerArrangement = 0;
+                    if let Some(p) = &self.shared.processor {
+                        p.getBusArrangement(dir, i, &mut arr);
+                    }
+                    out.push(BusLayout {
+                        name: utf16(&info.name),
+                        input: dir == BusDirections_::kInput as i32,
+                        aux: info.busType == BusTypes_::kAux as BusType,
+                        default_active: info.flags & default_active != 0,
+                        channels: channel_count(arr),
+                    });
+                }
+            }
+        }
+        out
     }
 
     /// The controller's automatable parameters (hidden, read-only and program-change ones are

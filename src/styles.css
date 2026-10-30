@@ -1113,6 +1113,15 @@ select {
   text-decoration: line-through;
 }
 
+/* A VST3 keyed by another track (its editor is a native window, so the slot says so). */
+.slot.filled.keyed .slot-name::before {
+  content: "SC";
+  margin-right: 4px;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
 .slot-name {
   flex: 1;
   min-width: 0;

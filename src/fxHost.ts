@@ -5,6 +5,7 @@ import type { FxInfo } from "./fx";
 import type { MenuItem } from "./components/Menu";
 import { getState, setState } from "./store";
 import { closePanel, fxKey, openPanel, togglePanel } from "./fxDockState";
+import { sideChainMenu } from "./sideChain";
 
 /** The preset id of the Channel EQ. */
 export const CHANNEL_EQ = "builtin:channel-eq";
@@ -87,6 +88,18 @@ function pasteTargets(track: Id): Id[] {
   return sel.length > 1 && sel.includes(track) ? sel : [track];
 }
 
+/**
+ * The Side Chain item of a VST3 insert that has a side-chain input, then a separator: the editor is
+ * a native window with no room for it, so it lives in the slot's menus. Nothing for other slots.
+ */
+export function slotSideChainItems(track: Id, slot: number, plugin: PluginSlot | null): MenuItem[] {
+  const snap = getState().snap;
+  if (!snap || !plugin || !snap.key_inputs?.includes(plugin.uid)) return [];
+  const set = (source: Id | null) => act("set_sidechain", { track, slot, source });
+  const setPre = (pre: boolean) => act("set_sidechain_pre", { track, slot, pre });
+  return [sideChainMenu(snap.project.tracks, track, plugin, set, setPre), { separator: true }];
+}
+
 /** The right-click menu of an insert or instrument slot. */
 export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): MenuItem[] {
   const instrument = slot === INSTRUMENT_SLOT;
@@ -103,6 +116,7 @@ export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): Me
   const fits = !!clip && isInstrument(clip.plugin_id) === instrument;
   const targets = pasteTargets(track);
   const items: MenuItem[] = [
+    ...slotSideChainItems(track, slot, plugin),
     { label: "Copy Plug-in", disabled: !plugin, onClick: () => copyPlugin(track, slot) },
     { label: clip ? `Paste ${clip.name}` : "Paste Plug-in", disabled: !fits, onClick: () => pastePlugin([track], slot) },
   ];

@@ -592,6 +592,9 @@ Details of each stage:
   one). With MIDI Thru off it is recorded but not played.
 - **Built-in effects and side-chains**: a built-in effect runs in its insert slot like a VST3,
   given its key signal when it has one (see [Built-in effects](#13-built-in-effects-and-presets)).
+  A VST3 with an aux input gets the same signal there, as a second input bus in `ProcessData` (a
+  mono aux takes a mix-down; see [The VST3 host](#9-the-vst3-host)). `InsertDsp::key` holds the
+  route for both.
   A track that keys another (`keyed`) copies its signal as it leaves its plug-ins, before its
   compensation delay, into `key_l`/`key_r` and applies the fader gains to it, so the key is
   post-fader. A pre-fader key (`keyed_pre`) is copied at the same point into
@@ -851,11 +854,28 @@ runs at startup only when there is no cache; otherwise only from Rescan.
    `initialize` it, and connect the two `IConnectionPoint`s directly (no host proxy).
 3. Sync the controller: `component.getState` → `controller.setComponentState`, then
    `setComponentHandler`.
-4. Force the first audio input and output buses to stereo, allocate the channel buffers, activate
-   audio bus 0 in and out and event input bus 0 (side-chain buses stay inactive).
+4. Ask for stereo on the first audio input and output buses and, on the first aux input after the
+   main one, for stereo, then mono, then whatever it had. `setBusArrangements`' answer is
+   checked and the channel buffers are sized from what `getBusArrangement` reads back. Activate
+   audio bus 0 in and out and event input bus 0; the aux input follows the slot's key source,
+   and every other extra input is explicitly inactive, whatever the plug-in's default.
 5. `setupProcessing(kRealtime, kSample32, max_block, rate)` and `setActive(true)`.
 6. Read the `IMidiMapping` assignments for controllers 0–129 (CCs, aftertouch, pitch bend) on
    channel 0.
+
+**Side-chain inputs.** A VST3 insert is keyed like a built-in effect (`PluginSlot::sidechain`,
+`set_sidechain`, the same routing, loop refusal and renders), through its first aux input.
+Activating that bus needs an inactive component, and `setActive` isn't for the audio thread, so
+changing it takes a handshake that blocks only the main thread (`session/vst_key.rs`):
+`Cmd::VstGate` makes the processor crossfade to dry over 5 ms and stop calling the plug-in
+(`Gate` in `plugin.rs`; `parked` says it has), the main thread cycles `setActive` around
+`activateBus`, and another `Cmd::VstGate` starts the plug-in again and, after its latency,
+crossfades back. A plug-in `process` isn't reaching (bypassed, on an Off track) stops at once.
+`update_pdc` calls `sync_vst_keys`, so every way a source can change is covered: choosing one, undo,
+a deleted source track. A new instance gets the right bus before its first `setActive`
+(`instantiate_keyed`). Without a key source the bus is inactive and filled with silence, flagged in
+`silenceFlags`; with a source that has nothing to give (off, skipped by an isolated render) the
+same silence reaches an active bus. `Snapshot::key_inputs` tells the UI which inserts can be keyed.
 
 The two halves share an `Arc<Shared>` whose `Drop` deactivates, disconnects and terminates the
 plug-in, on whichever thread drops last (in practice the main thread: controllers belong to the
@@ -1268,8 +1288,8 @@ it like any plug-in.
   and tail, republished on every parameter change. A dynamics effect (one with a meter named
   "Gain Reduction" or "Reduction") also keeps its largest gain reduction since the last tick,
   panel or not, for the strip's gain-reduction meter (`take_gain_reduction`).
-- `Cmd::FxParam` sets a value; `Cmd::Sidechain` sets the key source, and `resolve_keys` keeps
-  each effect's `key_idx` (the source's index in the track list) current.
+- `Cmd::FxParam` sets a value; `Cmd::Sidechain` sets the key source (`InsertDsp::key`, for a VST3
+  insert too), and `resolve_keys` keeps its `idx` (the source's index in the track list) current.
 - `Cmd::SidechainPre` (`PluginSlot::sidechain_pre`) makes the key pre-fader: the source keeps a
   second buffer (`keyed_pre`, `pre_key_l`/`pre_key_r`) copied at the same point as the
   post-fader key but gated only by mute and solo, not scaled by the fader and pan. Both taps are
@@ -1473,6 +1493,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `session/auto_write.rs` | Automation writing (Touch, Latch, Write), plug-in editors following automation, lane edit commands. |
 | `session/controllers.rs` | Controller assignments: the last touched parameter, learning, the saved list, applying controller moves through the normal edit paths (undo steps, automation touches that let go 0.5 s after the controller stops). Run from `idle`. |
 | `session/builtin.rs` | Built-in effects in slots: instantiation, parameters, side-chains, meters for open panels. |
+| `session/vst_key.rs` | VST3 side-chain inputs: keeping each plug-in's aux bus in line with its slot's key source. |
 | `session/presets.rs` | Copy and paste of plug-ins and Channel EQ; loading and saving presets. |
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
 | `session/strip_settings.rs` | Copy, paste, reset, save and load channel strip settings. |
