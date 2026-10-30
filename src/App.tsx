@@ -42,7 +42,7 @@ import { freezeTracks, unfreezeTracks } from "./freeze";
 import { PdcStatus } from "./components/Latency";
 import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste, openToolMenu } from "./trackTools";
 import { getSettings, updateSettings } from "./prefs";
-import { createMarker, deleteMarker, gotoMarker, markerAtPlayhead, openMarkerList } from "./markers";
+import { createMarker, deleteMarker, deleteSelectedMarker, gotoMarker, markerAtPlayhead, openMarkerList } from "./markers";
 import { MarkerList } from "./components/MarkerList";
 import { packTakeFolder } from "./takes";
 import { installDetach, receiveSnapshot, toggleDetached } from "./detach";
@@ -399,7 +399,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "mute-regions": () => ops.toggleRegionMute(),
   "delete-regions": () => {
     // Selected automation points (or a tempo change) go first, as in Logic.
-    if (deleteSelectedPoints() || deleteSelectedTempoEvent() || marqueeDelete()) return;
+    if (deleteSelectedPoints() || deleteSelectedTempoEvent() || deleteSelectedMarker() || marqueeDelete()) return;
     if (getState().selectedRegions.length) ops.deleteRegions();
   },
   "set-locators": () => ops.setLocatorsByRegions(),

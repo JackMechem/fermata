@@ -15,6 +15,16 @@ All notable changes to Fermata are recorded here. The format follows
 - **Pre-fader side-chains:** a **Pre / Post** switch beside the Side Chain pop-up of the
   Compressor, Noise Gate and De-Esser keys the effect from the source before its fader, so a
   trigger track pulled all the way down still works. Existing projects stay post-fader.
+- **Arrangement track** (the top global track, View › Show Global Tracks): named sections
+  (Intro, Verse, Chorus…) that tile the timeline, added with +, renamed from Logic's name
+  pop-up, coloured by name, and resized by their right edge. Dragging a section moves it with
+  its content (regions on every track cut at its edges, automation and markers) and Alt-drag
+  copies it; a section can be deleted with or without its content. Clicking one selects its
+  regions.
+- **Markers with their own lengths:** set from the marker menu's Length submenu, the Marker
+  List's new Length column, or by dragging the end of a marker's bar. Clicking a marker selects
+  it (Delete removes it); with Cycle on, or dragged into the cycle strip, it sets the locators.
+
 - **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
   name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state
   included) and Channel EQ, resets the strip, and saves settings to load in any project.

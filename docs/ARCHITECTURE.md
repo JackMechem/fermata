@@ -359,8 +359,24 @@ samples at the project rate.
 ### Markers and Autopunch
 
 - `Project::markers` is the Marker track, sorted by position (`session/markers.rs`). Markers
-  are pure project data; the engine never sees them. `Marker::length` exists in the model but
-  the UI treats every marker as reaching the next one.
+  are pure project data; the engine never sees them. `Marker::length` is a marker's own length;
+  None means it reaches the next marker (`markerEnd` in `markers.ts`).
+- `Project::arrangement` is the Arrangement track: `ArrangementMarker { id, name, start,
+  length, color }` sections, sorted and tiling the timeline (each starts where the one before
+  ends), in samples like markers (they don't follow tempo changes). `arrangement.rs` holds the
+  pure arithmetic: tiling, resize (ripples the later sections only), and the plans for moving,
+  copying and deleting a section with its content. A plan is a time map, a list of `Piece {
+  start, end, dst, copy }` saying where each stretch of the old timeline lands (time before the
+  arrangement stays; time after it shifts by the change in length); neighbouring pieces that
+  stay together are merged, so content is only cut where it comes apart. `remap_points` maps
+  an automation lane through it, adding the old curve's value at each piece's first and last
+  sample (and pruning those the curve doesn't need, as `auto_move` does).
+  `session/arrangement.rs` applies a plan in one step: each track's regions are rebuilt (a
+  region inside one piece moves whole, loop and all; one across a piece edge is cut with
+  `range_edit::sub_region`, a loop first becoming real copies; the first piece keeps the id),
+  lanes are remapped, markers go with their time (copies of those in a copied section), and
+  tempo and signatures stay put. It refuses (changing nothing) when a frozen track's regions
+  would change.
 - `Project::punch: Punch { enabled, start, end }` is the Autopunch range. While recording,
   `Cmd::Autopunch` tells the engine where armed tracks stay silent and where input is
   captured.
@@ -1252,6 +1268,7 @@ it like any plug-in.
 | `session/pdc.rs` | Plug-in latency, the compensation solver, the PDC report. |
 | `session/freeze.rs` | Track Freeze and `frozen_guard`. |
 | `session/markers.rs` | Marker edits and the Autopunch range. |
+| `session/arrangement.rs` | Arrangement track edits: add, rename, colour, resize, and moving, copying or deleting a section with its content. |
 | `session/takes.rs` | Recording into take folders, Autopunch trimming, comp edits, Flatten, Merge, Pack, Unpack. |
 | `session/auto_write.rs` | Automation writing (Touch, Latch, Write), plug-in editors following automation, lane edit commands. |
 | `session/controllers.rs` | Controller assignments: the last touched parameter, learning, the saved list, applying controller moves through the normal edit paths (undo steps, automation touches that let go 0.5 s after the controller stops). Run from `idle`. |
@@ -1269,6 +1286,7 @@ it like any plug-in.
 | `session/templates.rs` | User project templates: save, list, rename, delete, new project from one. |
 | `session/track_alternatives.rs` | Track alternatives: new, duplicate, switch, rename, delete. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
+| `arrangement.rs` | The Arrangement track's arithmetic: tiling sections and the time maps (`Piece`, `Plan`) for moving, copying and deleting them; automation through a time map. Pure. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |
 | `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
@@ -1346,7 +1364,8 @@ it like any plug-in.
 | `takes.ts` | Take folders in the tracks area: take rows, comp drawing, swipes, the take folder menu. |
 | `tools.ts`, `marquee.ts` | Tracks-area tools (list, Tool menu keys, Scissors and Fade tool geometry) and the marquee's geometry; pure. |
 | `trackTools.ts` | The tools at work: the Tool menu (T), presses with each tool, the marquee's commands, tool cursors and overlay drawing. |
-| `markers.ts` | The marker lane and marker commands. |
+| `markers.ts` | The marker lane (bars over each marker's length, selection, length drags) and marker commands. |
+| `arrangement.ts` | The Arrangement track's names, colours, drop slots and resize preview; pure. `components/ArrangementTrack.tsx` draws the lane (in `GlobalTracks`) and handles its menus and drags. |
 | `freeze.ts` | Freeze and Unfreeze from the UI. |
 | `bounce.ts` | Bounce and export option types; opening the dialogs. |
 | `midiEdit.ts` | The Piano Roll's editing functions, pure and unit-tested. |

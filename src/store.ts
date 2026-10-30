@@ -103,6 +103,10 @@ export interface State {
   showControllerAssignments: boolean;
   /** The Step Input Keyboard is open (StepInput.tsx). */
   showStepInput: boolean;
+  /** The marker last clicked on the Marker track (Delete removes it). */
+  selectedMarker: Id | null;
+  /** The Arrangement track's selected section. */
+  selectedSection: Id | null;
 }
 
 export interface MidiSelection {
@@ -157,6 +161,8 @@ let state: State = {
   clipboardStart: null,
   showControllerAssignments: false,
   showStepInput: false,
+  selectedMarker: null,
+  selectedSection: null,
 };
 
 const listeners = new Set<() => void>();

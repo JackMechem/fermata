@@ -118,6 +118,16 @@ export interface Marker {
   length?: number | null;
 }
 
+/** A section on the Arrangement track (see arrangement.ts). Sections tile the timeline. */
+export interface ArrangementMarker {
+  id: Id;
+  name: string;
+  start: number;
+  length: number;
+  /** None: coloured by its name. */
+  color?: string | null;
+}
+
 export type BandKind = "low_cut" | "low_shelf" | "bell" | "high_shelf" | "high_cut";
 
 export interface EqBand {
@@ -277,6 +287,8 @@ export interface Project {
   /** This project alternative's name (File › Project Alternatives); empty until the project is
    *  first saved, when it takes the project's name. */
   alternative: string;
+  /** The Arrangement track's sections, in order. */
+  arrangement: ArrangementMarker[];
 }
 
 /** A VCA fader: no audio, but its level offsets its strips' faders and its mute mutes them. */

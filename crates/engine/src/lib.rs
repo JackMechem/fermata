@@ -3,6 +3,7 @@
 pub mod audio_file;
 pub mod audio_io;
 pub mod auto_move;
+pub mod arrangement;
 pub mod automation;
 pub mod clip;
 pub mod controllers;

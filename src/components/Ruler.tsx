@@ -7,7 +7,7 @@ import { tempoMap } from "../tempo";
 import { pixelRatio } from "../uiScale";
 import { mix, theme } from "../theme";
 import { onViewport, RULER_H, viewport } from "../view";
-import { createMarker, drawMarkers, markerAt, markerLaneMenu, markerMenu, renameMarker } from "../markers";
+import { clickMarker, createMarker, drawMarkers, markerAt, markerEdgeAt, markerEnd, markerLaneMenu, markerMenu, renameMarker, selectMarker, setLocatorsToMarker, setMarkerLength, type MarkerDrag } from "../markers";
 import { openMenu } from "./Menu";
 import { getSettings } from "../prefs";
 import { scrollTo } from "../view";
@@ -27,10 +27,12 @@ export function Ruler() {
   const pxPerBeat = useStore((s) => s.pxPerBeat);
   useStore((s) => s.themeId);
   useStore((s) => s.uiScale);
+  // The selected marker is drawn highlighted.
+  useStore((s) => s.selectedMarker);
   const live = useRef({ project, pxPerBeat });
   live.current = { project, pxPerBeat };
   const preview = useRef<{ strip: Strip; start: number; end: number } | null>(null);
-  const movingMarker = useRef<{ id: number; pos: number } | null>(null);
+  const movingMarker = useRef<MarkerDrag | null>(null);
 
   const draw = () => {
     const cv = ref.current;
@@ -126,9 +128,17 @@ export function Ruler() {
         el.style.visibility = x < -6 || x > viewport().width + 6 ? "hidden" : "visible";
       }
     });
+    // A click anywhere else drops the marker selection, so Delete goes back to regions (the
+    // Marker List keeps it).
+    const down = (e: MouseEvent) => {
+      const el = e.target as Element | null;
+      if (getState().selectedMarker !== null && el !== ref.current && !el?.closest?.(".marker-list")) selectMarker(null);
+    };
+    window.addEventListener("mousedown", down, true);
     return () => {
       a();
       b();
+      window.removeEventListener("mousedown", down, true);
     };
   }, []);
 
@@ -224,14 +234,19 @@ export function Ruler() {
     window.addEventListener("mouseup", up);
   };
 
-  /** The marker lane: click a marker to go to it, drag it to move it (snapped), double-click
-   *  to rename it; double-click the empty lane to create one there. */
+  /** The marker lane: click a marker to select it and go to it (with Cycle on, the cycle takes
+   *  its length), drag it to move it (snapped) or up into the cycle strip to set the locators
+   *  by it, drag the end of its bar to change its length, double-click it to rename it;
+   *  double-click the empty lane to create one there. */
   const markerDown = (e: React.MouseEvent, at: number, toSample: (cx: number) => number, snap: (v: number) => number) => {
     const { project, pxPerBeat } = live.current;
     if (!project) return;
     const pps = pxPerBeat / samplesPerBeat(project);
+    const edge = markerEdgeAt(at * pps);
+    if (edge) return markerLengthDown(e, edge, toSample, snap);
     const m = markerAt(at * pps);
     if (!m) {
+      selectMarker(null);
       if (e.detail === 2) createMarker(snap(at));
       return;
     }
@@ -239,12 +254,24 @@ export function Ruler() {
       renameMarker(m);
       return;
     }
+    selectMarker(m.id);
+    const top = ref.current!.getBoundingClientRect().top;
     const startX = e.clientX;
     let moved = false;
+    let toCycle = false;
     const move = (ev: MouseEvent) => {
-      if (!moved && Math.abs(ev.clientX - startX) < 3) return;
+      if (!moved && Math.abs(ev.clientX - startX) < 3 && Math.abs(ev.clientY - e.clientY) < 3) return;
       moved = true;
-      movingMarker.current = { id: m.id, pos: Math.round(snap(m.pos + toSample(ev.clientX) - at)) };
+      // Over the cycle strip, the marker sets the locators instead of moving.
+      toCycle = ev.clientY - top < CYCLE_H;
+      if (toCycle) {
+        movingMarker.current = null;
+        const end = markerEnd(project, m) ?? m.pos + tempoMap(project).samplesPerBarAt(m.pos) * 4;
+        preview.current = { strip: "cycle", start: m.pos, end };
+      } else {
+        preview.current = null;
+        movingMarker.current = { id: m.id, pos: Math.round(snap(m.pos + toSample(ev.clientX) - at)) };
+      }
       draw();
     };
     const up = () => {
@@ -252,8 +279,37 @@ export function Ruler() {
       window.removeEventListener("mouseup", up);
       const mv = movingMarker.current;
       movingMarker.current = null;
-      if (moved && mv && mv.pos !== m.pos) act("move_marker", { id: m.id, pos: mv.pos });
-      else if (!moved) act("locate", { pos: m.pos });
+      preview.current = null;
+      if (moved && toCycle) setLocatorsToMarker(m);
+      else if (moved && mv && mv.pos !== m.pos) act("move_marker", { id: m.id, pos: mv.pos });
+      else if (!moved) clickMarker(m);
+      else draw();
+    };
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  /** Dragging the end of a marker's bar: its own length, snapped, at least a beat. */
+  const markerLengthDown = (e: React.MouseEvent, m: { id: number; pos: number; length?: number | null }, toSample: (cx: number) => number, snap: (v: number) => number) => {
+    const { project } = live.current;
+    if (!project) return;
+    e.preventDefault();
+    selectMarker(m.id);
+    const end0 = m.pos + (m.length ?? 0);
+    const x0 = toSample(e.clientX);
+    const min = tempoMap(project).samplesPerBeatAt(m.pos);
+    const move = (ev: MouseEvent) => {
+      const end = Math.max(m.pos + min, snap(end0 + toSample(ev.clientX) - x0));
+      movingMarker.current = { id: m.id, pos: m.pos, length: Math.round(end - m.pos) };
+      draw();
+    };
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      const mv = movingMarker.current;
+      movingMarker.current = null;
+      const marker = project.markers.find((x) => x.id === m.id);
+      if (mv?.length && marker && mv.length !== m.length) setMarkerLength(marker, mv.length);
       else draw();
     };
     window.addEventListener("mousemove", move);
@@ -268,6 +324,7 @@ export function Ruler() {
     const pps = pxPerBeat / samplesPerBeat(project);
     const at = (e.clientX - rect.left + viewport().left) / pps;
     const m = markerAt(at * pps);
+    if (m) selectMarker(m.id);
     const snapped = Math.max(0, snapPos(project, at, getState().snapMode === "off" ? "beat" : getState().snapMode, pxPerBeat));
     openMenu(e.clientX, e.clientY, m ? markerMenu(m) : markerLaneMenu(snapped));
   };

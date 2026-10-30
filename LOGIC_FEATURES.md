@@ -508,7 +508,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [x] Create markers at the playhead (p. 737–738)
 - [x] Go to the next or previous marker (p. 745)
 - [ ] Markers from the cycle area or the selected regions (p. 738–739)
-- [~] Move, resize, colour and protect markers (p. 740–742). *Move and colour; a marker always reaches the next one, and none can be protected.*
+- [~] Move, resize, colour and protect markers (p. 740–742). *Move, resize (own length) and colour; none can be protected.*
 - [~] Rename markers in the track, list or ruler; Marker Text window (p. 743–744). *In the marker lane and the Marker List; no Marker Text window.*
 - [~] Go to marker by number; set the cycle to a marker (p. 745). *Set Locators to Marker; no go to marker by number.*
 - [ ] Marker sets (p. 746)
@@ -764,8 +764,8 @@ smart tempo, samplers, virtual players, pattern tools, Live Loops and notation.
 
 ### Arrangement track (p. 748–750)
 
-- [ ] Arrangement track with section markers (Intro, Verse, Chorus…) (p. 748)
-- [ ] Move, copy, replace, split and delete sections together with their regions (p. 749–750)
+- [x] Arrangement track with section markers (Intro, Verse, Chorus…) (p. 748)
+- [~] Move, copy, replace, split and delete sections together with their regions (p. 749–750). *Move, copy and delete with content; no replace or split.*
 - [ ] Cut the sections of selected arrangement markers; insert scenes (key commands)
 
 ### Transposition (p. 757)

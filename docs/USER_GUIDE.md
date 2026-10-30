@@ -856,15 +856,23 @@ The marker lane at the bottom of the ruler is Logic's Marker track.
 
 - **Create Marker** (Alt+', or Navigate › Create Marker) adds a marker at the playhead,
   rounded to the nearest bar. Double-clicking empty marker lane creates one there.
-- Each marker shows its name in its colour, with a faint band reaching the next marker.
-- Click a marker to go to it; drag it to move it (snapped); double-click it to rename it.
+- Each marker is a bar in its colour with its name at the start. A marker lasts until the
+  next one, or for a **length of its own**: right-click › Length (1 to 16 bars, or To Next
+  Marker), type one in the Marker List, or drag the end of its bar (snapped; at least a
+  beat). A marker with its own length has a stronger bar with a visible end.
+- Click a marker to select it and go to it; with Cycle on, the cycle takes the marker's span
+  too. Drag it to move it (snapped), or up into the cycle strip at the top of the ruler to
+  set the locators by it. Double-click it to rename it. With a marker selected, Delete
+  removes it.
 - Right-click a marker: Go to Marker, Set Locators to Marker (the cycle covers its section),
-  Rename…, Color, Delete, Marker List…. Right-click empty lane: Create Marker Here, Marker
-  List….
+  Rename…, Length, Color, Delete, Marker List…. Right-click empty lane: Create Marker Here,
+  Marker List….
 - **Go to Previous / Next Marker:** Alt+, and Alt+. (Navigate menu).
 - **Navigate › Delete Marker** removes the marker at or before the playhead.
 - **Marker List** (Ctrl+Alt+K, Navigate › Open Marker List): every marker with its colour,
-  position, an editable name, Go To and Delete, plus Create Marker.
+  position, an editable name and length (bars beats divisions ticks; leave it empty to reach
+  the next marker, which is shown dimmed), Go To and Delete, plus Create Marker. The selected
+  marker is highlighted.
 - Markers are saved with the project, and every marker edit can be undone.
 
 ---
@@ -874,6 +882,31 @@ The marker lane at the bottom of the ruler is Logic's Marker track.
 A project has a base tempo (5 to 990 BPM) and time signature, set in the control bar's LCD or in
 File › Project Settings › General. Changes along the timeline live in the **Global Tracks**.
 Show them with View › Show Global Tracks (G); they sit between the ruler and the tracks.
+
+**Arrangement track** (the top global track, as in Logic)
+- Named sections — Intro, Verse, Chorus, Bridge, Outro and so on — that follow each other
+  without gaps. The **+** button in the header adds one after the last (eight bars, named
+  Intro, Verse, Chorus, Bridge, Outro in turn); double-click empty lane does the same, and
+  right-click it › Add picks the name.
+- Click a section to select it and every region in it. Click its name for the name pop-up
+  (Intro, Verse, Pre-Chorus, Chorus, Bridge, Solo, Break, Interlude, Outro, Rename…), or
+  double-click the section to type a name. Each name has its own colour; right-click › Color
+  sets another.
+- Drag a section's right edge to resize it (in bars). The later sections move along; the
+  regions stay where they are.
+- **Drag a section** to another place in the order to move it **with its content**: the
+  regions on every track in it (cut at the section's edges), the automation and the markers
+  go with it, and the sections it passes close up or make room. Hold **Alt** (Option) while
+  dragging to insert a **copy** instead; everything after the copy moves later. The moved or
+  copied section's regions are selected afterwards.
+- Right-click a section: Name, Color, Select Regions in Section, Set Locators by Section, Go
+  to Section, **Delete Arrangement Marker** (only the marker; the section before takes over
+  its time) and **Delete Arrangement Marker and Content** (its regions, automation and markers
+  go, and everything after it moves earlier to close the gap).
+- Each of these is one undo step. Tempo and signature changes stay where they are when
+  sections move: rearrange sections with the same tempo, or fix the tempo track afterwards.
+  A section move refuses to cut a frozen track's regions; unfreeze the track first.
+- Sections, like markers, sit at fixed positions in time: changing the tempo doesn't move them.
 
 **Tempo track**
 - Click empty space to add a tempo change at the snapped position, starting at the tempo in

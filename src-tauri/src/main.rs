@@ -334,6 +334,13 @@ fn main() {
             commands::rename_track_alternative,
             commands::delete_track_alternative,
             menu::set_project_menus,
+            commands::set_marker_length,
+            commands::add_arrangement_marker,
+            commands::rename_arrangement_marker,
+            commands::set_arrangement_marker_color,
+            commands::resize_arrangement_marker,
+            commands::move_arrangement_marker,
+            commands::delete_arrangement_marker,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

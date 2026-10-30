@@ -1675,3 +1675,50 @@ pub fn rename_track_alternative(state: State<AppState>, track: Id, name: String,
 pub fn delete_track_alternative(state: State<AppState>, track: Id, name: String) -> R<Snapshot> {
     try_edit(&state, "Delete Track Alternative", None, false, |s| s.delete_track_alternative(track, &name))
 }
+
+// ---- Marker lengths and the Arrangement track --------------------------------------------------
+
+/// Sets a marker's own length; None (or 0) makes it reach the next marker again.
+#[tauri::command]
+pub fn set_marker_length(state: State<AppState>, id: Id, length: Option<i64>) -> Snapshot {
+    edit(&state, "Marker Length", None, false, |s| s.set_marker_length(id, length))
+}
+
+/// The Arrangement track's + button: a section after the last one, named `name` or from
+/// Logic's list. Returns its id.
+#[tauri::command]
+pub fn add_arrangement_marker(state: State<AppState>, name: Option<String>) -> R<Made> {
+    edit_made(&state, "Create Arrangement Marker", false, |s| Ok(vec![s.add_arrangement_marker(name)]))
+}
+
+#[tauri::command]
+pub fn rename_arrangement_marker(state: State<AppState>, id: Id, name: String) -> Snapshot {
+    edit(&state, "Rename Arrangement Marker", None, false, |s| s.rename_arrangement_marker(id, name))
+}
+
+/// None colours the section by its name.
+#[tauri::command]
+pub fn set_arrangement_marker_color(state: State<AppState>, id: Id, color: Option<String>) -> Snapshot {
+    edit(&state, "Arrangement Marker Color", None, false, |s| s.set_arrangement_marker_color(id, color))
+}
+
+/// Resizes a section; the later ones move along (their content stays).
+#[tauri::command]
+pub fn resize_arrangement_marker(state: State<AppState>, id: Id, length: i64) -> Snapshot {
+    edit(&state, "Resize Arrangement Marker", None, false, |s| s.resize_arrangement_marker(id, length))
+}
+
+/// Moves section `id` with its content before section `before` (null: to the end), or with
+/// `copy` inserts a copy there. Returns the regions in the moved or copied section.
+#[tauri::command]
+pub fn move_arrangement_marker(state: State<AppState>, id: Id, before: Option<Id>, copy: bool) -> R<Made> {
+    let label = if copy { "Copy Arrangement Marker" } else { "Move Arrangement Marker" };
+    edit_made(&state, label, false, |s| s.move_arrangement_marker(id, before, copy))
+}
+
+/// Deletes a section: just the marker, or with `content` its time and everything in it.
+#[tauri::command]
+pub fn delete_arrangement_marker(state: State<AppState>, id: Id, content: bool) -> R<Snapshot> {
+    let label = if content { "Delete Arrangement Marker and Content" } else { "Delete Arrangement Marker" };
+    try_edit(&state, label, None, false, |s| s.delete_arrangement_marker(id, content))
+}

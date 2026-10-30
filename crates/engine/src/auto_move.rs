@@ -73,7 +73,7 @@ fn replace(curve: &[AutoPoint], lo: i64, hi: i64, seg: &[AutoPoint]) -> Vec<Auto
 
 /// Drops added points that the curve is the same without: on the line between their
 /// neighbours, or repeating the value an end of the lane holds anyway.
-fn prune(mut pts: Vec<(AutoPoint, bool)>) -> Vec<AutoPoint> {
+pub(crate) fn prune(mut pts: Vec<(AutoPoint, bool)>) -> Vec<AutoPoint> {
     let same = |a: f32, b: f32| (a - b).abs() <= 1e-6 * a.abs().max(b.abs()).max(1.0);
     let mut i = 0;
     while i < pts.len() {

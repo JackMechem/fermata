@@ -337,6 +337,26 @@ pub struct Marker {
     pub length: Option<i64>,
 }
 
+/// A section on the Arrangement track (Logic's arrangement marker: Intro, Verse, Chorus…).
+/// Sections tile the timeline: each starts where the one before it ends.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ArrangementMarker {
+    pub id: Id,
+    pub name: String,
+    /// Timeline position in samples, like a marker's.
+    pub start: i64,
+    pub length: i64,
+    /// None colours the section by its name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+}
+
+impl ArrangementMarker {
+    pub fn end(&self) -> i64 {
+        self.start + self.length
+    }
+}
+
 /// The Autopunch range: while it is on, recording only captures between `start` and `end`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Punch {
@@ -688,6 +708,10 @@ pub struct Project {
     /// from before alternatives, where it is the project's name. See `session/alternatives.rs`.
     #[serde(default)]
     pub alternative: String,
+    /// The Arrangement track: named sections tiling the timeline, sorted by start (see
+    /// `crate::arrangement`).
+    #[serde(default)]
+    pub arrangement: Vec<ArrangementMarker>,
 }
 
 /// A VCA fader (Logic's VCA strip). It passes no audio: its level offsets the faders of the
@@ -742,6 +766,7 @@ impl Project {
             drag_mode: DragMode::Overlap,
             vcas: Vec::new(),
             alternative: String::new(),
+            arrangement: Vec::new(),
         }
     }
 

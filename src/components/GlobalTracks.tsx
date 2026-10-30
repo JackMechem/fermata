@@ -1,5 +1,6 @@
 // Logic's Signature and Tempo global tracks, between the ruler and the tracks (View › Show
-// Global Tracks, G). They scroll and zoom with the arrange area.
+// Global Tracks, G), under the Arrangement track (ArrangementTrack.tsx). They scroll and zoom
+// with the arrange area.
 //
 // Tempo lane: click to add a tempo change at the snapped position (dragging it right away),
 // drag a point up or down to change its tempo (Shift: fine) or sideways to move it,
@@ -19,6 +20,7 @@ import { NumberField } from "./Form";
 import { openMenu, type MenuItem } from "./Menu";
 import { getSettings } from "../prefs";
 import { timeStripWheel } from "../wheel";
+import { ARR_H, ArrangementHeader, ArrangementLane } from "./ArrangementTrack";
 
 /** Height of the Signature lane. */
 export const SIG_H = 20;
@@ -30,7 +32,7 @@ const PAD = 7;
 const TEMPO_COLOR = "#8cc63f";
 
 /** Rows the global tracks take in the tracks area (0 when hidden). */
-export const globalTracksHeight = (s: State) => (s.showGlobalTracks ? SIG_H + s.tempoLaneH : 0);
+export const globalTracksHeight = (s: State) => (s.showGlobalTracks ? ARR_H + SIG_H + s.tempoLaneH : 0);
 
 const project = () => getState().snap?.project;
 
@@ -416,6 +418,7 @@ export function GlobalTracks() {
   return (
     <>
       <div className="global-headers">
+        <ArrangementHeader />
         <div className="global-name" style={{ height: SIG_H }}>
           Signature
         </div>
@@ -424,8 +427,9 @@ export function GlobalTracks() {
           <div className="global-resize" onMouseDown={resizeDown} />
         </div>
       </div>
-      <div className="global-lanes">
-        <canvas ref={ref} onMouseDown={onMouseDown} onContextMenu={onContextMenu} onWheel={onWheel} />
+      <div className="global-lanes" onWheel={onWheel}>
+        <ArrangementLane />
+        <canvas ref={ref} onMouseDown={onMouseDown} onContextMenu={onContextMenu} />
         <div className="global-playhead" ref={phRef} style={{ ["--ph" as string]: theme.playhead }} />
       </div>
       {pop && <SignaturePopover pop={pop} onCancel={() => setPop(null)} onCommit={commitPop} />}

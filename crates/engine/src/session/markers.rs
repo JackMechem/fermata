@@ -53,11 +53,48 @@ impl Session {
         }
     }
 
+    /// Gives a marker its own length (Logic's marker length), or None (or a length under one
+    /// sample) to make it reach the next marker again.
+    pub fn set_marker_length(&mut self, id: Id, length: Option<i64>) {
+        if let Some(m) = self.project.markers.iter_mut().find(|m| m.id == id) {
+            m.length = length.filter(|&l| l > 0);
+            self.dirty = true;
+        }
+    }
+
     /// Sets the Autopunch range and switches it on or off. Like the cycle, it isn't an undo
     /// step.
     pub fn set_punch(&mut self, enabled: bool, start: i64, end: i64) {
         let (start, end) = (start.min(end).max(0), start.max(end).max(0));
         self.project.punch = Punch { enabled: enabled && end > start, start, end };
         self.dirty = true;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio_io::AudioConfig;
+
+    #[test]
+    fn a_marker_length_is_set_and_cleared() {
+        let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
+        let mut s = Session::new(cfg, Vec::new());
+        let id = s.add_marker(1000, None);
+        s.set_marker_length(id, Some(500));
+        assert_eq!(s.project.markers[0].length, Some(500));
+        // Moving keeps the length.
+        s.move_marker(id, 2000);
+        assert_eq!((s.project.markers[0].pos, s.project.markers[0].length), (2000, Some(500)));
+        s.set_marker_length(id, Some(0));
+        assert_eq!(s.project.markers[0].length, None);
+        s.set_marker_length(id, Some(10));
+        s.set_marker_length(id, None);
+        assert_eq!(s.project.markers[0].length, None);
+        // Old projects (no length) still load.
+        let m: Marker = serde_json::from_str(r#"{"id":1,"pos":5,"name":"A"}"#).unwrap();
+        assert_eq!(m.length, None);
+        let a: ArrangementMarker = serde_json::from_str(r#"{"id":1,"name":"Intro","start":0,"length":5}"#).unwrap();
+        assert_eq!(a.color, None);
     }
 }

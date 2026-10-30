@@ -68,6 +68,7 @@ pub use backups::BackupInfo;
 mod templates;
 pub use templates::{delete_template, list_templates, rename_template, templates_dir, UserTemplate};
 mod track_alternatives;
+mod arrangement;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";

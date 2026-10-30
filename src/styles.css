@@ -7159,3 +7159,60 @@ canvas.pr-cursor-line {
   font-weight: 600;
   color: var(--dim);
 }
+
+/* ---- Marker lengths and the Arrangement track ------------------------------------------------
+   The Marker List gains a Length column and shows the selected marker. */
+
+.marker-row {
+  grid-template-columns: 10px 86px 1fr 112px auto auto;
+}
+
+.marker-row.selected {
+  background: var(--accent-soft);
+  border-radius: 5px;
+}
+
+.marker-head {
+  padding: 0 0 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dim);
+}
+
+.marker-row input.marker-length {
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+/* The Arrangement track: the top global track, with its + button in the header. */
+.arrangement-name {
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.arrangement-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+}
+
+.arrangement-add:hover {
+  background: var(--btn-hi);
+  color: var(--text);
+}
+
+.arrangement-add svg {
+  width: 11px;
+  height: 11px;
+}
+
+.arrangement-lane {
+  display: block;
+}

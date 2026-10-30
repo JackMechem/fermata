@@ -77,6 +77,7 @@ export function markerMenu(m: Marker): MenuItem[] {
     { label: "Set Locators to Marker", onClick: () => setLocatorsToMarker(m) },
     { separator: true },
     { label: "Rename…", onClick: () => renameMarker(m) },
+    { label: "Length", children: lengthMenu(m) },
     { label: "Color", children: colorMenu(m.color, (c) => act("set_marker_color", { id: m.id, color: c }), "Default") },
     { label: "Delete", onClick: () => deleteMarker(m.id) },
     { separator: true },
@@ -95,32 +96,51 @@ export function markerLaneMenu(pos: number): MenuItem[] {
 /** The default marker colour, a neutral that suits the theme. */
 const defaultColor = () => (theme.region === "light" ? "#8e8e93" : "#9a9aa0");
 
-/** Marker flags drawn last, for hit testing: content x range per marker. */
-let flags: { id: Id; x0: number; x1: number }[] = [];
+/** A marker as drawn: its flag (the name) and its bar, in content x. `end` is set for a marker
+ *  with its own length, whose bar's right edge can be dragged. */
+let flags: { id: Id; x0: number; x1: number; band: number; end: number | null }[] = [];
 
-/** Draws the marker lane at `y` (canvas coordinates). `moving` shows a marker being dragged. */
-export function drawMarkers(ctx: CanvasRenderingContext2D, p: Project, pps: number, left: number, W: number, y: number, moving: { id: Id; pos: number } | null) {
+/** A marker being dragged on the lane: moved to `pos`, or resized to `length`. */
+export interface MarkerDrag {
+  id: Id;
+  pos: number;
+  length?: number | null;
+}
+
+/** Draws the marker lane at `y` (canvas coordinates): each marker's bar over its length (to
+ *  the next marker when it has none), with its name flag at the start. */
+export function drawMarkers(ctx: CanvasRenderingContext2D, p: Project, pps: number, left: number, W: number, y: number, moving: MarkerDrag | null) {
   const h = MARKER_H;
-  const list = p.markers.map((m) => (moving && m.id === moving.id ? { ...m, pos: moving.pos } : m)).sort((a, b) => a.pos - b.pos);
+  const selected = getState().selectedMarker;
+  const list = p.markers.map((m) => (moving && m.id === moving.id ? { ...m, pos: moving.pos, length: moving.length === undefined ? m.length : moving.length } : m)).sort((a, b) => a.pos - b.pos);
+  const proj = { ...p, markers: list };
   ctx.font = "600 10px Inter, 'SF Pro Text', system-ui, sans-serif";
   ctx.textBaseline = "middle";
   flags = [];
-  list.forEach((m, i) => {
+  list.forEach((m) => {
     const x = m.pos * pps - left;
-    const next = list[i + 1];
-    const reach = next ? next.pos * pps - left : W + 1;
+    const own = !!m.length && m.length > 0;
+    const endPos = markerEnd(proj, m);
+    const reach = endPos !== null ? endPos * pps - left : W + 1;
     const label = m.name;
     const tw = ctx.measureText(label).width + 10;
     const x1 = Math.min(reach - 1, x + Math.max(10, tw));
-    if (x1 < 0 || x > W) {
-      flags.push({ id: m.id, x0: x + left, x1: x1 + left });
+    const hit = { id: m.id, x0: x + left, x1: x1 + left, band: reach + left, end: own ? reach + left : null };
+    if (reach < 0 || x > W) {
+      flags.push(hit);
       return;
     }
     const color = m.color ?? defaultColor();
-    // A faint band to the next marker, the flag with the name, and a stem at the position.
-    ctx.fillStyle = mix(color, theme.ruler, 0.8, 0.9);
+    const on = selected === m.id || moving?.id === m.id;
+    // The bar over the marker's length (stronger when it has a length of its own, or is
+    // selected), the flag with the name, and the bar's end.
+    ctx.fillStyle = mix(color, theme.ruler, on ? 0.55 : own ? 0.68 : 0.8, on ? 0.95 : 0.9);
     ctx.fillRect(x, y + 1, Math.max(0, reach - x - 1), h - 2);
-    ctx.fillStyle = moving?.id === m.id ? mix(color, "#ffffff", 0.25) : color;
+    if (own || on) {
+      ctx.fillStyle = color;
+      ctx.fillRect(Math.round(reach) - 2, y + 1, 2, h - 2);
+    }
+    ctx.fillStyle = on ? mix(color, "#ffffff", 0.25) : color;
     ctx.beginPath();
     ctx.roundRect(x, y + 1, Math.max(2, x1 - x), h - 2, [0, 3, 3, 0]);
     ctx.fill();
@@ -131,18 +151,71 @@ export function drawMarkers(ctx: CanvasRenderingContext2D, p: Project, pps: numb
     ctx.fillStyle = "rgba(10,10,12,0.9)";
     ctx.fillText(label, x + 4, y + h / 2 + 0.5);
     ctx.restore();
-    flags.push({ id: m.id, x0: x + left, x1: x1 + left });
+    flags.push(hit);
   });
 }
 
-/** The marker whose flag is at content x (as last drawn). */
+/** The marker at content x (as last drawn): its flag, or the bar of one with its own length. */
 export function markerAt(x: number): Marker | null {
   const p = project();
   if (!p) return null;
+  const find = (id: Id) => p.markers.find((m) => m.id === id) ?? null;
   // Later flags are drawn on top.
   for (let i = flags.length - 1; i >= 0; i--) {
     const f = flags[i];
-    if (x >= f.x0 - 2 && x <= f.x1) return p.markers.find((m) => m.id === f.id) ?? null;
+    if (x >= f.x0 - 2 && x <= f.x1) return find(f.id);
+  }
+  for (let i = flags.length - 1; i >= 0; i--) {
+    const f = flags[i];
+    if (f.end !== null && x >= f.x0 && x <= f.end) return find(f.id);
   }
   return null;
+}
+
+/** The marker whose bar ends at content x, for dragging its length. Only a marker with a
+ *  length of its own has an edge to drag (give it one in its menu or the Marker List). */
+export function markerEdgeAt(x: number): Marker | null {
+  const p = project();
+  if (!p) return null;
+  for (let i = flags.length - 1; i >= 0; i--) {
+    const f = flags[i];
+    if (f.end !== null && Math.abs(x - f.end) <= 4 && x > f.x1) return p.markers.find((m) => m.id === f.id) ?? null;
+  }
+  return null;
+}
+
+/** Selects a marker on the Marker track (and in the Marker List). */
+export function selectMarker(id: Id | null) {
+  if (getState().selectedMarker !== id) setState({ selectedMarker: id });
+}
+
+/** Delete with a marker selected removes it. */
+export function deleteSelectedMarker(): boolean {
+  const id = getState().selectedMarker;
+  if (id === null || !project()?.markers.some((m) => m.id === id)) return false;
+  setState({ selectedMarker: null });
+  deleteMarker(id);
+  return true;
+}
+
+/** A click on a marker: selects it and goes to it; with Cycle on the cycle takes its length
+ *  too, as in Logic. */
+export function clickMarker(m: Marker) {
+  selectMarker(m.id);
+  if (project()?.cycle.enabled) setLocatorsToMarker(m);
+  act("locate", { pos: m.pos });
+}
+
+/** Sets a marker's own length (null: to the next marker again). */
+export function setMarkerLength(m: Marker, length: number | null) {
+  act("set_marker_length", { id: m.id, length: length === null ? null : Math.max(1, Math.round(length)) });
+}
+
+/** The marker menu's Length submenu. */
+function lengthMenu(m: Marker): MenuItem[] {
+  const p = project();
+  if (!p) return [];
+  const own = !!m.length && m.length > 0;
+  const bars = [1, 2, 4, 8, 16].map((n) => ({ label: n === 1 ? "1 Bar" : `${n} Bars`, onClick: () => setMarkerLength(m, barsFrom(p, m.pos, n) - m.pos) }));
+  return [{ label: "To Next Marker", checked: !own, onClick: () => setMarkerLength(m, null) }, { separator: true }, ...bars];
 }
