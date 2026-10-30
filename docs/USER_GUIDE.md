@@ -243,7 +243,17 @@ status, the audio devices, and the number of MIDI inputs.
 When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
 All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
 and Split act on the range.
+With the Piano Roll or the Event List focused, Edit › Select's All Following, Inside Locators,
+Muted, Same Colored, Equal and Invert Selection (and their keys) select notes and events rather
+than regions, as in Logic (see [Edit menu](#edit-menu)).
 While a bounce is rendering, menu commands are ignored.
+
+**Sheets and key commands.** While a sheet is open (Strip Silence, Group Settings, a name or
+value to type, Settings, Bounce…), key commands don't reach the tracks or editors behind it,
+even after you click one of its sliders or buttons: **Esc** closes it and **Return** presses
+its default (highlighted) button. Controller Assignments is the exception, as Logic's window
+is: Learn Assignment (Ctrl+L), Controller Assignments (Ctrl+Shift+L) and the transport keys
+still work while it is open, while editing keys (Delete, Cut, Paste…) don't.
 
 ### Separate windows
 
@@ -266,7 +276,9 @@ be opened in a window of their own, for example to put the Mixer on a second mon
 - **Effect panels in separate windows by default:** Settings › General › Open Effect Panels ›
   Separate windows opens every built-in effect panel and Channel EQ in its own window.
 - **Everything stays live.** Meters, the playhead, the selection (the editor follows it), the
-  theme, the interface size and the settings are the same in every window. Key commands and the
+  theme, the interface size, the settings and the clipboards (regions, channel strip settings,
+  plug-ins and Channel EQ: copy in a separate Mixer, paste in the main window) are the same in
+  every window. Key commands and the
   menu bar work in a separate window as in the main one; the Edit menu acts on the separate
   window's editor while it is in front.
 - **Effect panels opened from a separate Mixer** (clicking an insert slot there) float inside
@@ -1193,6 +1205,14 @@ Highest Notes, Select Lowest Notes (of each chord), Select Muted Notes, Select I
 Export Region as MIDI File…. The Piano Roll has its own note clipboard, separate from the region
 clipboard.
 
+The Edit › Select key commands act on the notes while the Piano Roll has focus (and on the
+listed events while the Event List has it): **All Following** (Shift+F, from the first
+selected note, or the playhead), **Inside Locators** (Shift+L), **Muted** (Shift+M), **Same
+Colored** (Shift+C: the velocity of a selected note, which sets its colour), **Equal**
+(Shift+E: the pitch of a selected note; for controllers, the same controller and value) and
+**Invert Selection** (Shift+I). Overlapped, Similar and All Following of Same Track still act
+on regions.
+
 ### Velocity and controller lane
 
 The lane below the notes shows velocity or a controller. Drag the bar above it to resize it
@@ -1277,7 +1297,8 @@ note selection is shared with the Piano Roll: notes selected in one are selected
   the region there, or the nearest listed one; a one-bar region is made when the track has
   none nearby). It copies the selected event of that type, if there is one, as Logic's Create
   does; otherwise a note is C3, velocity 100, a beat long, and a pitch bend is centred.
-- **Backspace** deletes the selected events.
+- **Backspace** deletes the selected events. The Edit › Select key commands (Shift+I Invert
+  Selection, Shift+F All Following…) act on the listed events, as in the Piano Roll.
 - **The playhead:** the event at the playhead is highlighted, and with **Catch** (the button
   and View menu) the list scrolls to keep it in view during playback.
 - **Separate window:** the pop-out button at the right of the bar, the View menu, or View ›
@@ -1322,6 +1343,8 @@ regions**, MIDI regions that play the notes their pattern makes.
   Each row counts its steps from the region's start, and a looped region (the region's Loop)
   starts the pattern over on every repetition.
 - **While playing**, the step each row is on is outlined.
+- **Delete** and Backspace do nothing while the Step Sequencer has focus (it has no step
+  selection), so they can't remove the pattern region being edited.
 - **Functions** menu: Add Row, Clear Pattern, and **Convert to MIDI Region**, which writes the
   notes the pattern plays into the region (also in the region's right-click menu). A MIDI
   region's right-click menu has **Convert to Pattern Region**: a row for each pitch, each
@@ -1977,7 +2000,8 @@ input port) and the parameter. For each one:
 - **Delete** removes it; that controller plays the instrument again.
 
 An assignment whose track or plug-in isn't in the open project is greyed and does nothing.
-**Learn Transport Button…** assigns a button to Play / Stop, Record or Cycle.
+**Learn Transport Button…** assigns a button to Play / Stop, Record or Cycle. Learn Assignment
+(Ctrl+L) and the transport keys work while the window is open; editing keys don't.
 
 ---
 
@@ -2392,7 +2416,8 @@ Tracks, Editing and Windows.
   bar can't be used.
 - **Default** restores a command's own keys; **Reset All** restores everything.
 - The menu bar's shortcuts are listed at the end, read-only ("Menu Bar (fixed)").
-- Shortcuts work in the main window, not while typing in a text field.
+- Shortcuts work in the main window, not while typing in a text field or while a sheet is
+  open (see [The menu bar](#the-menu-bar)).
 
 ### Appearance
 

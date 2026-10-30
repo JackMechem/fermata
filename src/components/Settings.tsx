@@ -24,21 +24,17 @@ import {
 } from "../prefs";
 import { setState, useStore, type Snap, type SettingsTab } from "../store";
 import { Check, NumberField, Select, sheetKey, Slider } from "./Form";
+import { grabKeys, useSheetKeys } from "../sheetKeys";
 import type { WheelScrolls } from "../wheel";
 
 const toast = (text: string, ms = 3000) => setState({ toast: { text, at: Date.now(), ms } });
 
 function SheetFrame({ title, children, onClose, width }: { title: string; children: React.ReactNode; onClose: () => void; width: number }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
+  const ref = useRef<HTMLDivElement>(null);
+  useSheetKeys(ref, onClose);
   return (
     <div className="sheet-backdrop" onMouseDown={onClose}>
-      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
+      <div ref={ref} className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
         <div className="sheet-title">{title}</div>
         {children}
       </div>
@@ -965,9 +961,8 @@ function KeysPane({ close }: { close: () => void }) {
       if (!mine.includes(key)) next = withKeys(next, id, [...mine, key]);
       setKeys(next);
     };
-    // Capture phase, ahead of the sheet's Escape handler and the main window's shortcuts.
-    window.addEventListener("keydown", k, true);
-    return () => window.removeEventListener("keydown", k, true);
+    // Ahead of the sheet's Escape handling and the main window's shortcuts.
+    return grabKeys(k);
   }, [capture]);
 
   /** Puts a command's default keys back, taking them from any command that has them now (a

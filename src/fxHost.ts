@@ -56,29 +56,29 @@ export async function loadPlugin(track: Id, slot: number, pluginId: string, open
 }
 
 // ---- clipboard --------------------------------------------------------------------------------
-// Kept here rather than in the store's project state, so it survives opening another project.
+// In the store, shared by every window, and outside the project, so it survives opening
+// another.
 
-let pluginClip: PluginSlot | null = null;
-let eqClip: ChannelEq | null = null;
-
-export const pluginClipboard = () => pluginClip;
-export const eqClipboard = () => eqClip;
+export const pluginClipboard = () => getState().pluginClip;
+export const eqClipboard = () => getState().eqClip;
 
 export async function copyPlugin(track: Id, slot: number) {
   const s = await call<PluginSlot>("copy_plugin", { track, slot });
-  if (s) pluginClip = s;
+  if (s) setState({ pluginClip: s });
 }
 
 export function pastePlugin(tracks: Id[], slot: number) {
-  if (pluginClip) return act("paste_plugin", { tracks, slot, plugin: pluginClip });
+  const plugin = pluginClipboard();
+  if (plugin) return act("paste_plugin", { tracks, slot, plugin });
 }
 
 export function copyEq(eq: ChannelEq) {
-  eqClip = structuredClone(eq);
+  setState({ eqClip: structuredClone(eq) });
 }
 
 export function pasteEq(tracks: Id[]) {
-  if (eqClip) return act("paste_eq", { tracks, eq: eqClip });
+  const eq = eqClipboard();
+  if (eq) return act("paste_eq", { tracks, eq });
 }
 
 /** The tracks a paste goes to: every selected track when `track` is among several selected. */
@@ -90,7 +90,7 @@ function pasteTargets(track: Id): Id[] {
 /** The right-click menu of an insert or instrument slot. */
 export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): MenuItem[] {
   const instrument = slot === INSTRUMENT_SLOT;
-  const clip = pluginClip;
+  const clip = pluginClipboard();
   // An instrument only pastes into an instrument slot, an effect only into an Audio FX slot.
   // Like Session::find_plugin: a plug-in found at another path matches by its class id.
   const cid = (id: string) => id.slice(id.lastIndexOf("|") + 1).toLowerCase();
@@ -113,6 +113,7 @@ export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): Me
 /** The Channel EQ thumbnail's right-click menu. */
 export function eqMenu(track: Id, eq: ChannelEq | undefined): MenuItem[] {
   const targets = pasteTargets(track);
+  const eqClip = eqClipboard();
   const items: MenuItem[] = [
     { label: "Copy Channel EQ", disabled: !eq, onClick: () => eq && copyEq(eq) },
     { label: "Paste Channel EQ", disabled: !eqClip, onClick: () => pasteEq([track]) },

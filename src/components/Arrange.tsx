@@ -10,7 +10,7 @@ import { mix, theme } from "../theme";
 import { indexAt, stepVisible, useLayout, visibleSteps, zoomTracks, type Layout } from "../layout";
 import { onViewport, registerScroller, setViewport, viewport } from "../view";
 import { openMenu } from "./Menu";
-import { laneMenu, linkedRegions, regionMenu } from "../ops";
+import { laneMenu, linkedRegions, regionMenu, renameRegion } from "../ops";
 import { isLooped, loopEnd, loopPasses, regionEnd } from "../loops";
 import { automationHover, automationLeave, automationMenu, automationMouseDown, drawAutomation } from "../automation";
 import { refuseFrozen } from "../freeze";
@@ -1125,10 +1125,7 @@ export function Arrange() {
     openMenu(
       e.clientX,
       e.clientY,
-      regionMenu(r, () => {
-        const name = window.prompt("Region name", r.name);
-        if (name) act("rename_region", { id: r.id, name });
-      }),
+      regionMenu(r, () => renameRegion(r)),
     );
   };
 

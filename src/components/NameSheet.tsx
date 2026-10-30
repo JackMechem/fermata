@@ -1,8 +1,10 @@
-// A small sheet that asks for a name (New Alternative, Save as Template, renames): `askName`
-// resolves with the trimmed name, or null when cancelled. It sits above the other sheets and
-// the Project Chooser, so they can ask too.
+// A small sheet that asks for a name (New Alternative, Save as Template, renames) or a value
+// (the Piano Roll's Transpose by… and the like): `askName` resolves with the trimmed text, or
+// null when cancelled. It sits above the other sheets and the Project Chooser, so they can ask
+// too. The app uses it instead of window.prompt, which macOS's web view doesn't implement.
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { nameProblem } from "../alternativesModel";
+import { useSheetKeys } from "../sheetKeys";
 import { sheetKey } from "./Form";
 
 interface Ask {
@@ -15,10 +17,18 @@ interface Ask {
   resolve: (name: string | null) => void;
 }
 
+/** A check for names that aren't file names (regions, markers, takes): anything but empty. */
+export const notEmpty = (name: string): string | null => (name.trim() ? null : "The name can't be empty.");
+
 let current: Ask | null = null;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((s) => s());
 
+/**
+ * Asks for a name: `label` goes before the field ("Name:"), `value` is the text to start from,
+ * `ok` the default button's label, and `check` returns a message that keeps the sheet open (by
+ * default, `nameProblem`: a name that can be a file name).
+ */
 export function askName(opts: { title: string; label?: string; value?: string; ok?: string; check?: (name: string) => string | null }): Promise<string | null> {
   current?.resolve(null);
   return new Promise((resolve) => {
@@ -49,7 +59,9 @@ function NameSheet({ ask }: { ask: Ask }) {
   const [name, setName] = useState(ask.value);
   const [problem, setProblem] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   useEffect(() => input.current?.select(), []);
+  useSheetKeys(box, () => finish(null));
   const submit = () => {
     const p = ask.check(name);
     if (p) setProblem(p);
@@ -57,7 +69,7 @@ function NameSheet({ ask }: { ask: Ask }) {
   };
   return (
     <div className="sheet-backdrop name-sheet-backdrop" onMouseDown={() => finish(null)}>
-      <div className="sheet" style={{ width: 380 }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, () => finish(null))}>
+      <div ref={box} className="sheet" style={{ width: 380 }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, () => finish(null))}>
         <div className="sheet-title">{ask.title}</div>
         <div className="name-sheet-row">
           <label>{ask.label}</label>

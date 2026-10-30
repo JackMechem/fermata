@@ -88,6 +88,24 @@ export function StepSequencer() {
     setModeState(m);
   };
 
+  // A click in the editor gives it the focus, so the window's key commands don't take its keys:
+  // Delete would remove the pattern region being edited. The editor has no step selection, so
+  // Delete does nothing here.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const focusProps = {
+    ref: rootRef,
+    tabIndex: -1,
+    onPointerDownCapture: (e: React.PointerEvent) => {
+      if (!(e.target as HTMLElement).closest("input, textarea, select")) rootRef.current?.focus({ preventScroll: true });
+    },
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if ((e.key === "Delete" || e.key === "Backspace") && !(e.target as HTMLElement).closest("input, textarea")) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+  };
+
   /** Applies `f` to the pattern and sends it; `key` joins an undo step (a drag's steps). */
   const edit = (label: string, f: (p: Pattern) => Pattern, key: string | null = null) => {
     const { region, pattern } = current.current;
@@ -278,7 +296,7 @@ export function StepSequencer() {
     const track = project?.tracks.find((t) => t.id === selectedTrack);
     const canCreate = track?.kind === "instrument" && !track.frozen;
     return (
-      <div className="editor step-seq">
+      <div className="editor step-seq" {...focusProps}>
         {bar}
         <div className="editor-body">
           <div className="editor-empty ss-empty">
@@ -299,7 +317,7 @@ export function StepSequencer() {
   const frozen = !!trackOf(region.id)?.frozen;
 
   return (
-    <div className="editor step-seq">
+    <div className="editor step-seq" {...focusProps}>
       {bar}
       <div className="ss-tools">
         <div className="editor-tabs ss-modes">

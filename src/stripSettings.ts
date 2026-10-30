@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { act, call, MASTER_ID, type ChannelEq, type Id, type PluginSlot } from "./api";
 import type { MenuItem } from "./components/Menu";
+import { askName } from "./components/NameSheet";
 import { getState, setState } from "./store";
 
 /** A channel strip setting as the engine hands it over (`StripSetting`). */
@@ -17,9 +18,6 @@ export interface StripSetting {
   eq?: ChannelEq | null;
 }
 
-// Kept here rather than in the store's project state, so it survives opening another project
-// (like the plug-in clipboard in fxHost.ts).
-let stripClip: StripSetting | null = null;
 
 /** Resets the clip indicators of these strips (MASTER_ID for Stereo Out), or of all (null). */
 export function resetClipIndicators(tracks: Id[] | null) {
@@ -35,10 +33,11 @@ function targets(track: Id): Id[] {
 
 export async function copyStrip(track: Id) {
   const s = await call<StripSetting>("copy_strip", { track });
-  if (s) stripClip = s;
+  if (s) setState({ stripClip: s });
 }
 
 export function pasteStrip(tracks: Id[]) {
+  const stripClip = getState().stripClip;
   if (stripClip) return act("paste_strip", { tracks, setting: stripClip });
 }
 
@@ -48,7 +47,7 @@ function toast(text: string) {
 
 /** Save Channel Strip Setting As…: asks for a name, and before replacing a saved one. */
 async function saveStrip(track: Id, suggested: string) {
-  const name = window.prompt("Save the channel strip setting as:", suggested);
+  const name = await askName({ title: "Save Channel Strip Setting", label: "Save as:", value: suggested, ok: "Save" });
   if (name === null) return;
   let overwrite = false;
   for (;;) {
@@ -81,6 +80,7 @@ async function deleteStrip(name: string) {
  */
 export async function stripSettingMenu(track: Id, name: string): Promise<MenuItem[]> {
   const saved = (await call<string[]>("list_strip_settings")) ?? [];
+  const stripClip = getState().stripClip;
   const to = targets(track);
   const many = to.length > 1 ? ` (${to.length} Strips)` : "";
   const items: MenuItem[] = [

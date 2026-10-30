@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
-import type { AutoParam, Id, PluginDesc, Region, Snapshot, Tick } from "./api";
+import type { AutoParam, ChannelEq, Id, PluginDesc, PluginSlot, Region, Snapshot, Tick } from "./api";
+import type { StripSetting } from "./stripSettings";
 import type { FxInfo } from "./fx";
 import type { DropTarget } from "./dnd";
 import type { DockPanels } from "./fxDock";
@@ -109,6 +110,12 @@ export interface State {
   selectedMarker: Id | null;
   /** The Arrangement track's selected section. */
   selectedSection: Id | null;
+  /** The channel strip, plug-in and Channel EQ clipboards (stripSettings.ts, fxHost.ts). Here,
+   *  so every window shares them (detachModel.ts SYNCED_FIELDS), and not in the project, so
+   *  they survive opening another. */
+  stripClip: StripSetting | null;
+  pluginClip: PluginSlot | null;
+  eqClip: ChannelEq | null;
 }
 
 export interface MidiSelection {
@@ -166,6 +173,9 @@ let state: State = {
   showStepInput: false,
   selectedMarker: null,
   selectedSection: null,
+  stripClip: null,
+  pluginClip: null,
+  eqClip: null,
 };
 
 const listeners = new Set<() => void>();

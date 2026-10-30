@@ -13,7 +13,8 @@ import { coalesced, framePos, onFrame } from "../frame";
 import { Icon } from "../icons";
 import * as me from "../midiEdit";
 import { exportMidi } from "../midiFiles";
-import { fmt, keyHint } from "../keymap";
+import { commandForEvent, fmt, keyHint } from "../keymap";
+import { isEditorSelect, selectEvents } from "../noteSelect";
 import {
   BLACK,
   CYCLE_H,
@@ -44,6 +45,7 @@ import { EditorTabs } from "./EventList";
 import { lengthBbt, samplesPerBeat, toBbt } from "../time";
 import { barLines, musicalWarp, tempoMap, type Warp } from "../tempo";
 import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu";
+import { askName } from "./NameSheet";
 import { getSettings } from "../prefs";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
@@ -1511,6 +1513,21 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (anySelected()) commit(musical(notesNow(), (n) => me.duplicate(n, grid().grid)), work.current.cc, "Duplicate Notes");
   };
   const selectAll = () => setSelection(me.selectAll(notesNow()));
+  /** Edit › Select commands (Invert Selection, All Following…) act on the notes while the
+   *  Piano Roll has focus, as in Logic; false for those that stay with the regions. */
+  const selectCommand = (id: string): boolean => {
+    if (!isEditorSelect(id)) return false;
+    const c = live.current.project.cycle;
+    const notes = notesNow();
+    const items = notes.map((n) => ({ start: n.start, sel: n.sel, equal: String(n.pitch), velocity: n.velocity, muted: n.muted }));
+    const sel = selectEvents(id, items, { playhead: playhead(), locators: c.end > c.start ? c : null });
+    if (!sel) return false;
+    setSelection(
+      notes.map((n, i) => (n.sel === sel[i] ? n : { ...n, sel: sel[i] })),
+      work.current.cc.map((x) => (x.sel ? { ...x, sel: false } : x)),
+    );
+    return true;
+  };
   const apply = (f: (n: PNote[]) => PNote[], label: string, key?: string) => commit(f(notesNow()), work.current.cc, label, key);
   const quantizeNow = () => {
     const { project, pr } = live.current;
@@ -1520,11 +1537,11 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   };
   const msToSamples = (ms: number) => (ms / 1000) * live.current.project.sample_rate;
   const humanize = (ms: number, vel: number) => apply((n) => me.humanize(n, { time: msToSamples(ms), velocity: vel, length: 0 }), "Humanize");
-  const ask = (question: string, def: string, f: (v: number[]) => void) => {
-    const a = window.prompt(question, def);
-    if (a === null) return;
-    const nums = a.split(/[,\s]+/).map(Number).filter((x) => Number.isFinite(x));
-    if (nums.length) f(nums);
+  /** Asks for one or more numbers (Transpose by…, Set Velocity to…) in the name sheet. */
+  const ask = async (title: string, label: string, def: string, f: (v: number[]) => void) => {
+    const numbers = (text: string) => text.split(/[,\s]+/).filter(Boolean).map(Number).filter((x) => Number.isFinite(x));
+    const a = await askName({ title, label, value: def, check: (t) => (numbers(t).length ? null : "Type a number.") });
+    if (a !== null) f(numbers(a));
   };
   const exportRegion = () => {
     const r = work.current.regions.find((x) => x.id === live.current.focus) ?? work.current.regions[0];
@@ -1564,7 +1581,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
             ] as [string, number][]
           ).map(([label, d]) => ({ label, onClick: () => apply((n) => me.transpose(n, d), "Transpose") })),
           { separator: true },
-          { label: "Other…", onClick: () => ask("Transpose by semitones", "7", ([d]) => apply((n) => me.transpose(n, Math.round(d)), "Transpose")) },
+          { label: "Other…", onClick: () => ask("Transpose", "Semitones:", "7", ([d]) => apply((n) => me.transpose(n, Math.round(d)), "Transpose")) },
         ],
       },
       {
@@ -1574,8 +1591,8 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           { separator: true },
           ...[50, 80, 90, 110, 120, 150].map((p) => ({ label: `Scale ${p}%`, onClick: () => apply((n) => me.scaleVelocity(n, p), "Scale Velocity") })),
           { separator: true },
-          { label: "Set to…", onClick: () => ask("Set velocity (1–127)", "100", ([v]) => apply((n) => me.setVelocity(n, v), "Set Velocity")) },
-          { label: "Scale by…", onClick: () => ask("Scale velocity by percent", "110", ([p]) => apply((n) => me.scaleVelocity(n, p), "Scale Velocity")) },
+          { label: "Set to…", onClick: () => ask("Set Velocity", "Velocity (1–127):", "100", ([v]) => apply((n) => me.setVelocity(n, v), "Set Velocity")) },
+          { label: "Scale by…", onClick: () => ask("Scale Velocity", "Percent:", "110", ([p]) => apply((n) => me.scaleVelocity(n, p), "Scale Velocity")) },
         ],
       },
       {
@@ -1584,7 +1601,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
           { label: "Light (±5 ms, ±5 velocity)", onClick: () => humanize(5, 5) },
           { label: "Medium (±10 ms, ±10 velocity)", onClick: () => humanize(10, 10) },
           { label: "Strong (±20 ms, ±20 velocity)", onClick: () => humanize(20, 20) },
-          { label: "Custom…", onClick: () => ask("Humanize: timing in ms, then velocity", "10, 10", ([ms, v]) => humanize(ms, v ?? 0)) },
+          { label: "Custom…", onClick: () => ask("Humanize", "Timing (ms), velocity:", "10, 10", ([ms, v]) => humanize(ms, v ?? 0)) },
         ],
       },
       { separator: true },
@@ -1662,7 +1679,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       { separator: true },
       {
         label: "Other Controller…",
-        onClick: () => ask("Controller number (0–127)", "74", ([n]) => n >= 0 && n <= 127 && setPrefs({ lane: `cc:${Math.round(n)}`, showLane: true })),
+        onClick: () => ask("Show Controller", "Controller (0–127):", "74", ([n]) => n >= 0 && n <= 127 && setPrefs({ lane: `cc:${Math.round(n)}`, showLane: true })),
       },
       ...curveItems(),
     ];
@@ -1737,6 +1754,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   useEffect(() => {
     const h = (id: string) => {
       if (!rootRef.current?.contains(document.activeElement)) return false;
+      if (selectCommand(id)) return true;
       const f: Record<string, () => void> = { "select-all": selectAll, copy, cut, paste, duplicate, delete: deleteSelected };
       if (!f[id]) return false;
       f[id]();
@@ -1766,6 +1784,12 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         e.stopPropagation();
         return;
       }
+    }
+    const cmd = commandForEvent(e.nativeEvent);
+    if (cmd && selectCommand(cmd)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
     }
     if (mod && !e.altKey) {
       // ⌘A and ⌘D are native menu accelerators; they arrive through pianoRollMenu().

@@ -58,6 +58,7 @@ import { ControllerAssignmentsSheet, LearnBanner } from "./components/Controller
 import { newAlternative, revertToBackup, revertToSaved, saveAsTemplate, switchAlternative, useProjectMenus } from "./projectFiles";
 import { deleteTrackAlternative, newTrackAlternative, renameTrackAlternative, trackForAlternatives } from "./trackAlternatives";
 import { NameSheetHost } from "./components/NameSheet";
+import { sheetBlocks } from "./sheetKeys";
 import { AlternativesSheet } from "./components/AlternativesSheet";
 import { ARRANGE_COMMANDS, runArrangeCommand } from "./arrangeCmds";
 import { StripSilenceHost } from "./components/StripSilence";
@@ -593,7 +594,7 @@ export default function App() {
     // Detached panel windows: their key commands run here, as if pressed in this window.
     const offDetach = installDetach({
       key: (id, repeat) => {
-        if (!getState().dialog && !runStepInputCommand(id, repeat)) KEY_ACTIONS[id]?.();
+        if (!getState().dialog && !sheetBlocks(id) && !runStepInputCommand(id, repeat)) KEY_ACTIONS[id]?.();
       },
     });
     const ctx = (e: MouseEvent) => e.preventDefault();

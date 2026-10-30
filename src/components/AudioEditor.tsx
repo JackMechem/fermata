@@ -5,7 +5,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { act, call, type Id, type Project, type Region, type Track } from "../api";
 import * as ed from "../audioEdit";
 import { coalesced, framePos, onFrame } from "../frame";
-import { laneMenu, regionMenu } from "../ops";
+import { laneMenu, regionMenu, renameRegion } from "../ops";
 import { currentTick, getState, setState, useStore } from "../store";
 import { theme } from "../theme";
 import { formatDb, formatTime, lengthBbt as lengthAt, PEAK_BUCKET, samplesPerBeat, snapPos, toBbt } from "../time";
@@ -774,10 +774,7 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       e.clientY,
       [
         ...extra,
-        ...regionMenu(r, () => {
-          const name = window.prompt("Region name", r.name);
-          if (name) act("rename_region", { id: r.id, name });
-        }),
+        ...regionMenu(r, () => renameRegion(r)),
       ],
     );
   };

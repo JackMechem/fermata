@@ -1,6 +1,6 @@
 // The Project Chooser shown at launch and from File › New: start from a template, or reopen a
 // recent project. Modelled on Logic Pro's chooser.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { invoke } from "@tauri-apps/api/core";
 import { act, call, type InputSel, type RecentProject, type TrackKind, type UserTemplate } from "../api";
@@ -10,6 +10,7 @@ import { nameProblem } from "../alternativesModel";
 import { confirmDiscard } from "../files";
 import { getState, setState, useStore } from "../store";
 import { NumberField, Select, sheetKey } from "./Form";
+import { useSheetKeys } from "../sheetKeys";
 import { getSettings, openProjectPath, updateSettings, type Startup } from "../prefs";
 
 interface TemplateTrack {
@@ -138,13 +139,8 @@ export function ProjectChooser() {
     });
   }, []);
 
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, []);
+  const box = useRef<HTMLDivElement>(null);
+  useSheetKeys(box, close);
 
   const toast = (text: string) => setState({ toast: { text, at: Date.now(), ms: 5000 } });
   const target = `${location.replace(/\/+$/, "")}/${name.trim() || "Untitled"}.fermata`;
@@ -263,7 +259,7 @@ export function ProjectChooser() {
 
   return (
     <div className="chooser-backdrop">
-      <div className="chooser" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, close)}>
+      <div ref={box} className="chooser" onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, close)}>
         <aside className="chooser-side">
           <div className="chooser-brand">
             <svg width="22" height="22" viewBox="0 0 22 22" fill="none">

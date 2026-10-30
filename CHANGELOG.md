@@ -230,6 +230,22 @@ All notable changes to Fermata are recorded here. The format follows
   switch, left the menu's tick on the wrong alternative.
 - Edit › Delete removed the selected regions even when automation points, a tempo change or a
   marker were selected; it now deletes those first, as the Delete key does.
+- On macOS, renaming a region, take, comp, marker or arrangement marker, Save Channel Strip
+  Setting As… and the Piano Roll's Transpose by…, Set Velocity…, Scale Velocity…, Custom
+  Humanize… and Other Controller… did nothing: macOS's web view has no `window.prompt`. They now
+  ask in Fermata's own name sheet (which detached windows show too).
+- Key commands reached the app behind an open sheet once the focus was outside its text fields:
+  Backspace deleted regions while Strip Silence was open after clicking its slider. Sheets
+  (Strip Silence, Group Settings, the name sheet, Settings, Bounce…) now hold back key
+  commands, Esc closes them and Return presses the default button. Controller Assignments
+  stays non-modal, as in Logic: Learn Assignment and the transport keys still work.
+- Copy Channel Strip Settings, Copy Plug-in and Copy Channel EQ in a detached Mixer couldn't be
+  pasted in the main window (or the other way round): the clipboards are now shared.
+- Edit › Select commands (Shift+I, Shift+F, Shift+M…) selected regions while the Piano Roll or
+  Event List had focus; Invert Selection, All Following, Inside Locators, Muted, Same Colored and
+  Equal now select its notes or events.
+- Delete or Backspace with the Step Sequencer focused deleted the pattern region being edited;
+  they now do nothing there.
 
 ## [0.1.0-alpha.1] - 2026-10-29
 

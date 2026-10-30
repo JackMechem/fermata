@@ -60,7 +60,8 @@ export function ControllerAssignmentsSheet() {
   );
   const learnKey = keyHint("learn-assignment");
   return (
-    <Sheet title="Controller Assignments" onClose={close} width={800}>
+    // Non-modal, like Logic's window: Learn Assignment and the transport keys still work.
+    <Sheet title="Controller Assignments" onClose={close} width={800} mode="non-modal">
       <div className="ctl-head">
         <span>Controller</span>
         <span>Channel</span>

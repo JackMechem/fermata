@@ -3,15 +3,24 @@
 import { useEffect, useState } from "react";
 import { Icon } from "../icons";
 import { openMenuAt } from "./Menu";
+import { defaultButton } from "../sheetKeys";
 
 /**
  * onKeyDown for a sheet: keys typed in it stay there, so the main window's shortcuts don't
- * fire. That also keeps them from the sheet's own window Esc listener, so Esc is handled here
- * too (an open menu takes Esc first, in the capture phase).
+ * fire (sheetKeys.ts handles the keys pressed outside it). Esc closes it (an open menu takes
+ * Esc first, in the capture phase), and Return presses its default button unless a field or
+ * another button has the focus.
  */
 export function sheetKey(e: React.KeyboardEvent, onClose: () => void) {
   e.stopPropagation();
   if (e.key === "Escape") onClose();
+  else if (e.key === "Enter" && !(e.target as HTMLElement).closest("input, textarea, select, button")) {
+    const b = defaultButton(e.currentTarget as HTMLElement);
+    if (b) {
+      e.preventDefault();
+      b.click();
+    }
+  }
 }
 
 export function Select<T extends string | number>({

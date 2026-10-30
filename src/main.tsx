@@ -10,6 +10,10 @@ import { savedShowOverview } from "./components/Overview";
 import "./panelKinds";
 import { ownPanel } from "./detach";
 import { DetachedWindow } from "./components/DetachedWindow";
+import { installSheetKeys } from "./sheetKeys";
+
+// First, so open sheets see every key press before anything else does.
+installSheetKeys();
 
 applyTheme(savedThemeId(), false);
 const scale = savedUiScale();

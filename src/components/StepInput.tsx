@@ -7,6 +7,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { act, actMade, type Project, type Track } from "../api";
 import { commandForEvent, keyHint } from "../keymap";
+import { sheetOpen } from "../sheetKeys";
 import * as si from "../stepInput";
 import { currentTick, getState, onTick, setState, useStore } from "../store";
 import { tempoMap } from "../tempo";
@@ -165,7 +166,7 @@ export function StepInput() {
     const key = (e: KeyboardEvent) => {
       const tgt = e.target as HTMLElement | null;
       if (tgt && ["INPUT", "SELECT", "TEXTAREA"].includes(tgt.tagName)) return;
-      if (getState().dialog) return;
+      if (getState().dialog || sheetOpen()) return;
       const id = commandForEvent(e);
       if (!id || !runStepInputCommand(id, e.repeat)) return;
       e.preventDefault();

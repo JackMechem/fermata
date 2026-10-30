@@ -7505,3 +7505,9 @@ canvas.pr-cursor-line {
   grid-template-columns: 130px 1fr;
   margin-bottom: 4px;
 }
+
+/* ---- Step Sequencer focus (components/StepSequencer.tsx) ---------------------------------- */
+
+.step-seq:focus {
+  outline: none;
+}

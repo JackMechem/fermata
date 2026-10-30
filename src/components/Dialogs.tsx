@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useSheetKeys } from "../sheetKeys";
+import type { SheetMode } from "../sheetKeysModel";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { act, BUILTIN_SYNTH, call, supportedRates, type AudioConfig, type DeviceList, type Group, type InputLevel, type InputSel, type Tick, type TrackKind } from "../api";
 import { updateGroup } from "../ops";
@@ -15,17 +17,13 @@ import { SettingsWindow } from "./Settings";
 import { PdcSettings } from "./Latency";
 import { fmt } from "../keymap";
 
-export function Sheet({ title, children, onClose, width = 560 }: { title: string; children: React.ReactNode; onClose: () => void; width?: number }) {
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [onClose]);
+/** A sheet: modal for key commands unless `mode` says otherwise (sheetKeys.ts). */
+export function Sheet({ title, children, onClose, width = 560, mode = "modal" }: { title: string; children: React.ReactNode; onClose: () => void; width?: number; mode?: SheetMode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useSheetKeys(ref, onClose, mode);
   return (
     <div className="sheet-backdrop" onMouseDown={onClose}>
-      <div className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
+      <div ref={ref} className="sheet" style={{ width }} onMouseDown={(e) => e.stopPropagation()} onKeyDown={(e) => sheetKey(e, onClose)}>
         <div className="sheet-title">{title}</div>
         {children}
       </div>

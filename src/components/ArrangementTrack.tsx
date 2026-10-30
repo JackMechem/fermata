@@ -17,6 +17,7 @@ import { mix, theme } from "../theme";
 import { pixelRatio } from "../uiScale";
 import { onViewport, viewport } from "../view";
 import { openMenu, type MenuItem } from "./Menu";
+import { askName, notEmpty } from "./NameSheet";
 
 /** Height of the Arrangement lane. */
 export const ARR_H = 22;
@@ -29,9 +30,9 @@ export function addSection(name?: string) {
   actMade("add_arrangement_marker", { name: name ?? null }).then((ids) => ids?.length && setState({ selectedSection: ids[0] }));
 }
 
-function renameSection(s: ArrangementMarker) {
-  const name = window.prompt("Arrangement marker name", s.name);
-  if (name !== null && name.trim() && name !== s.name) act("rename_arrangement_marker", { id: s.id, name: name.trim() });
+async function renameSection(s: ArrangementMarker) {
+  const name = await askName({ title: "Rename Arrangement Marker", value: s.name, ok: "Rename", check: notEmpty });
+  if (name && name !== s.name) act("rename_arrangement_marker", { id: s.id, name });
 }
 
 /** Selects a section and every region in it, as clicking it does in Logic. */

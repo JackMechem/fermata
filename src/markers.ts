@@ -3,6 +3,7 @@
 // undoable); the engine never sees them.
 import { act, type Id, type Marker, type Project } from "./api";
 import type { MenuItem } from "./components/Menu";
+import { askName, notEmpty } from "./components/NameSheet";
 import { keyHint } from "./keymap";
 import { colorMenu } from "./ops";
 import { currentTick, getState, setState } from "./store";
@@ -49,9 +50,9 @@ export function markerAtPlayhead(): Marker | null {
   return [...p.markers].reverse().find((m) => m.pos <= at + 1) ?? null;
 }
 
-export function renameMarker(m: Marker) {
-  const name = window.prompt("Marker name", m.name);
-  if (name !== null && name.trim() && name !== m.name) act("rename_marker", { id: m.id, name: name.trim() });
+export async function renameMarker(m: Marker) {
+  const name = await askName({ title: "Rename Marker", value: m.name, ok: "Rename", check: notEmpty });
+  if (name && name !== m.name) act("rename_marker", { id: m.id, name });
 }
 
 export function deleteMarker(id: Id) {

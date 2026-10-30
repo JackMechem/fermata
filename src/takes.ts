@@ -5,6 +5,7 @@
 import { act, actMade, type Id, type Region, type Take, type TakeFolder, type Track } from "./api";
 import { compNames, currentComp, isMidiFolder } from "./comps";
 import type { MenuItem } from "./components/Menu";
+import { askName, notEmpty } from "./components/NameSheet";
 import { getState, setState } from "./store";
 import { mix, theme } from "./theme";
 import { drawWave, ensureWave, waveCache } from "./waveform";
@@ -227,14 +228,15 @@ export function takeAtRow(r: Region & { takes: TakeFolder }, y: number, rowsTop:
   return k >= 0 && k < r.takes.takes.length ? r.takes.takes[k] : null;
 }
 
-function renameTake(r: Region, t: Take) {
-  const name = window.prompt("Take name", t.name);
-  if (name) act("rename_take", { region: r.id, take: t.id, name });
+async function renameTake(r: Region, t: Take) {
+  const name = await askName({ title: "Rename Take", value: t.name, ok: "Rename", check: notEmpty });
+  if (name && name !== t.name) act("rename_take", { region: r.id, take: t.id, name });
 }
 
-function renameComp(r: Region & { takes: TakeFolder }, index: number) {
-  const name = window.prompt("Comp name", compNames(r.takes)[index]);
-  if (name?.trim()) act("rename_comp", { region: r.id, index, name });
+async function renameComp(r: Region & { takes: TakeFolder }, index: number) {
+  const old = compNames(r.takes)[index];
+  const name = await askName({ title: "Rename Comp", value: old, ok: "Rename", check: notEmpty });
+  if (name && name !== old) act("rename_comp", { region: r.id, index, name });
 }
 
 /** The comps part of an audio folder's menu, as in Logic: the comps to switch between, then

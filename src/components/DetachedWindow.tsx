@@ -11,6 +11,7 @@ import { useStore } from "../store";
 import { BounceDialog, BounceInPlaceDialog } from "./Bounce";
 import { GroupSheet, NewTrackDialog, SettingsDialog } from "./Dialogs";
 import { MenuHost } from "./Menu";
+import { NameSheetHost } from "./NameSheet";
 import { pianoRollMenu } from "./PianoRoll";
 import { eventListMenu } from "./EventList";
 import { ProjectSettingsSheet } from "./Settings";
@@ -52,6 +53,7 @@ export function DetachedWindow() {
       {dialog === "project-settings" && <ProjectSettingsSheet />}
       {groupSheet !== null && <GroupSheet />}
       <MenuHost />
+      <NameSheetHost />
       <Toast />
     </div>
   );

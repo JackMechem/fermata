@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { act, actMade, api, call, canRecord, isStack, type Group, type Id, type Region, type Snapshot, type Track } from "./api";
 import { newAux } from "./routing";
 import type { MenuItem } from "./components/Menu";
+import { askName, notEmpty } from "./components/NameSheet";
 import { currentLayout, setTrackHeight, stepVisible } from "./layout";
 import { isLooped, regionEnd } from "./loops";
 import { BOUNCE_IN_PLACE_HINT, openBounce, openBounceInPlace } from "./bounce";
@@ -331,6 +332,12 @@ export function colorMenu(current: string | null | undefined, set: (c: string | 
   const items: MenuItem[] = TRACK_COLORS.map((c) => ({ label: c, color: c, checked: c === current, onClick: () => set(c) }));
   if (defaultLabel) return [{ label: defaultLabel, checked: !current, onClick: () => set(null) }, { separator: true }, ...items];
   return items;
+}
+
+/** Rename… in a region's menu. */
+export async function renameRegion(r: Region) {
+  const name = await askName({ title: "Rename Region", value: r.name, ok: "Rename", check: notEmpty });
+  if (name && name !== r.name) act("rename_region", { id: r.id, name });
 }
 
 /** The menu for right-clicking a region (acting on the whole selection). */

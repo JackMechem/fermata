@@ -12,6 +12,7 @@ import { currentTick, getState, setState } from "./store";
 import { regionsIn, subRegion } from "./audioRange";
 import { detachMenuItems } from "./detach";
 import { zeroCrossingsItem } from "./zeroCrossings";
+import { sheetOpen } from "./sheetKeys";
 
 export { regionsIn };
 
@@ -405,7 +406,7 @@ export function onEditorKey(e: KeyboardEvent) {
   const tgt = e.target as HTMLElement;
   if (tgt && (tgt.tagName === "INPUT" || tgt.tagName === "SELECT" || tgt.tagName === "TEXTAREA")) return;
   // Dialogs and open menus keep their keys (Escape closes a menu, not the selection).
-  if (getState().dialog || document.querySelector(".menu-layer")) return;
+  if (getState().dialog || sheetOpen() || document.querySelector(".menu-layer")) return;
   const mod = e.metaKey || e.ctrlKey;
   const sel = rangeSel();
   const code = e.code;

@@ -13,7 +13,8 @@ import { detachMenuItems, ownPanel } from "../detach";
 import * as el from "../eventList";
 import { framePos, onFrame } from "../frame";
 import { Icon } from "../icons";
-import { fmt } from "../keymap";
+import { commandForEvent, fmt } from "../keymap";
+import { isEditorSelect, selectEvents } from "../noteSelect";
 import * as me from "../midiEdit";
 import { currentTick, getState, setState, useStore, type MidiSelection, type State } from "../store";
 import { barLines, tempoMap } from "../tempo";
@@ -247,6 +248,26 @@ export function EventList() {
   const selectAll = () => setSelection(el.selectKeys(work.current.lists, new Set(live.current.rows.map((r) => r.key))));
   const selectNone = () => setSelection(el.selectKeys(work.current.lists, new Set()));
   const anySelected = () => live.current.rows.some((r) => el.isSelected(work.current.lists, r));
+  /** Edit › Select commands (Invert Selection, All Following…) act on the events listed while
+   *  the Event List has focus, as in Logic; false for those that stay with the regions. */
+  const selectCommand = (id: string): boolean => {
+    if (!isEditorSelect(id)) return false;
+    const l = work.current.lists;
+    const rows = live.current.rows;
+    const items = rows.map((r) => {
+      if (r.note) {
+        const n = l.notes[r.idx];
+        return { start: r.start, sel: !!n.sel, equal: `n${n.pitch}`, velocity: n.velocity, muted: n.muted };
+      }
+      const c = l.cc[r.idx];
+      return { start: r.start, sel: !!c.sel, equal: `c${JSON.stringify(c.kind)}:${c.value}` };
+    });
+    const c = live.current.project?.cycle;
+    const sel = selectEvents(id, items, { playhead: currentTick()?.pos ?? 0, locators: c && c.end > c.start ? c : null });
+    if (!sel) return false;
+    setSelection(el.selectKeys(l, new Set(rows.filter((_, i) => sel[i]).map((r) => r.key))));
+    return true;
+  };
   /** Deletes the selected events shown (not those of types filtered out). */
   const deleteEvents = () => {
     const l = work.current.lists;
@@ -425,6 +446,12 @@ export function EventList() {
   const onKeyDown = (e: React.KeyboardEvent) => {
     const tgt = e.target as HTMLElement;
     if (tgt.tagName === "INPUT") return;
+    const cmd = commandForEvent(e.nativeEvent);
+    if (cmd && selectCommand(cmd)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     const mod = e.ctrlKey || e.metaKey;
     let handled = true;
     if (mod || e.altKey) handled = false;
@@ -458,6 +485,7 @@ export function EventList() {
   useEffect(() => {
     const h = (id: string) => {
       if (!rootRef.current?.contains(document.activeElement)) return false;
+      if (selectCommand(id)) return true;
       const f: Record<string, () => void> = { "select-all": selectAll, delete: deleteEvents };
       if (!f[id]) return false;
       f[id]();
