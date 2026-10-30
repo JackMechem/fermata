@@ -4,6 +4,27 @@ What's left, in the order it matters for a usable release. Each stage builds on 
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
 of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
+## Open items (2026-10-30)
+
+Left over from the round of 2026-10-30 (Track On/Off, drag to a new track, VST3 side-chain inputs,
+multi-output instruments, surviving SIGXCPU). Checked in the running app on a virtual display: the
+new-track lane and drop, undo, the Off look, the Side Chain menu and SC badge, the "+", an output
+aux's name and Input slot, and TONE3000's editor opening on a copy of a real project.
+
+- **Not heard yet:** all of the above ran stopped or on the null device. Listen for clicks when
+  choosing a side-chain source and pressing "+" during playback, on a real interface.
+- **Opening TONE3000's editor blows the 10.7 ms soft real-time limit** every first time (SIGXCPU,
+  ignored now, so it should only cost a dropout). What makes that block slow isn't known.
+- Adding any track during playback restarts held notes (`Cmd::MidiTarget`, then Chase); with a
+  sampler that ignores note-offs, one note sounds doubled.
+- In Low Latency Mode a monitored instrument skips its compensation delay but its output auxes
+  keep theirs, so an aux can lag while monitoring.
+- An LSP lookahead change didn't reach delay compensation after a render until the next
+  `update_pdc`.
+- Freeze and Bounce in Place refuse an instrument with output auxes; Export Region renders only
+  its main output.
+- An undo that turns a latent track back on during a take can shift where the take lands.
+
 ## Open items (2026-10-29)
 
 Left over from the feature round of 2026-10-29 and the stabilisation pass after it. Nothing
