@@ -9,6 +9,7 @@ import * as ops from "./ops";
 import { ProjectChooser } from "./components/ProjectChooser";
 import { ProjectSettingsSheet, RecoverySheet } from "./components/Settings";
 import { commandForEvent } from "./keymap";
+import { runsOnKey } from "./keyRepeat";
 import { installPluginKeys } from "./pluginKeys";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
 import { toggleZeroCrossings } from "./zeroCrossings";
@@ -480,8 +481,8 @@ function onKey(e: KeyboardEvent) {
   const id = commandForEvent(e);
   const run = id ? KEY_ACTIONS[id] : undefined;
   if (!run) return;
-  run();
   e.preventDefault();
+  if (id && runsOnKey(id, e.repeat)) run();
 }
 
 export function Toast() {

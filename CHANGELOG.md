@@ -48,6 +48,8 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Fixed
 
+- Holding a key no longer repeats toggles and one-shot commands: holding Space started and
+  stopped the transport over and over. Moving, zooming and nudging still repeat.
 - Dragging a region onto a frozen track lost it, and dragging one off a frozen track doubled
   it. Both now leave the region where it was, with the existing "is frozen" message.
 - On Linux, one audio block taking longer than the buffer's length ended the app with SIGXCPU.

@@ -25,9 +25,13 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
   `update_pdc`.
 - Freeze and Bounce in Place refuse an instrument with output auxes; Export Region renders only
   its main output.
-- `multiout_check` fails about 1 run in 7: LSP's sampler sometimes hasn't made sound within 10 s
-  of loading or reopening ("the sampler loads its samples", "and the aux plays"). It happens without
-  the held-notes fix too. Unknown whether it's the check's timing or a real load problem.
+- **LSP's Multi-Sampler can lose a sample for good while loading:** one instrument stays silent, and
+  a new instance or reopening the project brings it back. Measured with two samples and our plug-in
+  host only, no engine: 1 load in 300 at audio-device pace, 9 in 300 calling `process` flat-out. It
+  hasn't been tried in another host, so whether the fault is LSP's or in how we call it is unknown.
+  `multiout_check` retries past it and prints a line when it happens.
+- `controller_check` failed once in a full run, counting two MIDI messages too many ("other messages
+  still play the instrument (2 -> 6)"), and passed 15 of 15 alone. Cause unknown.
 - An undo that turns a latent track back on during a take can shift where the take lands.
 
 ## Open items (2026-10-29)
@@ -95,8 +99,6 @@ here has been checked by eye in the app yet unless it says so.
     frame with `XAllowEvents` replay, on its own thread. Rule to be chosen by measuring whether the
     I-beam cursor is readable on JUCE and LSP; the fallbacks are chords only, or a per-window toggle.
     It needs a test under XWayland on a real display.
-  - Holding Space looks like it re-toggles the transport in the main window: `onKey` in
-    `src/App.tsx` has no repeat check (from reading the code).
   - Only one Channel EQ analyzer per session: a detached EQ and another strip's EQ take turns.
   - CI: run `scripts/headless-checks.sh` on macos-latest too (it runs on macOS now), and open a
     draft PR from `dev` so the Linux headless step runs on GitHub's runners.

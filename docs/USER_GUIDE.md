@@ -3013,6 +3013,8 @@ blank, because WebKit then draws on the CPU.
 
 ## 20. Known limitations
 
+- **LSP's Multi-Sampler:** now and then one of its samples doesn't load, and that instrument stays
+  silent. Load the plug-in again, or close and reopen the project.
 - **Platforms:** plug-in editor windows open on Linux (X11) and macOS; Windows (HWND)
   embedding is planned. On macOS, keys a plug-in's window doesn't use itself (Space, R, other
   key commands, Musical Typing) go to Fermata, while typing into the plug-in's own fields stays
