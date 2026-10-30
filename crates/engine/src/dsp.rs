@@ -67,6 +67,10 @@ pub struct EngineStatus {
     pub master: Meter,
     pub inputs: Vec<Meter>,
     pub cpu_load: AtomicU32,
+    /// The worst recent block's load, and how many blocks took longer than their own audio.
+    /// See `BlockLoad`.
+    pub cpu_peak: AtomicU32,
+    pub late_blocks: AtomicU32,
     pub cmds_done: AtomicU64,
     pub midi_activity: AtomicU32,
     pub overruns: AtomicU32,
@@ -95,6 +99,8 @@ impl Default for EngineStatus {
             master: Meter::default(),
             inputs: (0..MAX_INPUTS).map(|_| Meter::default()).collect(),
             cpu_load: AtomicU32::new(0),
+            cpu_peak: AtomicU32::new(0),
+            late_blocks: AtomicU32::new(0),
             cmds_done: AtomicU64::new(0),
             midi_activity: AtomicU32::new(0),
             overruns: AtomicU32::new(0),
@@ -152,6 +158,37 @@ fn check_output(status: &EngineStatus, ins: &mut InsertDsp, l: &mut [f32], r: &m
 const OVERLOAD_SECS: f64 = 0.06;
 /// How long it then outputs silence without processing, so the thread catches up and sleeps.
 const SHED_SECS: f64 = 0.25;
+/// How long the CPU meter's peak stays put after a block sets it, and the time constant of its
+/// fall after that.
+const PEAK_HOLD_SECS: f64 = 2.0;
+const PEAK_FALL_SECS: f64 = 0.25;
+
+/// Single blocks' load, which the smoothed average hides: one block over 1.0 is already a dropout.
+/// The hold runs in audio time, counted from the blocks themselves.
+#[derive(Default)]
+struct BlockLoad {
+    peak: f32,
+    held_secs: f64,
+    late: u32,
+}
+
+impl BlockLoad {
+    /// Takes in a block that used `load` of its `secs` of audio.
+    fn block(&mut self, load: f32, secs: f64) {
+        if load > 1.0 {
+            self.late += 1;
+        }
+        if load >= self.peak {
+            self.peak = load;
+            self.held_secs = 0.0;
+            return;
+        }
+        self.held_secs += secs;
+        if self.held_secs > PEAK_HOLD_SECS {
+            self.peak = (self.peak * (-secs / PEAK_FALL_SECS).exp() as f32).max(load);
+        }
+    }
+}
 
 /// What a built-in effect is told about the transport.
 fn fx_context(t: &TransportInfo) -> crate::fx::FxContext {
@@ -695,6 +732,7 @@ pub struct Engine {
     bus_r: Vec<f32>,
     inputs: Vec<Vec<f32>>,
     load: f32,
+    block_load: BlockLoad,
     /// How long the callbacks have been taking longer than the audio they produce, and how
     /// many callbacks are left to skip after an overload.
     behind_secs: f64,
@@ -892,6 +930,7 @@ impl Engine {
             bus_r: vec![0.0; MAX_BLOCK],
             inputs: (0..MAX_INPUTS).map(|_| vec![0.0; MAX_BLOCK]).collect(),
             load: 0.0,
+            block_load: BlockLoad::default(),
             behind_secs: 0.0,
             shedding: 0,
             offline: false,
@@ -1397,6 +1436,12 @@ impl Engine {
             let l = (spent / budget) as f32;
             self.load = self.load * 0.9 + l * 0.1;
             self.status.cpu_load.store(self.load.to_bits(), Ordering::Relaxed);
+            // A render is meant to run flat out, so it isn't a late block.
+            if !self.offline {
+                self.block_load.block(l, budget);
+                self.status.cpu_peak.store(self.block_load.peak.to_bits(), Ordering::Relaxed);
+                self.status.late_blocks.store(self.block_load.late, Ordering::Relaxed);
+            }
             // A callback that takes longer than the audio it makes leaves the thread no time
             // to sleep. Kept up, the kernel kills the whole app, so give up a moment of audio.
             self.behind_secs = if spent > budget && !self.offline { self.behind_secs + spent } else { 0.0 };
@@ -2009,6 +2054,74 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_block_peak_holds_then_falls_to_the_current_load() {
+        const BLOCK: f64 = 0.01;
+        let mut b = BlockLoad::default();
+        b.block(1.5, BLOCK);
+        for _ in 0..190 {
+            b.block(0.2, BLOCK);
+        }
+        assert_eq!(b.peak, 1.5, "held for the hold time");
+        for _ in 0..20 {
+            b.block(0.2, BLOCK);
+        }
+        assert!(b.peak < 1.5, "falling after it");
+        for _ in 0..200 {
+            b.block(0.2, BLOCK);
+        }
+        assert_eq!(b.peak, 0.2, "and stops at the current load");
+    }
+
+    #[test]
+    fn only_a_higher_block_restarts_the_peak_hold() {
+        const BLOCK: f64 = 0.01;
+        let mut b = BlockLoad::default();
+        b.block(0.5, BLOCK);
+        for _ in 0..150 {
+            b.block(0.4, BLOCK);
+        }
+        b.block(0.6, BLOCK);
+        for _ in 0..150 {
+            b.block(0.4, BLOCK);
+        }
+        assert_eq!(b.peak, 0.6, "the higher block restarted it");
+        for _ in 0..60 {
+            b.block(0.4, BLOCK);
+        }
+        assert!(b.peak < 0.6, "the lower ones didn't");
+    }
+
+    #[test]
+    fn blocks_over_their_own_length_are_counted() {
+        let mut b = BlockLoad::default();
+        for load in [0.5, 1.0, 1.2, 0.9, 3.0, 1.01] {
+            b.block(load, 0.01);
+        }
+        assert_eq!(b.late, 3, "exactly 100% made it in time");
+    }
+
+    /// At this sample rate every block is late, but a render runs flat out on purpose.
+    #[test]
+    fn a_render_does_not_count_as_late_blocks() {
+        let (_tx, rx) = rtrb::RingBuffer::new(64);
+        let (gtx, _grx) = rtrb::RingBuffer::new(64);
+        let (_live_tx, live_rx) = rtrb::RingBuffer::new(16);
+        let (rec_tx, _rec_rx) = rtrb::RingBuffer::new(16);
+        let (an_tx, _an_rx) = rtrb::RingBuffer::new(16);
+        let status = Arc::new(EngineStatus::default());
+        let mut e = Engine::new(1e12, rx, gtx, status.clone(), live_rx, rec_tx, an_tx);
+        let mut out = vec![0.0f32; 512 * 2];
+        e.offline = true;
+        e.process(&[], 0, &mut out, 2);
+        assert_eq!(status.late_blocks.load(Ordering::Relaxed), 0);
+        assert_eq!(f32::from_bits(status.cpu_peak.load(Ordering::Relaxed)), 0.0);
+        e.offline = false;
+        e.process(&[], 0, &mut out, 2);
+        assert_eq!(status.late_blocks.load(Ordering::Relaxed), 1);
+        assert!(f32::from_bits(status.cpu_peak.load(Ordering::Relaxed)) > 1.0);
+    }
 
     /// At an absurd sample rate every callback is "late", like a machine that can't keep up:
     /// the engine must notice, report it and go quiet instead of grinding on.

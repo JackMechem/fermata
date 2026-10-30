@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { act } from "../api";
 import { Icon } from "../icons";
 import { getState, onTick, setState, useStore } from "../store";
+import { cpuTitle, shownPeak } from "../cpuMeter";
 import { framePos, onFrame } from "../frame";
 import { formatTime, toBbt } from "../time";
 import { fmtBpm, tempoMap } from "../tempo";
@@ -218,12 +219,22 @@ function TransportButtons() {
 
 function CpuMeter() {
   const [cpu, setCpu] = useState(0);
-  useEffect(() => onTick((t) => setCpu((c) => (Math.abs(c - t.cpu) > 0.01 ? t.cpu : c))), []);
+  const [blockPeak, setBlockPeak] = useState(0);
+  const [lateBlocks, setLateBlocks] = useState(0);
+  const [cleared, setCleared] = useState(0);
+  useEffect(() => onTick((t) => {
+    setCpu((c) => (Math.abs(c - t.cpu) > 0.01 ? t.cpu : c));
+    setBlockPeak((p) => (Math.abs(p - t.cpu_peak) > 0.01 ? t.cpu_peak : p));
+    setLateBlocks(t.late_blocks);
+  }), []);
+  const peak = shownPeak(cpu, blockPeak);
+  const late = lateBlocks - cleared;
   return (
-    <div className="cpu" title={`Audio thread load ${(cpu * 100).toFixed(0)}%`}>
+    <div className={"cpu" + (late > 0 ? " over" : "")} title={cpuTitle(cpu, peak, late)} onClick={() => setCleared(lateBlocks)}>
       <span>CPU</span>
       <div className="cpu-bar">
         <div style={{ width: `${Math.min(100, cpu * 100)}%`, background: cpu > 0.8 ? "#f0524a" : cpu > 0.5 ? "#f0b43c" : "#8d9099" }} />
+        <div className="cpu-peak" style={{ left: `${Math.min(100, peak * 100)}%` }} />
       </div>
     </div>
   );

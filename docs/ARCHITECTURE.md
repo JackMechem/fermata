@@ -466,7 +466,8 @@ keeps the current one, since renaming isn't an undo step).
    copy the stereo bus to the output (mono devices get the average), advance the position and
    wrap at the cycle end.
 4. Publish position, play/record state and the CPU load (smoothed ratio of time used to the
-   buffer's duration).
+   buffer's duration), with the worst recent block's load and the count of blocks over 100%
+   (`BlockLoad`; not during offline renders).
 
 `process_block` does this for every track, **in processing order**:
 
@@ -1666,6 +1667,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `fxShapes.ts` | The curves the modulation, distortion and Gain panels draw, mirroring the engine; pure, tested. |
 | `linearPhaseEq.ts` | The Linear Phase EQ's parameters as Channel EQ settings, so its panel reuses the EQ editor; pure, tested. |
 | `stripSettings.ts` | The channel strip Setting menu: the strip clipboard (a store field), Reset, saving and loading; resetting clip indicators. |
+| `cpuMeter.ts` | The CPU meter's tooltip and where its peak tick goes; pure, tested. |
 | `stripMeters.ts` | The clip indicator's readout and the gain-reduction meter's scale and fall; pure, tested. |
 | `vca.ts` | VCA offsets and loop checks for drawing the Mixer (mirrors `vca.rs`); pure, tested. |
 | `slotDrag.ts` | Dragging plug-ins between Audio FX slots. |

@@ -439,6 +439,7 @@ select {
 }
 
 .cpu-bar {
+  position: relative;
   width: 38px;
   height: 4px;
   border-radius: 2px;
@@ -448,6 +449,31 @@ select {
 
 .cpu-bar div {
   height: 100%;
+}
+
+/* The worst recent block. Its right edge marks the value, so it stays on the bar at 100% and off
+   it at 0. --text, not the level meters' --meter-hold, which no theme sets and whose light
+   fallback is lost on the Light theme's pale track. */
+.cpu-peak {
+  position: absolute;
+  top: 0;
+  width: 1px;
+  transform: translateX(-100%);
+  background: var(--text);
+}
+
+/* A block ran late since the last click: red like a strip's clip indicator, until clicked. */
+.cpu.over {
+  cursor: pointer;
+}
+
+.cpu.over span {
+  align-self: flex-start;
+  margin-left: -2px;
+  padding: 0 2px;
+  border-radius: 2px;
+  background: var(--red);
+  color: #fff;
 }
 
 /* ---- sliders, knobs, faders, meters --------------------------------------------------------- */

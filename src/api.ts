@@ -491,6 +491,10 @@ export interface Tick {
   playing: boolean;
   recording: boolean;
   cpu: number;
+  /** The worst recent single block's load: held for two seconds, then falling. */
+  cpu_peak: number;
+  /** Blocks so far that took longer than their own audio. Only ever grows. */
+  late_blocks: number;
   meters: [Id, number, number][];
   master: [number, number];
   inputs: number[];

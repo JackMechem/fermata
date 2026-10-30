@@ -279,6 +279,7 @@ instead and enforce rules that would otherwise only fail in the running app.
 | `fxShapes.test.ts` | The curves the modulation, distortion and Gain panels draw, against the engine's values. |
 | `fxDock.test.ts` | Plug-in panels docked or floating: the slot toggle, closing back, one Channel EQ at a time, Esc, pruning, resize maths and saved sizes. |
 | `linearPhaseEq.test.ts` | The Linear Phase EQ's parameters as Channel EQ settings. |
+| `cpuMeter.test.ts` | The CPU meter's tooltip and where its peak tick goes. |
 | `stripMeters.test.ts` | The clip indicator readout and the gain-reduction meter. |
 | `vca.test.ts` | VCA offsets and loop checks in the Mixer. |
 | `trackOff.test.ts` | Whether a track is off through its stacks (`src/trackOff.ts`), and the power button's tooltip. |
@@ -323,8 +324,11 @@ instead and enforce rules that would otherwise only fail in the running app.
   the panic message and backtrace are in the terminal (`RUST_BACKTRACE=1`). A plug-in putting
   out NaNs or runaway levels is contained and named in a toast (`bad_audio_warning`).
 - **"System overload"**: the callbacks ran late for more than 60 ms in a row, so the engine shed
-  load and the session stopped the transport (`EngineStatus::overloads`). The CPU figure in the
-  control bar shows how close you are. `fx_bench --release` times the built-in effects; the audio
+  load and the session stopped the transport (`EngineStatus::overloads`). The CPU meter in the control
+  bar shows how close you are: `Tick.cpu` is the average, `cpu_peak` the worst recent block and
+  `late_blocks` the blocks over 100%, a single one of which is a dropout but no overload
+  (`BlockLoad` in `dsp.rs`). All of them are one thread's load, so they won't match a system
+  monitor. `fx_bench --release` times the built-in effects; the audio
   thread runs with flush-to-zero, so denormals are not the cause.
 - **Plug-ins**: `cargo run -p vst3-host --example probe -- <name>` loads and runs plug-ins
   outside the app. Settings › Plug-ins shows the last scan's report, including bundles that

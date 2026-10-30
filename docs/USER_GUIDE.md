@@ -101,6 +101,7 @@ Contents:
     [Plug-in windows don't open on Wayland](#plug-in-windows-dont-open-on-wayland) ·
     [Your computer's audio is recorded, or loops back](#your-computers-audio-is-recorded-or-loops-back) ·
     [Recordings are early or late](#recordings-are-early-or-late) ·
+    [The CPU meter](#the-cpu-meter) ·
     ["System overload" and playback stops](#system-overload-and-playback-stops) ·
     ["… put out invalid audio" and a plug-in goes quiet](#-put-out-invalid-audio-and-a-plug-in-goes-quiet) ·
     [The playhead or meters freeze during a bounce](#the-playhead-or-meters-freeze-during-a-bounce) ·
@@ -204,8 +205,7 @@ From left to right:
 - **Mode buttons:** Cycle (C), Autopunch, **Replace** (red when on: recordings replace what they
   overlap; see [Overlapping recordings](#recording-audio)), Count-in (the "1234" button,
   Shift+K), Metronome (K).
-- **Master volume** slider and the **CPU** meter (the audio thread's load; amber above 50%, red
-  above 80%).
+- **Master volume** slider and the **CPU** meter. See [the CPU meter](#the-cpu-meter).
 - **Musical Typing** (Ctrl+K), **List Editors** (D, the Event List) and **Browsers** (F) buttons.
 
 ### Tracks area
@@ -2901,7 +2901,8 @@ at 40% lowers everything you record by about 24 dB, and a muted source records s
 ### Crackles, clicks or dropouts
 
 - Raise the **I/O Buffer Size** in Settings › Audio (256 or 512 samples), then Apply Changes.
-- Watch the **CPU** meter in the control bar; freeze heavy tracks (snowflake button).
+- Watch the [CPU meter](#the-cpu-meter) in the control bar, its peak tick above all; freeze heavy
+  tracks (snowflake button).
 - Make sure real-time scheduling is available: on Linux, rtkit must be running
   (`security.rtkit.enable = true;` on NixOS). PipeWire's own quantum can also be raised.
 - Use **PipeWire** as the driver on Linux. Direct ALSA (`hw:`) devices lock the interface for
@@ -2933,6 +2934,25 @@ and monitoring can feed back.
 ### Recordings are early or late
 
 Set **Recording Delay** in Settings › Audio. See [Latency compensation](#latency-compensation).
+
+### The CPU meter
+
+The **CPU** meter in the control bar shows the audio load: how much of each buffer's time the
+audio thread uses. It is not your system monitor's CPU figure, which is shared across all
+cores: one audio thread at 80% on a 24-thread machine reads about 3% there. The audio
+load is what decides whether audio drops out, because a block that takes longer than the buffer
+plays arrives too late. Hover over the meter for the numbers.
+
+- **The bar** is the average: amber above 50%, red above 80%.
+- **The thin tick** is the worst single block lately. It stays for two seconds, then falls. A
+  low bar with a high tick means the load comes in bursts, so an average alone looks fine while
+  single blocks come close to the limit.
+- **The red CPU label** means at least one block went over 100% since you last clicked the
+  meter, so you probably heard a dropout. The tooltip counts them; click the meter to clear it.
+
+A red label on its own is a dropout, and playback carries on. ["System overload"](#system-overload-and-playback-stops)
+is something else: blocks ran late back to back for more than about 60 ms, so Fermata also stops
+playback. Every overload shows on the meter too, but most late blocks never become an overload.
 
 ### "System overload" and playback stops
 

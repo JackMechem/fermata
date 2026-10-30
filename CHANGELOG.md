@@ -32,6 +32,13 @@ All notable changes to Fermata are recorded here. The format follows
   output only runs while an aux uses it. Freeze and Bounce in Place refuse an instrument with such
   auxes for now.
 
+### Changed
+
+- **The CPU meter says what it measures and shows what the average hides.** Its tooltip explains
+  that it's the audio thread's load, not the system monitor's figure, with the average and recent
+  peak. A thin tick marks the worst single block for two seconds, and the label stays red once
+  a block has gone over 100%, with a count in the tooltip, until you click the meter.
+
 ### Fixed
 
 - Dragging a region onto a frozen track lost it, and dragging one off a frozen track doubled
