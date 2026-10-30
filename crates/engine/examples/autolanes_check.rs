@@ -215,6 +215,57 @@ fn main() {
     );
     check("and plays them as before", same(&render(&mut t, len), &render(&mut s, len)));
 
+    // A folder's lane lines up with its subtrack under delay compensation: with a latent
+    // plug-in elsewhere (the Linear Phase EQ, High), its mute still lands where it is drawn.
+    s.clear_automation(MASTER_ID, None);
+    s.clear_automation(b, None);
+    s.clear_automation(folder, None);
+    s.set_automation_lane(folder, AutoParam::Mute, vec![pt(0, 0.0, 0.0), pt(half, 0.0, 0.0), pt(half, 1.0, 0.0)]);
+    // Where the subtrack falls silent: past the last sample above -60 dB of its level.
+    let silent_from = |x: &[f32]| x.iter().rposition(|v| v.abs() > 1e-3 * 0.084).map(|i| i as i64 + 1).unwrap_or(0);
+    let plain = silent_from(&render(&mut s, len));
+    s.set_plugin(a, 0, "builtin:linear-phase-eq").unwrap();
+    s.set_builtin_param(a, 0, daw_engine::fx::linear_phase_eq::QUALITY, 2.0).unwrap();
+    s.idle();
+    let latency = s.pdc_total();
+    let compensated = silent_from(&render(&mut s, len));
+    check(
+        &format!("a folder's mute lands at its point under delay compensation ({latency} frames): at {compensated}, without it {plain} (drawn at {half})"),
+        latency > 1000 && (compensated - plain).abs() < 64 && (0..3000).contains(&(plain - half)),
+    );
+    // And a bounce's last frames, still in the compensation delay when the range ends, follow
+    // Stereo Out's lane too: a fade to silence stays silent to the end.
+    s.clear_automation(folder, None);
+    s.set_automation_lane(MASTER_ID, AutoParam::Volume, vec![pt(0, 0.0, 0.0), pt(half, 0.0, 0.0), pt(half, -96.0, 0.0)]);
+    let faded = silent_from(&render(&mut s, len));
+    check(&format!("Stereo Out's lane reaches the end of a bounce under delay compensation (silent from {faded})"), (faded - plain).abs() < 64);
+
+    // An automated plug-in parameter moved by hand: in Read the lane still decides a bounce,
+    // on Stereo Out and on a track alike (each render sends the lanes afresh).
+    s.clear_automation(MASTER_ID, None);
+    s.remove_plugin(a, 0);
+    for track in [MASTER_ID, b] {
+        use daw_engine::fx::gain::GAIN;
+        s.set_plugin(track, 1, "builtin:gain").unwrap();
+        let uid = if track == MASTER_ID { s.project.master.inserts[1].as_ref().unwrap().uid } else { s.project.track(b).unwrap().inserts[1].as_ref().unwrap().uid };
+        // -6 dB: the Gain runs from -96 to +24 dB.
+        s.set_automation_lane(track, AutoParam::Plugin { uid, param: GAIN, name: "Gain".into() }, vec![pt(0, 0.75, 0.0)]);
+        let by_lane = render(&mut s, len);
+        s.set_builtin_param(track, 1, GAIN, 0.0).unwrap();
+        let after = render(&mut s, len);
+        let name = if track == MASTER_ID { "Stereo Out" } else { "a track" };
+        check(&format!("on {name}, a lane overrides a hand-moved parameter in a bounce ({:.2} dB)", level(&after, &by_lane, 0.1, 0.4)), same(&after, &by_lane));
+        // In Off the lane is ignored: the parameter plays its own value (0 dB), as it will
+        // when the project is opened again, not the lane's last.
+        s.set_auto_mode(track, AutoMode::Off);
+        let off = render(&mut s, len);
+        s.set_auto_mode(track, AutoMode::Read);
+        s.clear_automation(track, None);
+        let own = render(&mut s, len);
+        check(&format!("on {name}, Off plays the parameter's own value ({:.2} dB)", level(&off, &own, 0.1, 0.4)), same(&off, &own));
+        s.remove_plugin(track, 1);
+    }
+
     if FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);
     }

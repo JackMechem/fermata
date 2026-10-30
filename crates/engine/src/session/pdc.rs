@@ -285,6 +285,25 @@ mod tests {
     }
 
     #[test]
+    fn an_instance_id_reused_after_undo_has_its_own_latency() {
+        let cfg = crate::audio_io::AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
+        let mut s = Session::new(cfg, Vec::new());
+        let t = s.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();
+        s.remove_plugin(t, usize::MAX);
+        // A Linear Phase EQ, undone: its id is free again.
+        s.checkpoint("Insert", None, true);
+        let eq = s.set_plugin(t, 0, "builtin:linear-phase-eq").unwrap();
+        assert!(s.pdc_total() > 0);
+        s.undo();
+        assert_eq!(s.pdc_total(), 0);
+        // The synth that takes the id has no latency.
+        let synth = s.set_plugin(t, usize::MAX, BUILTIN_SYNTH).unwrap();
+        assert_eq!(synth, eq, "the id is reused");
+        assert_eq!(s.pdc_total(), 0);
+        assert!(s.pdc_report().strips.is_empty());
+    }
+
+    #[test]
     fn stacks_wait_for_their_slowest_subtrack() {
         // 1 and 2 play into summing stack 5 (which has 30 frames itself); 3 goes straight out.
         let nodes = [node(1, 200, Some(5), &[]), node(2, 0, Some(5), &[]), node(5, 30, None, &[]), node(3, 0, None, &[])];

@@ -2,7 +2,7 @@
 //! timeline. Adding, renaming, recolouring and resizing a section only changes the markers.
 //! Moving, copying or deleting one with its content rearranges the project: every region on
 //! every track is cut at the section edges and its pieces move with their section, and so do
-//! automation and the Marker track's markers. The tempo and signature tracks stay as they are.
+//! automation (Stereo Out's too) and the Marker track's markers. The tempo and signature tracks stay as they are.
 //! The order arithmetic is in `crate::arrangement`.
 
 use anyhow::{anyhow, Result};
@@ -145,6 +145,16 @@ impl Session {
                 lanes_changed.push(t.id);
             }
         }
+        // Stereo Out's automation goes with its time too.
+        let mut master = false;
+        for lane in self.project.master.automation.iter_mut() {
+            let points = arrangement::remap_points(&lane.points, pieces);
+            master |= points != lane.points;
+            lane.points = points;
+        }
+        if master {
+            lanes_changed.push(MASTER_ID);
+        }
         // Markers go with their time (a copied section gets copies of its markers).
         let mut markers = Vec::new();
         for m in &self.project.markers {
@@ -276,6 +286,18 @@ mod tests {
         assert_eq!(spans(&s, t[1]), vec![(1500, 2000, 0), (3000, 3500, 500)]);
         assert_eq!(s.project.arrangement[0].start, 0);
         assert_eq!(s.project.markers.iter().map(|m| m.pos).collect::<Vec<_>>(), vec![2500]);
+    }
+
+    #[test]
+    fn stereo_out_automation_moves_with_its_section() {
+        let (mut s, _, sec, _) = session();
+        let pt = |pos: i64, value: f32| crate::model::AutoPoint { pos, value, curve: 0.0 };
+        // A dip in the middle section's Stereo Out volume.
+        s.set_automation_lane(MASTER_ID, AutoParam::Volume, vec![pt(1200, 0.0), pt(1500, -20.0), pt(1800, 0.0)]);
+        s.move_arrangement_marker(sec[1], None, false).unwrap();
+        let pos: Vec<i64> = s.project.master.automation[0].points.iter().map(|p| p.pos).collect();
+        assert!(pos.contains(&2500), "the dip moved with section 2 to 2000..3000: {pos:?}");
+        assert!(!pos.contains(&1500));
     }
 
     #[test]

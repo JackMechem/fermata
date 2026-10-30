@@ -212,6 +212,33 @@ mod tests {
     }
 
     #[test]
+    fn duplicated_tracks_get_their_own_alternatives() {
+        let mut s = session();
+        let t = s.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();
+        let id = s.project.alloc_id();
+        s.project.track_mut(t).unwrap().regions.push(region(id, 0));
+        s.new_track_alternative(t, true).unwrap();
+        let ids = |s: &Session, t: Id| -> Vec<Id> {
+            let tr = s.project.track(t).unwrap();
+            tr.regions.iter().chain(tr.alternatives.iter().flat_map(|a| a.regions.iter())).map(|r| r.id).collect()
+        };
+        // With its content: every region of every alternative is a copy with an id of its own.
+        let copy = s.duplicate_tracks(&[t], true)[0];
+        assert_eq!(names(s.project.track(copy).unwrap()), vec!["A", "B"]);
+        assert!(ids(&s, copy).iter().all(|r| !ids(&s, t).contains(r)), "{:?} vs {:?}", ids(&s, copy), ids(&s, t));
+        // Switching both to A then plays separate regions: moving one leaves the other.
+        s.switch_track_alternative(t, "A").unwrap();
+        s.switch_track_alternative(copy, "A").unwrap();
+        let moved = s.project.track(copy).unwrap().regions[0].id;
+        s.move_region(moved, 300, None);
+        assert_eq!((starts(&s, t), starts(&s, copy)), (vec![0], vec![300]));
+        // Without content (and so Move Regions to New Track): no alternatives either.
+        let empty = s.duplicate_tracks(&[t], false)[0];
+        let tr = s.project.track(empty).unwrap();
+        assert!(tr.regions.is_empty() && tr.alternatives.is_empty() && tr.alternative.is_empty());
+    }
+
+    #[test]
     fn frozen_tracks_refuse() {
         let mut s = session();
         let t = s.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();

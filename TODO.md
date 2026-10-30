@@ -43,9 +43,6 @@ here has been checked by eye in the app yet unless it says so.
     `tauri dev` and in the .app; ⌘ and ⌥ key commands; the unsigned .dmg opening with
     right-click › Open; `bash scripts/headless-checks.sh` (bash 3.2, no `timeout`).
 - **Small fixes:**
-  - Check a VCA on a subtrack of a folder stack whose own volume is automated: the folder's
-    automation (`apply_fold`) replaces the static stack values, which is also where the VCA's
-    offset is folded in (`track_params`), so the VCA may be ignored while the folder lane plays.
   - The Compressor's "Lookahead" and the Classic Opto's "Peak Reduction" labels may overlap
     their knobs by a pixel or two.
 - **Larger:**

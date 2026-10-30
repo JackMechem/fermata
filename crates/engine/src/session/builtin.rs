@@ -317,13 +317,15 @@ impl Session {
         }
     }
 
-    /// After a track's automation changed: its built-in effects' parameters that no lane
-    /// drives any more go back to their own values (the engine holds the last automated
-    /// value otherwise, which the project wouldn't know about).
+    /// After a track's automation or automation mode changed: its built-in effects' parameters
+    /// that no lane drives any more (none in Off and Write, which don't read lanes) go back to
+    /// their own values (the engine holds the last automated value otherwise, which the
+    /// project wouldn't know about, so reopening it would sound different).
     pub(super) fn resync_builtins(&mut self, track: Id) {
+        let reads = matches!(self.auto_mode_of(track), Some(AutoMode::Read | AutoMode::Touch | AutoMode::Latch));
         let m = &self.project.master;
         let Some((automation, inserts)) = (if track == MASTER_ID { Some((&m.automation, &m.inserts)) } else { self.project.track(track).map(|t| (&t.automation, &t.inserts)) }) else { return };
-        let driven = |uid: Id, id: u32| automation.iter().any(|l| !l.points.is_empty() && matches!(l.param, AutoParam::Plugin { uid: u, param, .. } if u == uid && param == id));
+        let driven = |uid: Id, id: u32| reads && automation.iter().any(|l| !l.points.is_empty() && matches!(l.param, AutoParam::Plugin { uid: u, param, .. } if u == uid && param == id));
         let mut cmds = Vec::new();
         for s in inserts.iter().flatten() {
             let Some(info) = fx::find(&s.plugin_id) else { continue };

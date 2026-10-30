@@ -39,6 +39,8 @@ impl Session {
             order[to..=from].rotate_right(1);
         }
         self.send(Cmd::ReorderInserts { track, order });
+        // Low Latency Mode names the plug-ins it turns off by slot.
+        self.update_pdc();
         self.dirty = true;
         Ok(())
     }
@@ -133,5 +135,26 @@ impl Session {
             now[i] = had[order[i] as usize].clone();
         }
         Some(now)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn low_latency_mode_follows_a_moved_plug_in() {
+        let cfg = crate::audio_io::AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
+        let mut s = Session::new(cfg, Vec::new());
+        let mut prefs = s.prefs.clone();
+        prefs.latency.low_latency = true;
+        s.set_prefs(prefs);
+        let t = s.add_track(TrackKind::Audio, InputSel::Mono(0), None, None).unwrap();
+        s.set_plugin(t, 0, "builtin:linear-phase-eq").unwrap();
+        s.set_plugin(t, 1, "builtin:gain").unwrap();
+        let skip = |s: &Session| s.pdc_sent.get(&t).map(|p| p.0.low_latency_skip).unwrap_or(0);
+        assert_eq!(skip(&s), 1 << 0, "the Linear Phase EQ is over the limit");
+        s.move_insert(t, 0, 1).unwrap();
+        assert_eq!(skip(&s), 1 << 1, "it is turned off in its new slot, not the Gain in its old one");
     }
 }

@@ -384,12 +384,12 @@ Times are in samples at the project rate.
 - Stereo Out has lanes too (`Master::automation`, `auto_mode`): every automation command and
   `Cmd` takes `MASTER_ID` for it (`session/auto_lanes.rs` has `strip_lanes`), and the engine
   plays them in `dsp/auto.rs` (volume and plug-ins, read `pdc.total` back).
-- Folder stacks automate their volume and mute. The engine works out each folder's
-  `FoldState` before the tracks play (folders come after their subtracks in the processing
-  order); a track whose nearest folder (`TrackParams::folder`) has automation playing rebuilds
-  its volume and mute from `own_gain`, `own_mute` and `bus_mute` with the folder's gain and
-  mute of that block. Without folder automation the session's static stack values apply as
-  before.
+- Folder stacks automate their volume and mute. A track whose nearest folder
+  (`TrackParams::folder`) has automation playing works out the folder's `FoldState` (`fold_at`,
+  through the folders above it) at its own fader time, so the lanes line up with its
+  delay-compensated audio, and rebuilds its volume and mute from `own_gain`, `own_mute`,
+  `bus_mute` and its VCA's `vca_gain` and `vca_mute` with the folder's gain and mute. Without
+  folder automation the session's static stack values apply as before.
 - Which lanes the UI shows: the main lane's parameter is UI state (`autoLane` in the store);
   the extra lanes below a track are `Track::auto_lanes` (`Master::auto_lanes` for the Output
   track), set with `set_auto_lanes` (one undo step). `layout.ts` gives them `autoRows` after
@@ -616,8 +616,11 @@ lock held, faster than real time:
 - It saves the transport state, turns off cycle, metronome, count-in, live MIDI, the analyzer
   and Low Latency Mode, clears every delay line and settles its taps, tells built-in effects
   it is offline (`Effect::set_offline`: they may block, so background work lands at the same
-  point every render), plays `[from, to)` and then `tail` frames with the transport stopped
-  (so effects ring out), drops the leading latency, and restores everything.
+  point every render), starts like playback (automation sent afresh, notes and controllers
+  chased), plays `[from, to)`, then the frames still in the delay compensation with the
+  transport running but nothing new starting (`draining`, so automation follows them to the
+  end), then `tail` frames with the transport stopped (so effects ring out), drops the leading
+  latency, and restores everything.
 - `render_with_edit` (`Session::render_with_edit`) runs an edit partway through a render, for
   checks of changes made while playing (`pdc_glide_check`).
 - `Isolate { tracks, tap, fader, effects }` renders one track (with the subtracks feeding it)

@@ -533,6 +533,8 @@ impl Session {
             own_gain: volume_gain(t.volume_db.max(-96.0)),
             own_mute: t.mute,
             bus_mute,
+            vca_gain: volume_gain(vca_db.max(-96.0)),
+            vca_mute,
         }
     }
 
@@ -742,6 +744,11 @@ impl Session {
 
     fn instantiate_slot(&mut self, slot: &PluginSlot) -> Result<InsertDsp> {
         let sr = self.sample_rate();
+        // Undo frees instance ids for reuse: one that held a built-in effect may come back as
+        // another kind of plug-in, which mustn't inherit its latency or meters.
+        if crate::fx::find(&slot.plugin_id).is_none() {
+            self.fx.remove(&slot.uid);
+        }
         let plugin = if let Some(info) = crate::fx::find(&slot.plugin_id) {
             self.instantiate_builtin(&info, slot)
         } else if slot.plugin_id == BUILTIN_SYNTH {
@@ -947,6 +954,7 @@ impl Session {
             }
             if cur.auto_mode != t.auto_mode {
                 self.send(Cmd::AutoMode(t.id, t.auto_mode));
+                self.resync_builtins(t.id);
             }
             // Freezing loads and unloads plug-ins itself.
             if self.restore_freeze(cur, t) {
@@ -1547,6 +1555,27 @@ impl Session {
                 } else {
                     Vec::new()
                 };
+                // Track alternatives are content too, and their regions need ids of their own:
+                // a copy sharing them would edit the original's regions once both play them.
+                if content {
+                    for r in t.alternatives.iter_mut().flat_map(|a| a.regions.iter_mut()) {
+                        r.id = self.project.alloc_id();
+                    }
+                } else {
+                    t.alternatives.clear();
+                    t.alternative.clear();
+                }
+                // Extra lanes of the original's plug-ins show the copies' parameters.
+                let old = src.inserts.iter().flatten().chain(src.instrument.iter()).map(|s| s.uid);
+                let new = t.inserts.iter().flatten().chain(t.instrument.iter()).map(|s| s.uid);
+                let map: Vec<(Id, Id)> = old.zip(new).collect();
+                for p in &mut t.auto_lanes {
+                    if let AutoParam::Plugin { uid, .. } = p {
+                        if let Some((_, n)) = map.iter().find(|(o, _)| o == uid) {
+                            *uid = *n;
+                        }
+                    }
+                }
                 copies.push(t);
             }
             for t in &mut copies {

@@ -4,8 +4,7 @@
 
 use super::*;
 
-/// What a folder stack does to its subtracks this block. Worked out before the tracks play,
-/// because a folder sits after its subtracks in the processing order.
+/// What a folder stack does to a subtrack this block (see [`fold_at`]).
 #[derive(Debug, Clone, Copy, Default)]
 pub(super) struct FoldState {
     /// The folder's gain, with the folders it is in.
@@ -44,46 +43,43 @@ pub(super) fn apply_fold(p: &mut TrackParams, f: FoldState) {
     if !f.live {
         return;
     }
-    p.stack_gain = f.gain;
-    p.stack_mute = f.mute || p.bus_mute;
+    // The VCA offset is part of the static stack values too: it stays.
+    p.stack_gain = f.gain * p.vca_gain;
+    p.stack_mute = f.mute || p.bus_mute || p.vca_mute;
     p.volume = p.own_gain * p.stack_gain;
     p.mute = p.own_mute || p.stack_mute;
 }
 
-impl Engine {
-    /// Works out every folder stack's [`FoldState`] for the block at the playhead. Parents
-    /// come after their subtracks in the list, so walking backwards meets them first.
-    pub(super) fn update_folders(&mut self) {
-        let playing = self.playing;
-        for i in (0..self.tracks.len()).rev() {
-            if self.tracks[i].kind != TrackKind::Folder {
+/// A folder stack's [`FoldState`] for a subtrack whose fader plays timeline position `at`.
+/// Delay compensation makes that earlier than the playhead, so the folder's lanes (and those
+/// of the folders it is in) are read there, in line with the subtrack's audio as its own lanes
+/// are. `tracks` are the engine's tracks from index `base` on, and the folder is at `j`; a
+/// folder comes after its subtracks in the processing order.
+pub(super) fn fold_at(tracks: &[Box<TrackDsp>], base: usize, j: usize, at: i64, playing: bool) -> FoldState {
+    let t = &tracks[j - base];
+    let parent = t.fold_idx.filter(|&k| k > j).map(|k| fold_at(tracks, base, k, at, playing)).unwrap_or_default();
+    let mut p = t.params;
+    apply_fold(&mut p, parent);
+    let mut live = parent.live;
+    if playing && reads(t.auto_mode) {
+        for lane in t.automation.iter() {
+            if t.touched.contains(&Some(lane.target)) {
                 continue;
             }
-            let parent = self.tracks[i].fold_idx.filter(|&j| j > i).map(|j| self.tracks[j].fold).unwrap_or_default();
-            let t = &mut self.tracks[i];
-            let mut p = t.params;
-            apply_fold(&mut p, parent);
-            let mut live = parent.live;
-            if playing && reads(t.auto_mode) {
-                let at = self.pos - t.pdc.output_time as i64;
-                for lane in t.automation.iter() {
-                    if t.touched.contains(&Some(lane.target)) {
-                        continue;
-                    }
-                    let Some(v) = value_at(&lane.points, at) else { continue };
-                    match lane.target {
-                        AutoTarget::Volume => p.volume = volume_gain(v) * p.stack_gain,
-                        AutoTarget::Mute => p.mute = v >= 0.5 || p.stack_mute,
-                        // A folder has no audio: pan, sends and plug-ins don't apply.
-                        _ => continue,
-                    }
-                    live = true;
-                }
+            let Some(v) = value_at(&lane.points, at) else { continue };
+            match lane.target {
+                AutoTarget::Volume => p.volume = volume_gain(v) * p.stack_gain,
+                AutoTarget::Mute => p.mute = v >= 0.5 || p.stack_mute,
+                // A folder has no audio: pan, sends and plug-ins don't apply.
+                _ => continue,
             }
-            t.fold = FoldState { gain: p.volume, mute: p.mute, live };
+            live = true;
         }
     }
+    FoldState { gain: p.volume, mute: p.mute, live }
+}
 
+impl Engine {
     /// Plays Stereo Out's lanes for the block: sets `master_auto.volume` and sends plug-in
     /// values to Stereo Out's plug-ins. Its audio lags the timeline by the whole graph's delay
     /// compensation, so the lanes are read that far back.
@@ -168,6 +164,8 @@ mod tests {
             own_gain: 0.5,
             own_mute: false,
             bus_mute: false,
+            vca_gain: 1.0,
+            vca_mute: false,
         }
     }
 
@@ -190,6 +188,17 @@ mod tests {
         let mut p = TrackParams { own_mute: true, stack_mute: false, mute: true, ..params() };
         apply_fold(&mut p, FoldState { gain: 1.0, mute: false, live: true });
         assert!(p.mute && !p.stack_mute);
+    }
+
+    #[test]
+    fn a_playing_folder_lane_keeps_the_vca_offset_and_mute() {
+        // A subtrack on a VCA at -6 dB (0.5): the folder's lane replaces the folder's part only.
+        let mut p = TrackParams { vca_gain: 0.5, stack_gain: 0.25, ..params() };
+        apply_fold(&mut p, FoldState { gain: 0.1, mute: false, live: true });
+        assert!((p.stack_gain - 0.05).abs() < 1e-7 && (p.volume - 0.025).abs() < 1e-7);
+        let mut p = TrackParams { vca_mute: true, ..params() };
+        apply_fold(&mut p, FoldState { gain: 1.0, mute: false, live: true });
+        assert!(p.mute && p.stack_mute, "a muted VCA still mutes while the folder lane plays");
     }
 
     #[test]

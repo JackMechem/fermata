@@ -137,6 +137,10 @@ impl Engine {
         self.set_effects_offline(true);
         self.reset_effects();
         self.silence_instruments();
+        // As when playback starts: plug-in automation is sent afresh (a plug-in may have been
+        // moved by hand since), and controllers and notes held over `from` are chased.
+        self.resend_automation();
+        self.chase_all_cc();
         for t in &mut self.tracks {
             if let Some(d) = &mut t.delay {
                 d.clear();
@@ -173,11 +177,17 @@ impl Engine {
             }
             None => run(self, to - from, &mut out),
         }
-        // The tail: notes end and the transport stops, but instruments and plug-ins keep
-        // processing so releases, reverbs and delays are captured.
-        self.playing = false;
+        // Notes end. The last `latency` frames of the range are still on their way through the
+        // delay compensation: the transport runs on for them, so automation keeps following
+        // them, with nothing new starting (see `draining`).
         self.flush_all_notes();
-        run(self, tail.max(0) + latency, &mut out);
+        self.draining = true;
+        run(self, latency, &mut out);
+        self.draining = false;
+        // The tail: the transport stops, but instruments and plug-ins keep processing so
+        // releases, reverbs and delays are captured.
+        self.playing = false;
+        run(self, tail.max(0), &mut out);
         for c in &mut out {
             c.drain(..(latency as usize).min(c.len()));
         }

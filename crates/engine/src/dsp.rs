@@ -26,7 +26,7 @@ pub use pdc::{DelayLine, PdcGlobal, PdcParams, INSTRUMENT_BIT};
 mod builtin;
 pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared};
 mod auto;
-use auto::{FoldState, MasterAuto};
+use auto::MasterAuto;
 
 pub const MAX_BLOCK: usize = 1024;
 pub const MAX_INPUTS: usize = 32;
@@ -222,6 +222,9 @@ pub struct TrackParams {
     pub own_gain: f32,
     pub own_mute: bool,
     pub bus_mute: bool,
+    /// The track's VCA offset (gain) and mute, which a folder's automation leaves in place.
+    pub vca_gain: f32,
+    pub vca_mute: bool,
 }
 
 /// A send as the engine plays it. A muted send keeps its slot at gain 0, so it fades out
@@ -284,8 +287,6 @@ pub struct TrackDsp {
     pre_key_r: Vec<f32>,
     /// Index in the engine's list of `params.folder` (kept up to date by `resolve_routes()`).
     fold_idx: Option<usize>,
-    /// For folder stacks: what they do to their subtracks this block.
-    fold: FoldState,
     /// Where the output and each send read the delay line, gliding when a delay changes.
     pdc_taps: pdc::PdcTaps,
 }
@@ -329,7 +330,6 @@ impl TrackDsp {
             pre_key_l: vec![0.0; MAX_BLOCK],
             pre_key_r: vec![0.0; MAX_BLOCK],
             fold_idx: None,
-            fold: FoldState::default(),
             pdc_taps: pdc::PdcTaps::default(),
         }
     }
@@ -664,6 +664,10 @@ pub struct Engine {
     capture: Option<(i64, i64)>,
     /// See `Cmd::Chase`: (notes, controllers).
     chase: (bool, bool),
+    /// The end of an offline render, while the audio still in the delay-compensation lines
+    /// comes out: the transport runs on (so automation and Stereo Out's lanes keep following
+    /// that audio), but regions, notes and the click start nothing new.
+    draining: bool,
 }
 
 fn db_to_gain(db: f32) -> f32 {
@@ -847,6 +851,7 @@ impl Engine {
             punch_range: None,
             capture: None,
             chase: (true, true),
+            draining: false,
         }
     }
 
@@ -982,6 +987,7 @@ impl Engine {
         for t in &mut self.tracks {
             t.auto_sent = [f32::NAN; MAX_AUTO_SENT];
         }
+        self.master_auto.sent = [f32::NAN; MAX_AUTO_SENT];
     }
 
     fn apply(&mut self, cmd: Cmd) {
@@ -1068,6 +1074,7 @@ impl Engine {
             }
             Cmd::Insert { track, slot, insert } => {
                 let old = if track == MASTER_ID {
+                    self.master_auto.sent = [f32::NAN; MAX_AUTO_SENT];
                     self.master_inserts.get_mut(slot).and_then(|s| std::mem::replace(s, insert))
                 } else {
                     // A new instance starts at its own values: automation is sent to it afresh,
@@ -1358,13 +1365,14 @@ impl Engine {
 
         self.bus_l[..n].fill(0.0);
         self.bus_r[..n].fill(0.0);
-        self.update_folders();
         // Isolated renders work out audibility themselves (see `Isolate`).
         let any_solo = self.isolate.is_none() && self.tracks.iter().any(|t| t.params.solo);
         let iso = self.isolate.as_ref();
         let snap_gains = self.snap_gains;
         let transport = self.transport();
         let (pos, playing, recording, punch, sr) = (self.pos, self.playing, self.recording, self.punch, self.sample_rate);
+        // Whether regions, notes and the click play (not while a render drains, see `draining`).
+        let sources = playing && !self.draining;
         let punch_range = self.punch_range;
         let (capture_from, capture_end) = self.capture.unwrap_or((punch, i64::MAX));
         let auto_monitor = self.auto_monitor;
@@ -1387,9 +1395,6 @@ impl Engine {
             r.fill(0.0);
             t.midi.clear();
             let mut p = t.params;
-            if let Some(j) = t.fold_idx.filter(|&j| j > ti) {
-                auto::apply_fold(&mut p, tail[j - ti - 1].fold);
-            }
             let pdc = t.pdc;
             // A live track (recording, or monitored in Low Latency Mode) skips its delay
             // compensation, so the performer isn't kept waiting (see session/pdc.rs).
@@ -1404,6 +1409,10 @@ impl Engine {
             // `output_time` late: automation and the plug-ins' transport follow the audio.
             let fx_at = pos - pdc.input_time as i64;
             let mix_at = pos - pdc.output_time as i64;
+            // A folder's lanes are read where this strip's fader is, like its own.
+            if let Some(j) = t.fold_idx.filter(|&j| j > ti) {
+                auto::apply_fold(&mut p, auto::fold_at(tail, ti + 1, j, mix_at, playing));
+            }
             let transport = if pdc.input_time > 0 { transport_at(&self.tempo, &transport, fx_at) } else { transport };
 
             // Automation overrides the fader, pan and mute (and drives plug-in parameters).
@@ -1466,7 +1475,7 @@ impl Engine {
                         (true, Some(r)) => r,
                         (true, None) => (i64::MIN, i64::MAX),
                     };
-                    if playing && !(quiet.0 <= pos && quiet.1 >= block_end) {
+                    if sources && !(quiet.0 <= pos && quiet.1 >= block_end) {
                         play_audio(&t.regions, pos, l, r, quiet);
                     }
                     // Input is heard with the I button, or on armed tracks when auto monitoring is
@@ -1534,7 +1543,7 @@ impl Engine {
                         }
                         t.flush_notes = false;
                     }
-                    if playing && t.chase_cc {
+                    if sources && t.chase_cc {
                         t.chase_cc = false;
                         // The latest value of each controller before the playhead, in the
                         // region that covers it.
@@ -1571,7 +1580,7 @@ impl Engine {
                             }
                         }
                     }
-                    if playing {
+                    if sources {
                         for reg in t.regions.iter() {
                             let RegionDsp::Midi { start, length, notes, cc } = reg else { continue };
                             let (rs, re) = (*start, *start + *length);
@@ -1625,7 +1634,7 @@ impl Engine {
                         }
                     }
                     // A frozen instrument track plays its freeze file instead.
-                    if playing {
+                    if sources {
                         play_audio(&t.regions, pos, l, r, (0, 0));
                     }
                 }
@@ -1831,7 +1840,7 @@ impl Engine {
         let pos = pos - self.pdc.total as i64;
         let counting_in = recording && self.count_in && pos < punch;
         let metro = self.metronome && if recording { cp.while_recording && !cp.only_count_in } else { cp.while_playing };
-        let clicking = playing && (metro || counting_in);
+        let clicking = sources && (metro || counting_in);
         let div = cp.division.clamp(1, 4);
         let map = &*self.tempo;
         // The clicks follow the tempo map's beats (and their subdivisions); the count-in

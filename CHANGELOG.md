@@ -246,6 +246,26 @@ All notable changes to Fermata are recorded here. The format follows
   Equal now select its notes or events.
 - Delete or Backspace with the Step Sequencer focused deleted the pattern region being edited;
   they now do nothing there.
+- A VCA on a track inside a folder stack was ignored (level and mute) while the folder's
+  volume or mute automation played.
+- A folder stack's automation played early by the delay compensation (up to 85 ms with the
+  Linear Phase EQ on High) instead of in line with its subtracks.
+- With delay compensation, the last moments of a bounce or export (the plug-in latency) ignored
+  automation and Stereo Out's lanes, so a fade to silence could end with a blip.
+- Bounces and exports could play a plug-in parameter at a value set by hand instead of its
+  automation in Read, on tracks and on Stereo Out; a plug-in put back on Stereo Out by undo
+  waited for its lane to change. Bounces now also chase notes and controllers held over their
+  start, as playback does.
+- After undo, a plug-in could inherit the latency of a Linear Phase EQ (or other built-in
+  effect) that had been undone, delaying the rest of the mix to compensate for nothing.
+- Duplicate Track (and Move Regions to New Track) shared the original's track alternatives:
+  the copy's alternatives held the same regions, so editing one changed the other. The copy now
+  gets its own (or none, without content).
+- Moving, copying or deleting an Arrangement section left Stereo Out's automation behind.
+- Low Latency Mode turned off the wrong plug-in after inserts were reordered.
+- Switching a track's or Stereo Out's automation to Off or Write left a built-in effect's
+  automated parameter at the lane's last value, so the project sounded different once reopened;
+  it now goes back to its own value.
 
 ## [0.1.0-alpha.1] - 2026-10-29
 

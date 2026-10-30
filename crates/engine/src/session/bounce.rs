@@ -137,6 +137,14 @@ impl Session {
         Ok(audio)
     }
 
+    /// The real-time engine, for headless checks that run `Engine::process` themselves (the
+    /// allocation check, `rt_alloc_check`). With a device running, edits made while the check
+    /// holds its lock queue their commands for the next `process`, as during playback.
+    #[doc(hidden)]
+    pub fn engine_for_checks(&self) -> Arc<parking_lot::Mutex<Engine>> {
+        self.engine.clone()
+    }
+
     /// The isolate settings for rendering `tap` through its channel strip. Its subtracks play
     /// unless they (or a stack between them and `tap`, or their VCA) are muted; `tap` itself always plays,
     /// whatever its mute and the project's solos say.

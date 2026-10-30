@@ -151,6 +151,22 @@ fn main() {
     s.redo();
     check("redo makes it pre-fader again", slot(&s) == Some((Some(a), true)) && near(mix_db(&mut s), pre));
 
+    // ---- a VCA inside a folder stack whose volume is automated ---------------------------------
+    // Track c alone, in a folder whose volume lane holds -10 dB, on a VCA at -6 dB: -16 dB.
+    s.remove_plugin(c, 0);
+    s.update_track(a, TrackPatch { mute: Some(true), ..Default::default() });
+    let alone = mix_db(&mut s);
+    let folder = s.create_stack(&[c], false).unwrap();
+    s.set_automation_lane(folder, AutoParam::Volume, vec![AutoPoint { pos: 0, value: -10.0, curve: 0.0 }]);
+    let lane = mix_db(&mut s) - alone;
+    check(&format!("the folder's lane alone takes c to -10 dB ({lane:.2})"), near(lane, -10.0));
+    let v = s.create_vca(&[c]);
+    level(&mut s, v, -6.0);
+    let both = mix_db(&mut s) - alone;
+    check(&format!("the VCA still applies while the folder's lane plays ({both:.2} dB)"), near(both, -16.0));
+    s.update_vca(v, VcaPatch { mute: Some(true), ..Default::default() });
+    check("and its mute still mutes", mix_db(&mut s) < -150.0);
+
     let _ = std::fs::remove_dir_all(&s.dir);
     if FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);

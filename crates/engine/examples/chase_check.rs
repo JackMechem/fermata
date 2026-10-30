@@ -96,6 +96,15 @@ fn main() {
     check(&format!("and a jump into the note is silent too ({after:.4})"), after < 1e-4);
     set_chase(&mut s, true, true);
 
+    // A bounce that starts inside the note chases it too, as playback does.
+    let level = |a: &[Vec<f32>]| a[0].iter().fold(0.0f32, |m, x| m.max(x.abs()));
+    let bounced = level(&s.render(mid, mid + bar, 0, None, &mut |_| {}).unwrap());
+    check(&format!("a bounce starting inside the note sounds it ({bounced:.3})"), bounced > 0.01);
+    set_chase(&mut s, false, true);
+    let bounced = level(&s.render(mid, mid + bar, 0, None, &mut |_| {}).unwrap());
+    check(&format!("but not with Chase: Notes off ({bounced:.4})"), bounced < 1e-4);
+    set_chase(&mut s, true, true);
+
     // Expression 0 set at the region start silences notes that start inside the cycle, but
     // only when it is chased.
     let beats: Vec<Note> = (4..12).map(|i| Note { start: i * beat, length: beat / 2, pitch: 60, velocity: 100, muted: false }).collect();

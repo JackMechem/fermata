@@ -529,6 +529,8 @@ impl Session {
             t.auto_mode = mode;
         }
         self.send(Cmd::AutoMode(track, mode));
+        // Off and Write leave built-in effects at their own values, the other modes at the lanes'.
+        self.resync_builtins(track);
         if mode == AutoMode::Write && self.is_playing() {
             self.start_write_passes(track, pos);
         }
