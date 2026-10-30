@@ -76,11 +76,11 @@ Goal: clean, fast audio editing and comping without workarounds.
 - [x] Drag modes: No Overlap, Shuffle Left and Right (Overlap and X-Fade are done)
 - [ ] Crossfades for take folders and looped regions; Logic's Crossfade Time and Curve settings
 - [x] Marquee tool, a Tool menu in the tracks area, and Scissors, Glue, Fade, Pencil and Eraser
-- [ ] Region gain drag; snap edits to zero crossings
-- [ ] Region drags in bars and beats across tempo changes
+- [x] Region gain drag; snap edits to zero crossings
+- [x] Region drags in bars and beats across tempo changes
 - [ ] Several comps per take folder; MIDI cycle recording into take folders
 - [x] Move automation with regions
-- [ ] Trim AAC/M4A encoder delay exactly on import
+- [x] Trim AAC/M4A encoder delay exactly on import
 
 ## Stage 4: MIDI and control
 
@@ -92,7 +92,7 @@ Goal: precise MIDI editing and hands-on control from hardware.
 - [x] Region playback parameters: non-destructive quantize, transpose, velocity, delay
 - [x] Record MIDI in Replace mode
 - [x] Chase notes that started before the playhead
-- [ ] Controller curve shapes
+- [x] Controller curve shapes
 
 ## Stage 5: Mixing and delivery
 

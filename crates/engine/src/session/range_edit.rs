@@ -121,7 +121,11 @@ impl Session {
             let r = self.project.track(track).unwrap().regions[idx].clone();
             let (rs, re) = (r.start, r.start + r.length);
             let mut edges = vec![rs];
-            edges.extend(cuts.iter().copied().filter(|&p| p > rs && p < re));
+            // Snap Edits to Zero Crossings moves each cut to this region's nearest crossing.
+            let mut inner: Vec<i64> = cuts.iter().filter(|&&p| p > rs && p < re).map(|&p| self.zero_cut(&r, p)).collect();
+            inner.sort_unstable();
+            inner.dedup();
+            edges.extend(inner);
             edges.push(re);
             if edges.len() == 2 {
                 out.push(id);
@@ -154,8 +158,23 @@ impl Session {
 
     /// Applies `action` to the parts of the given regions between timeline positions `start`
     /// and `end`. Returns the regions that now hold the range (to select them); empty for
-    /// Delete, or when no region overlaps the range.
+    /// Delete, or when no region overlaps the range. With Snap Edits to Zero Crossings each
+    /// region's range ends move to its own nearest crossings.
     pub fn edit_range(&mut self, ids: &[Id], start: i64, end: i64, action: RangeEdit) -> Result<Vec<Id>> {
+        if !self.project.snap_zero_crossings {
+            return self.edit_range_at(ids, start, end, action);
+        }
+        let ids = self.unloop(ids);
+        let (a, b) = (start.min(end).max(0), start.max(end));
+        let mut out = Vec::new();
+        for ((ga, gb), group) in self.zero_range_groups(&ids, a, b) {
+            out.extend(self.edit_range_at(&group, ga, gb, action)?);
+        }
+        Ok(out)
+    }
+
+    /// [`Session::edit_range`] at exactly `start` and `end`.
+    fn edit_range_at(&mut self, ids: &[Id], start: i64, end: i64, action: RangeEdit) -> Result<Vec<Id>> {
         let ids = &self.unloop(ids);
         let (a, b) = (start.min(end).max(0), start.max(end));
         let picked: Vec<Id> = ids.iter().copied().filter(|&id| self.region_span(id).is_some_and(|(s, e)| s < b && e > a)).collect();

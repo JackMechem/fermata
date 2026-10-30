@@ -21,6 +21,7 @@ import type { DragMode } from "../fades";
 import { ToolPopups } from "./TrackTools";
 import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste } from "../trackTools";
 import { showUsedAutomation } from "../automation";
+import { zeroCrossingsItem } from "../zeroCrossings";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 /** Logic's Drag pop-up; only Overlap and X-Fade so far. */
@@ -55,6 +56,8 @@ export function editMenu(): MenuItem[] {
     { label: "Loop Regions", hint: keyHint("loop"), disabled: !sel.length, checked: regs.length > 0 && regs.every(isLooped), onClick: () => ops.toggleLoop() },
     { label: "Convert Loops to Real Copies", disabled: !regs.some(isLooped), onClick: () => ops.convertLoops() },
     { label: "Set Locators by Regions", hint: keyHint("set-locators"), disabled: !sel.length, onClick: () => ops.setLocatorsByRegions() },
+    { separator: true },
+    zeroCrossingsItem(),
     { separator: true },
     { label: "Select All", hint: fmt("Mod+A"), onClick: ops.selectAllRegions },
     { label: "Delete", hint: keyHint("delete-regions"), disabled: !sel.length && !marquee, onClick: () => marqueeDelete() || ops.deleteRegions() },

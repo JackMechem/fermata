@@ -79,6 +79,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("convert-loops", "Convert Loops to Real Copies", None)?)
         .item(&item("pack-takes", "Pack Take Folder", None)?)
         .item(&item("set-locators", "Set Locators by Regions", None)?)
+        .item(&item("zero-crossings", "Snap Edits to Zero Crossings", None)?)
         .item(&item("select-all", "Select All", Some("CmdOrCtrl+A"))?)
         .separator()
         .item(&item("delete", "Delete", None)?)

@@ -82,6 +82,9 @@ pub const AUTOSAVE_FILE: &str = "project.autosave.json";
 mod auto_write;
 mod recovery;
 pub use recovery::{discard_journals, read_journal, recording_journals, JournalTake, RecJournal, RecordingRecovery, BACKUP_FILE};
+mod zero_crossings;
+mod region_gain;
+mod musical_moves;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -1892,12 +1895,13 @@ impl Session {
             for (ri, r) in t.regions.iter().enumerate() {
                 let picked = region_ids.is_empty() || region_ids.contains(&r.id);
                 if picked && pos > r.start && pos < r.start + r.length {
-                    targets.push((ti, ri));
+                    // Snap Edits to Zero Crossings cuts each region at its own crossing.
+                    targets.push((ti, ri, self.zero_cut(r, pos)));
                 }
             }
         }
         let mut touched = Vec::new();
-        for (ti, ri) in targets {
+        for (ti, ri, pos) in targets {
             let new_id = self.project.alloc_id();
             let t = &mut self.project.tracks[ti];
             let r = &mut t.regions[ri];

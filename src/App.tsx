@@ -11,6 +11,9 @@ import { ProjectSettingsSheet, RecoverySheet } from "./components/Settings";
 import { commandForEvent } from "./keymap";
 import { installPluginKeys } from "./pluginKeys";
 import { loadSettings, nudgeSamples, offerRecoveryFor, runStartup } from "./prefs";
+import { toggleZeroCrossings } from "./zeroCrossings";
+import { movedStart, nudgeTarget } from "./musicalMove";
+import { tempoMap } from "./tempo";
 import { restoreAppearance, useAppearancePersistence } from "./appearance";
 import { Editor } from "./components/Editor";
 import { EventList, eventListMenu } from "./components/EventList";
@@ -239,6 +242,9 @@ function handleMenu(id: string) {
     case "set-locators":
       ops.setLocatorsByRegions();
       break;
+    case "zero-crossings":
+      toggleZeroCrossings();
+      break;
     case "loop":
       ops.toggleLoop();
       break;
@@ -413,6 +419,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
     if (getState().selectedRegions.length) ops.deleteRegions();
   },
   "set-locators": () => ops.setLocatorsByRegions(),
+  "zero-crossings": () => handleMenu("zero-crossings"),
   loop: () => ops.toggleLoop(),
   "show-hidden": () => ops.toggleShowHidden(),
   "hide-tracks": () => ops.hideTracks(),
@@ -444,8 +451,15 @@ function nudgeRegions(dir: number) {
   const at = Math.min(...s.snap.project.tracks.flatMap((t) => t.regions.filter((r) => s.selectedRegions.includes(r.id)).map((r) => r.start)));
   const ids = s.selectedRegions;
   const delta = Math.round(dir * nudgeSamples(s.snap.project, Number.isFinite(at) ? at : 0));
-  const moves = s.snap.project.tracks.flatMap((t) => t.regions.filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, start: Math.max(0, r.start + delta) })));
-  moveAutomationAnswer(s.snap.project, moves).then((automation) => act("nudge_regions", { ids, delta, automation }));
+  // By a bar, beat or note value the first region moves through the tempo map and the others
+  // keep their bars and beats; by milliseconds they all move the same number of samples.
+  const map = tempoMap(s.snap.project);
+  const to = Number.isFinite(at) ? nudgeTarget(map, at, getSettings().ui.nudge, dir) : null;
+  const moves = s.snap.project.tracks.flatMap((t) =>
+    t.regions.filter((r) => ids.includes(r.id)).map((r) => ({ id: r.id, start: to === null ? Math.max(0, r.start + delta) : movedStart(map, r.start, at, to, true) })),
+  );
+  const musical = to === null ? {} : { from: at, to };
+  moveAutomationAnswer(s.snap.project, moves).then((automation) => act("nudge_regions", { ids, delta, automation, ...musical }));
 }
 
 function onKey(e: KeyboardEvent) {

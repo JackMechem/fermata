@@ -209,7 +209,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Cut, copy and paste; paste at the playhead keeps the spacing of several regions (p. 303)
 - [x] Duplicate (⌘D) and Repeat Regions 2–16 times (p. 304, 313)
 - [x] Move regions, including to other tracks (p. 305)
-- [x] Nudge regions by the nudge value (⌥←/⌥→) (p. 305–306)
+- [x] Nudge regions by the nudge value (⌥←/⌥→), in bars and beats across tempo changes (p. 305–306)
 - [x] Loop regions (L) and the loop pointer at the top-right corner (p. 311–312)
 - [~] Loop continuously (p. 312). *Loops to the next region, or four times the length when nothing follows.*
 - [x] Convert Loops to Real Copies (p. 313)
@@ -219,7 +219,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Split at the playhead (⌘T) (p. 319)
 - [x] Join regions (⌘J): MIDI notes merge, audio is mixed into a new file (p. 322)
 - [x] Create an empty MIDI region (p. 325)
-- [x] Audio region gain and Normalize (p. 325–326)
+- [x] Audio region gain and Normalize, and a gain handle to drag on the region (p. 325–326)
 - [x] Region colours (p. 328)
 - [x] Rename regions (p. 331)
 - [x] Delete regions (p. 332)
@@ -261,7 +261,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Humanize timing and velocity
 - [x] Help tag showing pitch, position and length
 - [~] Piano Roll tools (p. 54–60). *Pointer, Pencil, Eraser, Velocity, Mute, Scissors, Glue, Line; no Brush, Quantize, Solo or Zoom tools.*
-- [~] Controller editing (p. 400). *Points and ramps; no curve shapes.*
+- [x] Controller editing (p. 400). *Points, and ramps along Linear, Exponential, Logarithmic and S-Curve shapes; Create Ramp and Thin Out.*
 - [~] Delete events (p. 397). *No Delete Outside Region or Delete Unselected Within Selection.*
 - [ ] Brush tool and brush patterns (p. 381)
 - [ ] Add notes constrained to a scale (p. 381)
@@ -283,7 +283,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Split at the selection or playhead (p. 375)
 - [x] Fades and gain in the editor
 - [x] 0 dBFS markers and dB scale
-- [ ] Snap edits to zero crossings (p. 376)
+- [x] Snap edits to zero crossings (p. 376). *Also for splits and trims in the tracks area.*
 - [ ] Show automation in the Audio Track Editor (p. 377)
 
 ### Mixer (p. 539–620)

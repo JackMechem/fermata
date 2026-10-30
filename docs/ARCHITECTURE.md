@@ -1305,6 +1305,9 @@ it like any plug-in.
 | `session/strip_meters.rs` | The clip indicators' peak holds (`PeakHolds`) and each strip's gain reduction for the tick. |
 | `session/vca.rs` | VCA edits: create, delete, level, mute, name, colour, assigning strips, nesting. |
 | `session/region_moves.rs` | Moving several regions as one edit. |
+| `session/musical_moves.rs` | Moves in bars and beats through the tempo map (`musical_shift`, nudges by a bar, beat or note value). |
+| `session/zero_crossings.rs` | Snap Edits to Zero Crossings: where splits, trims and range edits of audio regions land. |
+| `session/region_gain.rs` | Per-region gains from a gain drag (`set_region_gains`). |
 | `session/tempo.rs` | Tempo and Signature track edits, Move MIDI Regions with Tempo. |
 | `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
 | `session/alternatives.rs` | Project alternatives: new, switch, rename, delete; name checks. |
@@ -1325,9 +1328,10 @@ it like any plug-in.
 | `midi_io.rs` | MIDI inputs (midir), velocity curves, the MIDI activity log, assigned controllers taken off the live path (`inject_from` feeds a message in as a port would, for tests). |
 | `plugin_db.rs` | Out-of-process plug-in scanning, the cache, the scan report, the config folder. |
 | `prefs.rs` | `Prefs` (Settings) and the metronome and bit-depth types saved in projects. |
-| `clip.rs` | Audio held in memory and the waveform overview. |
+| `clip.rs` | Audio held in memory, the waveform overview, and the zero-crossing search. |
 | `controllers.rs` | Controller assignments, the pure part: targets, reading CC and pitch bend, port names without ALSA's numbers, the fader taper, ranges, Jump and Pickup. |
 | `decode.rs` | Decoding audio files in any supported format, resampling, WAV writing. |
+| `decode/gapless.rs` | MP4/M4A encoder delay and padding (`iTunSMPB` tag or edit list), trimmed after decoding. |
 | `audio_file.rs` (+ `audio_file/`) | Writing bounces: `AudioFormat` (WAV, AIFF, FLAC via `flacenc`), `BitDepth`, the shared dithering `Quantizer`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
 | `synth.rs` | Fermata Synth, the built-in polyphonic instrument. |
@@ -1397,6 +1401,10 @@ it like any plug-in.
 | `freeze.ts` | Freeze and Unfreeze from the UI. |
 | `bounce.ts` | Bounce and export option types; opening the dialogs. |
 | `midiEdit.ts` | The Piano Roll's editing functions, pure and unit-tested. |
+| `ccCurves.ts` | Controller lane curves: curve shapes, ramps, Create Ramp, Thin Out; pure, tested. |
+| `musicalMove.ts` | Region moves and nudges in bars and beats through the tempo map; pure, tested. |
+| `regionGain.ts`, `regionGainDrag.ts` | The Tracks area's region gain handle: geometry and arithmetic (pure, tested), and drawing and dragging it. |
+| `zeroCrossings.ts` | The Snap Edits to Zero Crossings toggle and its menu item. |
 | `pianoRollDraw.ts` | Piano Roll canvas drawing. |
 | `eventList.ts` | The Event List's positions, lengths, typed values and edits; pure, tested. |
 | `stepInput.ts` | Step Input: step lengths through the tempo map, the chord/advance state machine (Rest, Back, Chord, Sustain, Quantize) and the region edits it makes; pure, tested. Also the hook Musical Typing reports its notes through. |

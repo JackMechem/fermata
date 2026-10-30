@@ -11,6 +11,7 @@ import * as ops from "./ops";
 import { currentTick, getState, setState } from "./store";
 import { regionsIn, subRegion } from "./audioRange";
 import { detachMenuItems } from "./detach";
+import { zeroCrossingsItem } from "./zeroCrossings";
 
 export { regionsIn };
 
@@ -341,6 +342,8 @@ export function editMenu(): MenuItem[] {
     { separator: true },
     { label: "Play Selection", hint: fmt("Shift+Space"), disabled: !sel, onClick: playSelection },
     { label: "Set Locators by Selection", disabled: !sel, onClick: setLocatorsBySelection },
+    { separator: true },
+    zeroCrossingsItem(),
     { separator: true },
     { label: "Select Region", hint: "Double-click", disabled: !r, onClick: () => r && view && setEd({ sel: { track: view.track, start: r.start, end: r.start + r.length } }) },
     { label: "Deselect", hint: "Esc", disabled: !sel, onClick: clearSel },

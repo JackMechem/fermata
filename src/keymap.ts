@@ -68,6 +68,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "delete-regions", label: "Delete Regions", group: "Editing", keys: ["Backspace", "Delete"] },
   { id: "loop", label: "Loop Regions", group: "Editing", keys: ["L"] },
   { id: "set-locators", label: "Set Locators by Regions", group: "Editing", keys: ["U"] },
+  { id: "zero-crossings", label: "Snap Edits to Zero Crossings", group: "Editing", keys: [] },
   { id: "nudge-left", label: "Nudge Regions Left", group: "Editing", keys: ["Alt+ArrowLeft"] },
   { id: "nudge-right", label: "Nudge Regions Right", group: "Editing", keys: ["Alt+ArrowRight"] },
   { id: "pack-takes", label: "Pack Take Folder", group: "Editing", keys: ["Mod+Ctrl+F"] },

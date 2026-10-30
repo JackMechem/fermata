@@ -5,6 +5,7 @@ import { ccMax, sameKind, type PCc, type PNote } from "./midiEdit";
 import type { TempoMap } from "./tempo";
 import { mix, theme } from "./theme";
 import { pixelRatio } from "./uiScale";
+import { curve, type CurveShape } from "./ccCurves";
 
 export const KEY_W = 64;
 export const PR_RULER_H = 28;
@@ -347,7 +348,7 @@ export interface LaneScene {
   color: (n: PNote) => string;
   focus: Id | null;
   /** A line being drawn (lane coordinates). */
-  line: { x0: number; y0: number; x1: number; y1: number } | null;
+  line: { x0: number; y0: number; x1: number; y1: number; shape?: CurveShape } | null;
   rubber: { x0: number; y0: number; x1: number; y1: number } | null;
   themeId: string;
   trackColor: string;
@@ -468,8 +469,12 @@ export function drawLane(ctx: CanvasRenderingContext2D, v: PrView, g: Grid, H: n
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 3]);
     ctx.beginPath();
-    ctx.moveTo(s.line.x0, s.line.y0);
-    ctx.lineTo(s.line.x1, s.line.y1);
+    // A controller line follows its curve shape, from the left end as the ramp is drawn.
+    const { x0, y0, x1, y1, shape } = s.line;
+    const [xa, ya, xb, yb] = x0 <= x1 ? [x0, y0, x1, y1] : [x1, y1, x0, y0];
+    ctx.moveTo(xa, ya);
+    if (shape && shape !== "linear") for (let k = 1; k < 32; k++) ctx.lineTo(xa + ((xb - xa) * k) / 32, ya + (yb - ya) * curve(shape, k / 32));
+    ctx.lineTo(xb, yb);
     ctx.stroke();
     ctx.setLineDash([]);
   }

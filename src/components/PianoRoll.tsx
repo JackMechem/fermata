@@ -47,6 +47,7 @@ import { closeMenu, menuOpen, openMenu, openMenuAt, type MenuItem } from "./Menu
 import { getSettings } from "../prefs";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
+import { canRamp, createRamps, CURVE_SHAPES, densityStep, DENSITIES, drawCcCurve, nearestEvent, thinOut, type CurveShape, type Density } from "../ccCurves";
 
 type PNote = me.PNote;
 type PCc = me.PCc;
@@ -75,6 +76,9 @@ interface Prefs {
   scale: boolean;
   midiOut: boolean;
   catchPlayhead: boolean;
+  /** The controller lane's Line Curve shape and Ramp Density (ccCurves.ts). */
+  curve: CurveShape;
+  density: Density;
 }
 
 const PREFS_KEY = "fermata.pianoRoll";
@@ -95,6 +99,8 @@ const DEFAULT_PREFS: Prefs = {
   scale: false,
   midiOut: true,
   catchPlayhead: true,
+  curve: "linear",
+  density: "1/32",
 };
 
 let prefs: Prefs = (() => {
@@ -304,7 +310,7 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
   /** What a drag in progress would make the list; drawn instead of the working list. */
   const preview = useRef<{ notes: PNote[]; cc: PCc[] } | null>(null);
   const rubber = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const laneLine = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const laneLine = useRef<{ x0: number; y0: number; x1: number; y1: number; shape?: CurveShape } | null>(null);
   const laneRubber = useRef<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const cyclePreview = useRef<{ start: number; end: number } | null>(null);
   const pressedKey = useRef<number | null>(null);
@@ -1190,7 +1196,9 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
         const p = local(ev, cv);
         if (!moved && Math.hypot(p.x - x, p.y - y) < 3) return;
         moved = true;
-        laneLine.current = { x0: x, y0: y, x1: p.x, y1: Math.max(0, Math.min(cv.clientHeight, p.y)) };
+        // A controller line shows the curve it will draw.
+        const shape = laneKind(live.current.pr.lane) ? live.current.pr.curve : undefined;
+        laneLine.current = { x0: x, y0: y, x1: p.x, y1: Math.max(0, Math.min(cv.clientHeight, p.y)), shape };
         requestDraw();
       },
       () => {
@@ -1281,12 +1289,17 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
     if (tool === "line") {
       lineDrag(x, y, (l) => {
         const vv = view();
-        const ta = timeAt(vv, l.x0);
-        const tb = timeAt(vv, l.x1);
-        const rid = regionFor(Math.min(ta, tb));
+        // An end on an existing event joins it: the line starts or stops at its time and value.
+        const at = (px: number, py: number) => {
+          const e = nearestEvent(work.current.cc, kind, px, py, (t) => xOf(vv, t), (val) => laneY(H, val, max));
+          return e ? { t: e.start, v: e.value } : { t: timeAt(vv, px), v: laneValue(H, py, max) };
+        };
+        const [a, b] = [at(l.x0, l.y0), at(l.x1, l.y1)];
+        const rid = regionFor(Math.min(a.t, b.t));
         if (rid === null) return noRegionHere();
-        const step = me.quarterLength(timeBase(live.current.project)) / 8;
-        commit(work.current.notes, me.drawCcLine(work.current.cc, rid, kind, ta, laneValue(H, l.y0, max), tb, laneValue(H, l.y1, max), step), "Controller Line");
+        const { pr, project } = live.current;
+        const step = densityStep(me.quarterLength(timeBase(project)), pr.density);
+        commit(work.current.notes, drawCcCurve(work.current.cc, rid, kind, a.t, a.v, b.t, b.v, step, pr.curve), "Controller Line");
       });
       return;
     }
@@ -1649,6 +1662,29 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
       {
         label: "Other Controller…",
         onClick: () => ask("Controller number (0–127)", "74", ([n]) => n >= 0 && n <= 127 && setPrefs({ lane: `cc:${Math.round(n)}`, showLane: true })),
+      },
+      ...curveItems(),
+    ];
+  };
+
+  /** The controller lane's curve settings and ramp functions (ccCurves.ts). */
+  const curveItems = (): MenuItem[] => {
+    const { pr, project } = live.current;
+    const kind = laneKind(pr.lane);
+    if (!kind) return [];
+    const cc = work.current.cc;
+    const step = densityStep(me.quarterLength(timeBase(project)), pr.density);
+    return [
+      { separator: true },
+      { label: "Line Curve", children: CURVE_SHAPES.map(([id, label]) => ({ label, checked: pr.curve === id, onClick: () => setPrefs({ curve: id }) })) },
+      { label: "Ramp Density", children: DENSITIES.map((d) => ({ label: d, checked: pr.density === d, onClick: () => setPrefs({ density: d }) })) },
+      { label: "Create Ramp", disabled: !canRamp(cc, kind), onClick: () => commit(work.current.notes, createRamps(work.current.cc, kind, pr.curve, step), "Create Ramp") },
+      {
+        label: "Thin Out",
+        onClick: () => {
+          const next = thinOut(work.current.cc, kind, Math.max(1, Math.round(me.ccMax(kind) / 127)));
+          if (next !== work.current.cc) commit(work.current.notes, next, "Thin Out Controller Events");
+        },
       },
     ];
   };
@@ -2014,7 +2050,17 @@ export function PianoRoll({ track, region }: { track: Track; region: Region | nu
               </button>
             </div>
             <div className="pr-lane" ref={laneWrap}>
-              <canvas ref={laneCv} className={toolClass} onMouseDown={onLaneDown} />
+              <canvas
+                ref={laneCv}
+                className={toolClass}
+                onMouseDown={onLaneDown}
+                onContextMenu={(e) => {
+                  // A controller lane's right-click menu: the curve settings and ramp functions.
+                  e.preventDefault();
+                  const items = curveItems().slice(1);
+                  if (items.length) openMenu(e.clientX, e.clientY, items);
+                }}
+              />
               <div className="pr-playhead" ref={playheads[2]} />
             </div>
           </>

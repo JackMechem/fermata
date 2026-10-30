@@ -1036,11 +1036,15 @@ pub fn set_project_notes(state: State<AppState>, notes: String) -> Snapshot {
     edit(&state, "Project Notes", Some("notes".into()), false, |s| s.set_notes(notes))
 }
 
-/// Moves regions by `delta` samples (Nudge Left / Right).
+/// Moves regions by `delta` samples (Nudge Left / Right). With `from` and `to` (a nudge by a
+/// bar, beat or note value), `from` goes to `to` and the others keep their bars and beats.
 #[tauri::command]
-pub fn nudge_regions(state: State<AppState>, ids: Vec<Id>, delta: i64, automation: Option<bool>) -> Snapshot {
+pub fn nudge_regions(state: State<AppState>, ids: Vec<Id>, delta: i64, automation: Option<bool>, from: Option<i64>, to: Option<i64>) -> Snapshot {
     let key = format!("nudge:{ids:?}");
-    edit(&state, "Nudge", Some(key), false, |s| s.drag_nudge_regions(&ids, delta, automation))
+    edit(&state, "Nudge", Some(key), false, |s| match (from, to) {
+        (Some(from), Some(to)) => s.drag_nudge_musical(&ids, from, to, automation),
+        _ => s.drag_nudge_regions(&ids, delta, automation),
+    })
 }
 
 /// Whether the project at `path` has an autosave newer than its last save.
@@ -1760,4 +1764,22 @@ pub fn convert_patterns_to_midi(state: State<AppState>, ids: Vec<Id>) -> Snapsho
 #[tauri::command]
 pub fn convert_midi_to_patterns(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
     edit(&state, "Convert to Pattern Region", None, false, |s| s.convert_midi_to_patterns(&ids))
+}
+
+/// Edit › Snap Edits to Zero Crossings (a project setting, not an undo step).
+#[tauri::command]
+pub fn set_snap_zero_crossings(state: State<AppState>, on: bool) -> Snapshot {
+    snap(&state, |s| s.set_snap_zero_crossings(on))
+}
+
+/// A region gain drag in the Tracks area: `gains` holds each region's new gain in dB. The
+/// drag's `first` update records the undo step and the rest join it, so a drag is one step
+/// however long it is held.
+#[tauri::command]
+pub fn set_region_gains(state: State<AppState>, gains: Vec<(Id, f32)>, first: bool) -> Snapshot {
+    if first {
+        edit(&state, "Region Gain", None, false, |s| s.set_region_gains(&gains))
+    } else {
+        snap(&state, |s| s.set_region_gains(&gains))
+    }
 }

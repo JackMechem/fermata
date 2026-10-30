@@ -4,6 +4,8 @@ use std::path::Path;
 
 use anyhow::{anyhow, Context, Result};
 
+pub mod gapless;
+
 /// File extensions the importer accepts.
 pub const AUDIO_EXTENSIONS: &[&str] = &["wav", "wave", "aif", "aiff", "aifc", "flac", "mp3", "ogg", "oga", "m4a", "mp4", "aac", "caf"];
 
@@ -128,6 +130,10 @@ fn decode_symphonia(path: &Path) -> Result<Decoded> {
                 o.push(f[c]);
             }
         }
+    }
+    // symphonia (0.5) decodes an MP4's encoder delay and padding as audio: drop them here.
+    if let Some(g) = gapless::read(path) {
+        g.trim(&mut channels, sample_rate);
     }
     if channels.is_empty() || channels[0].is_empty() || sample_rate == 0 {
         return Err(anyhow!("no audio decoded from {}", path.display()));

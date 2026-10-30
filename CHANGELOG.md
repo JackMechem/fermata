@@ -156,6 +156,15 @@ All notable changes to Fermata are recorded here. The format follows
 - A LICENSE file (MIT), shipped in every bundle.
 - CI runs the headless checks that need no third-party plug-ins on Linux
   (`scripts/headless-checks.sh`).
+- **Region gain handle:** hovering over an audio region shows its gain at the top centre of
+  its name bar; drag it up or down (Shift for fine steps) to change the gain of every selected
+  audio region by the same amount, with the waveform following, or double-click it for 0 dB.
+  A drag is one undo step.
+- **Snap Edits to Zero Crossings** (Edit menu, and a key command): splits, trims and range
+  edits of audio regions move to the nearest zero crossing within 5 ms. Saved with the project.
+- **Controller curves** in the Piano Roll's controller lane: the Line tool draws ramps along a
+  Linear, Exponential, Logarithmic or S-Curve shape at a chosen Ramp Density, joins the
+  points it starts and ends on, and Create Ramp and Thin Out fill and thin the selected points.
 
 ### Changed
 
@@ -165,6 +174,10 @@ All notable changes to Fermata are recorded here. The format follows
 - The track header's volume slider and level meter are one taller control: the meter fills
   the slider's groove.
 - Automation lanes move with a plug-in dragged to another track's strip; one undo reverts both.
+- Regions moved across tempo changes keep their bars and beats: with Snap on, the other
+  regions of a drag (and Alt-drag copies) follow the grabbed one in bars and beats rather than
+  in samples, and nudges by a bar, beat or note value count through the tempo map.
+- Waveforms in the tracks area are drawn at their region's gain.
 
 ### Fixed
 
@@ -176,6 +189,8 @@ All notable changes to Fermata are recorded here. The format follows
 - The Compressor's circuit tabs and other segmented buttons didn't show the current choice.
 - Opening Group Settings (including from New Group from Track) blanked the window.
 - Play or Record right after moving the playhead could start from the old position.
+- M4A/MP4 imports started about 40 ms late: the encoder delay and padding are now trimmed
+  exactly, from the iTunes gapless tag or the file's edit list.
 
 ## [0.1.0-alpha.1] - 2026-10-29
 

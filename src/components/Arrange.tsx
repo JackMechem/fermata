@@ -25,6 +25,9 @@ import { playedNotes } from "../regionParams";
 import { drawPatternMini } from "../stepSeq";
 import { dragOutcome, type Outcome } from "../dragModes";
 import { moveAutomationAnswer } from "../moveAutomation";
+import { movedStart, placedAt } from "../musicalMove";
+import { gainScale } from "../regionGain";
+import { drawGainHandle, gainDragging, onGainHandle, startGainDrag, withLiveGain } from "../regionGainDrag";
 import { activeTool, drawToolOverlay, escapeMarquee, notePointer, pressOnMarquee, toolHover, toolLeave, toolMouseDown, type ToolView } from "../trackTools";
 
 // ---- peaks ----------------------------------------------------------------------------------
@@ -148,7 +151,7 @@ export function drawRegion(
   if (showBody && r.content.type === "audio") {
     const wave = waveCache.get(r.content.clip);
     if (isFolder(r)) drawCompWave(ctx, r, x, w, bodyTop, bodyH, pps, content, visX0, visX1, shift, waveScale * 10 ** (r.content.gain_db / 20));
-    else if (wave) drawWave(ctx, wave, r.content.offset + shift, x, w, bodyTop, bodyH, pps, content, visX0, visX1, undefined, waveScale);
+    else if (wave) drawWave(ctx, wave, r.content.offset + shift, x, w, bodyTop, bodyH, pps, content, visX0, visX1, undefined, waveScale * gainScale(r.content.gain_db));
     const [fi, fo] = fades ?? [r.content.fade_in, r.content.fade_out];
     drawFades(ctx, r, x - shift * pps, x, w, bodyTop, bodyH, fi, fo, pps, content, handles, ghost ? undefined : regionCrossfades(r.id));
   } else if (showBody && r.pattern) {
@@ -451,7 +454,8 @@ export function Arrange() {
       let fades: [number, number] | undefined;
       if (drag && !still && drag.ids.includes(r.id)) {
         if (drag.kind === "move") {
-          start = Math.max(0, r.id === drag.grabbed ? spbSnap(r.start + drag.dx) : r.start + (spbSnap(getGrabbedStart() + drag.dx) - getGrabbedStart()));
+          const from = getGrabbedStart();
+          start = movedStart(tempoMap(project), r.start, from, Math.max(0, spbSnap(from + drag.dx)), getState().snapMode !== "off");
           if (loop != null) loop += start - r.start;
           ti = dragTarget(layout, i, drag.dTrack, project.tracks);
         } else if (r.id === drag.grabbed && drag.fade !== undefined && r.content.type === "audio") {
@@ -512,7 +516,7 @@ export function Arrange() {
         const x1 = loopEnd(g.start, g.length, g.loop) * pps - vp.left;
         if (g.th === 0 || x0 > W || x1 < 0 || g.y > H || g.y + g.th < 0) continue;
         ctx.globalAlpha = g.hidden ? 0.4 : 1;
-        drawLoops(ctx, r, t, -vp.left, g.start, g.length, g.loop, g.y, g.th - 3, selectedRegions.includes(r.id), pps, W, g.shift);
+        drawLoops(ctx, withLiveGain(r), t, -vp.left, g.start, g.length, g.loop, g.y, g.th - 3, selectedRegions.includes(r.id), pps, W, g.shift);
         ctx.globalAlpha = 1;
       }
     });
@@ -524,7 +528,8 @@ export function Arrange() {
         if (gone || th === 0 || x > W || x + w < 0 || y > H || y + th < 0) continue;
         const sel = selectedRegions.includes(r.id);
         ctx.globalAlpha = hidden ? 0.4 : 1;
-        drawRegion(ctx, r, t, x, y, w, th - 3, sel, pps, W, shift, fades, r.content.type === "audio" && (sel || hoverRef.current === r.id) && !t.frozen);
+        drawRegion(ctx, withLiveGain(r), t, x, y, w, th - 3, sel, pps, W, shift, fades, r.content.type === "audio" && (sel || hoverRef.current === r.id) && !t.frozen);
+        if (!t.frozen && !drag && (hoverRef.current === r.id || gainDragging(r.id))) drawGainHandle(ctx, withLiveGain(r), x, y, w, th - 3, W);
         if (t.frozen) {
           // Frozen: a frosted veil over the region, which can't be edited.
           ctx.globalAlpha = 0.28;
@@ -910,6 +915,7 @@ export function Arrange() {
       return;
     }
 
+    if (!h.inLoop && onGainHandle(r, h.x, h.localY, h.laneH, pps, scrollRef.current!.scrollLeft, viewport().width)) return startGainDrag(e, project, r, sel, requestDraw);
     const kind = grabKind(h);
     const startX = e.clientX;
     const startY = e.clientY;
@@ -970,7 +976,8 @@ export function Arrange() {
       }
       if (kind === "move") {
         const newStart = Math.max(0, snap(r.start + d.dx));
-        const delta = newStart - r.start;
+        // With snapping on, the others keep their bars and beats across tempo changes.
+        const musical = getState().snapMode !== "off";
         const tracks = project.tracks;
         const layout = live.current.layout;
         const moves = d.ids.flatMap((id) => {
@@ -978,12 +985,12 @@ export function Arrange() {
           if (ti < 0) return [];
           const reg = tracks[ti].regions.find((x) => x.id === id)!;
           const target = tracks[dragTarget(layout, ti, d.dTrack, tracks)];
-          return [{ reg, id, start: Math.max(0, Math.round(reg.start + delta)), track: target.id }];
+          return [{ reg, id, start: movedStart(tempoMap(project), reg.start, r.start, newStart, musical), track: target.id }];
         });
         if (d.copy) {
           // Option-drag: copies at the drop position in one undo step; the copies get selected.
-          const items = moves.map((m) => [m.track, m.reg]);
-          actMade("paste_regions", { items, offset: Math.round(delta), label: "Copy Regions" }).then((made) => made && setState({ selectedRegions: made }));
+          const items = moves.map((m) => [m.track, placedAt(m.reg, m.start)]);
+          actMade("paste_regions", { items, offset: 0, label: "Copy Regions" }).then((made) => made && setState({ selectedRegions: made }));
         } else {
           const plain = moves.map(({ id, start, track }) => ({ id, start, track }));
           moveAutomationAnswer(project, plain).then((automation) => act("move_regions", { moves: plain, automation }));
@@ -1137,6 +1144,11 @@ export function Arrange() {
     if (hoverRef.current !== h.region.id) {
       hoverRef.current = h.region.id;
       requestDraw();
+    }
+    const { pps } = live.current;
+    if (!h.inLoop && onGainHandle(h.region, h.x, h.localY, h.laneH, pps, el.scrollLeft, viewport().width)) {
+      el.style.cursor = "ns-resize";
+      return;
     }
     const kind = grabKind(h);
     el.style.cursor = kind === "loop" ? LOOP_CURSOR : kind === "left" || kind === "right" ? "ew-resize" : kind === "move" ? "default" : "col-resize";

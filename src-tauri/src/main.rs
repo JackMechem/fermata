@@ -337,6 +337,8 @@ fn main() {
             commands::set_pattern,
             commands::convert_patterns_to_midi,
             commands::convert_midi_to_patterns,
+            commands::set_snap_zero_crossings,
+            commands::set_region_gains,
             menu::set_project_menus,
             commands::set_marker_length,
             commands::add_arrangement_marker,

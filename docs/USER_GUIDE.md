@@ -234,7 +234,7 @@ status, the audio devices, and the number of MIDI inputs.
 |---|---|
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
-| Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Select All, Delete |
+| Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Snap Edits to Zero Crossings, Select All, Delete |
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
@@ -492,9 +492,14 @@ The pointer changes over a region's hot zones:
 | Lower left or right edge | Trim the start or end. |
 | Top left or right corner, below the name bar (audio) | Set the fade-in or fade-out length. |
 | Top right corner of the name bar | Set where a loop stops (see Loops). |
+| The gain handle at the top centre of the name bar (audio, shown on hover) | Change the region gain (see Gain and reverse). |
 
 - Moves, trims and loop ends follow the **Snap** setting (Smart, Bar, Beat or Off). Smart
   snaps to sixteenths, beats or bars depending on the zoom. Fades are never snapped.
+- **Across tempo changes**, a snapped move counts in bars and beats: the region you drag snaps
+  to the grid where it lands, and the others in the selection keep their distance from it in
+  bars and beats, so a region dragged from a 120 BPM section into a 90 BPM one still lands on
+  its beat. Alt-drag copies do the same. With Snap off, the others keep their distance in time.
 - A moved region comes to the front, so it plays over whatever it now overlaps.
 - **Drag mode** (the **Drag** pop-up in the tracks area's bar, next to Snap) decides what
   moves, trims, nudges, deletes, pastes and Alt-drag copies do to the other regions on the
@@ -528,7 +533,19 @@ The pointer changes over a region's hot zones:
   along. **Never** (the default) leaves automation where it is. Moves onto another track,
   copies, and neighbours that a Shuffle mode moves leave their automation behind.
 - **Nudge:** Alt+Left / Alt+Right move the selected regions by the Nudge Value (Settings ›
-  Editing; 1/16 note by default). A run of nudges is one undo step.
+  Editing; 1/16 note by default). A run of nudges is one undo step. A bar, beat or note value
+  is counted through the tempo map: the first selected region moves by exactly that many bars
+  or beats, and the others keep their bars and beats, across tempo changes too. A nudge by
+  milliseconds moves every region the same time.
+- **Snap Edits to Zero Crossings** (Edit menu, also in the Tracks area's and Audio Track
+  Editor's Edit menus; a key command with no key by default): with it on, splits, trims and
+  range edits of audio regions (Split at Playhead, the Scissors, the marquee, the Audio Track
+  Editor's range actions and splits) move to the nearest point within 5 ms where the audio
+  crosses zero (both channels summed) or is silent, so the cut doesn't click. Each region is
+  cut at its own crossing, so regions on different tracks split at slightly different points.
+  Where there is no crossing within 5 ms, the edit stays where it was asked. MIDI regions and
+  take folders are cut where asked. The setting is saved with the project and isn't an undo
+  step.
 - Regions on a frozen track can be selected but not changed.
 
 ### Split and join
@@ -637,6 +654,13 @@ As in Logic, a looping region repeats its own content from its end up to its **l
 
 - **Gain:** region menu › Gain › +6, +3, +1, -1, -3, -6 dB, Reset to 0 dB, or Normalize (the
   loudest sample reaches 0 dBFS); or the Inspector's Gain field. Gain ranges from -96 to +30 dB.
+- **Gain handle:** hovering over an audio region shows its gain in a small handle at the top
+  centre of its name bar (on regions wide enough to hold it). Drag the handle up or down to
+  change the gain, 0.25 dB a pixel, or 0.05 dB with Shift; the waveform grows and shrinks as
+  you drag, and you hear the change while playing. Every selected audio region changes by the
+  same number of dB from where it was (within -96, shown as −∞, to +30 dB). Double-click the
+  handle to set them to 0 dB. A drag is one undo step.
+- Waveforms in the tracks area are drawn at their region's gain.
 - **Reverse** writes a reversed copy of the audio to a new file, so the original stays intact.
 
 ### Region playback parameters
@@ -711,6 +735,9 @@ New Tracks….
 - Accepted audio: WAV, AIFF, FLAC, MP3, OGG Vorbis, M4A/AAC/MP4 and CAF. A WAV file already
   at the project's sample rate is used where it is; anything else is converted (with
   high-quality resampling) into the project's `Audio Files/`.
+- The silence an encoder adds at the start and end of MP3 and AAC files is trimmed, so the
+  audio starts exactly on time. For M4A/MP4 files Fermata reads it from the file's iTunes
+  gapless tag (`iTunSMPB`) or, without one, from its edit list.
 - **File › Import Audio File…** (Ctrl+Shift+I) imports one WAV file at the playhead onto the
   selected audio track (or the first audio track). The lane menu's Import Audio File Here…
   accepts every supported format and several files.
@@ -1071,7 +1098,19 @@ The lane below the notes shows velocity or a controller. Drag the bar above it t
 - Double-click to add a point (snapped; Alt for free).
 - Click a point to select it (Shift adds); drag selected points to move them in time and value
   (Ctrl for no snapping). Drag on empty space for a rubber band.
-- The Pencil draws freehand; Shift+Pencil or the Line tool draws a straight ramp.
+- The Pencil draws freehand; Shift+Pencil, Ctrl+Shift-drag (⌘⇧ on macOS) or the Line tool
+  draws a ramp of points along the **Line Curve** shape: Linear, Exponential (slow then
+  fast), Logarithmic (fast then slow) or S-Curve. While you drag, the line shows the curve. A
+  line that starts or ends on an existing point starts or ends exactly there, so drawing from
+  one point to another joins them.
+- **Ramp Density** sets how many points a ramp gets: one per 1/8, 1/16, 1/32 (the default) or
+  1/64 note. A value that doesn't change isn't repeated.
+- **Create Ramp** fills the gap between each pair of neighbouring selected points with a ramp
+  along the Line Curve, replacing the points between them.
+- **Thin Out** removes the selected points (all of the lane's points when none is selected)
+  that lie on the line between the points either side, keeping the shape with fewer events.
+- Line Curve, Ramp Density, Create Ramp and Thin Out are in the lane button's menu and the
+  lane's right-click menu (on controller, pitch bend and aftertouch lanes).
 - The Eraser, or Alt+click with the Pointer, removes points.
 - Backspace or Delete removes the selected points (after clicking in the lane).
 
@@ -2555,10 +2594,12 @@ blank, because WebKit then draws on the CPU.
   window is in front. The input level check is Linux only. On Windows and macOS only the
   system's default audio driver is available (no ASIO).
 - **Plug-in formats:** VST3 only; no CLAP, AU or VST2.
-- **Tempo:** moving regions in the tracks area is in samples, not bars, across tempo changes;
-  Move MIDI Regions with Tempo doesn't move automation or markers, isn't applied to base-tempo
-  edits in Project Settings, and isn't remembered between sessions.
-- **Editing:** no Marquee tool, Fade tool or region gain drag. The Shuffle and No Overlap
+- **Tempo:** a region's length stays in samples when it is moved across a tempo change (only
+  its start follows the bars and beats). Move MIDI Regions with Tempo doesn't move automation
+  or markers, isn't applied to base-tempo edits in Project Settings, and isn't remembered
+  between sessions.
+- **Editing:** region gain bottoms out at -96 dB (shown as −∞), not true silence. Snap Edits
+  to Zero Crossings doesn't apply to fades or to take folders. The Shuffle and No Overlap
   modes don't apply to range edits in the Audio Track Editor, Repeat, or Move to New Track.
   Apply Last Fade, fade marquee selections and the Crossfade Time and Curve settings aren't
   implemented.
@@ -2581,8 +2622,8 @@ blank, because WebKit then draws on the CPU.
   tail to the longest one. VST3 user presets aren't saved by Fermata (use the plug-in's own).
 - **Freeze** renders from the track's first region to its last plus up to 4 s of tail. A frozen
   track's plug-in automation lanes stay editable but do nothing until it is unfrozen.
-- **Imports:** AAC/M4A files may start about 40 ms late, because the encoder delay isn't fully
-  trimmed. MP3 is trimmed exactly.
+- **Imports:** a raw AAC stream (`.aac`, not in an M4A/MP4 file) and CAF files aren't trimmed
+  of their encoder delay; M4A/MP4 and MP3 are.
 - **Take folders** have one comp (Logic keeps several). Recording without Cycle over a folder
   doesn't add a take to it. A folder's own fades shape only its first and last comp stretch.
   With Autopunch inside the cycle, a punch-out closer to the cycle end than the recording
@@ -2595,7 +2636,8 @@ blank, because WebKit then draws on the CPU.
   folder's own timing, not each subtrack's delay compensation. Stereo Out's lanes play at the
   output's delay; with latency on Stereo Out's own plug-ins, their parameters change slightly
   early.
-- **Piano Roll:** no Score, and controllers have no curve shapes.
+- **Piano Roll:** no Score. Controller curves are drawn as ramps of points; a curve between
+  two points isn't kept as a shape that can be bent later.
 - **Event List:** lists MIDI regions only (not the regions of the project, or audio), on one
   track at a time. Fermata stores no MIDI channel, program changes, polyphonic aftertouch,
   release velocity or SysEx, so the Ch column always reads 1 and those types have no filter.

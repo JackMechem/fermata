@@ -737,6 +737,10 @@ pub struct Project {
     /// `crate::arrangement`).
     #[serde(default)]
     pub arrangement: Vec<ArrangementMarker>,
+    /// Edit › Snap Edits to Zero Crossings: splits and trims of audio regions move to the
+    /// nearest zero crossing. See `session/zero_crossings.rs`.
+    #[serde(default)]
+    pub snap_zero_crossings: bool,
 }
 
 /// A VCA fader (Logic's VCA strip). It passes no audio: its level offsets the faders of the
@@ -792,6 +796,7 @@ impl Project {
             vcas: Vec::new(),
             alternative: String::new(),
             arrangement: Vec::new(),
+            snap_zero_crossings: false,
         }
     }
 

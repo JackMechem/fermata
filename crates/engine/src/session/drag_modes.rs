@@ -39,6 +39,7 @@ impl Session {
     /// Trims a region's edges in the drag mode: No Overlap stops it at its neighbours, the
     /// Shuffle modes move them along.
     pub fn drag_resize_region(&mut self, id: Id, start: i64, length: i64) {
+        let (start, length) = self.zero_trim(id, start, length);
         let before = self.find_region(id).map(|(t, _)| (t, self.lane(t)));
         self.resize_region(id, start, length);
         match self.side() {

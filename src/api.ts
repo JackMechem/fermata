@@ -340,6 +340,8 @@ export interface Project {
   alternative: string;
   /** The Arrangement track's sections, in order. */
   arrangement: ArrangementMarker[];
+  /** Edit › Snap Edits to Zero Crossings: audio splits and trims land on zero crossings. */
+  snap_zero_crossings?: boolean;
 }
 
 /** A VCA fader: no audio, but its level offsets its strips' faders and its mute mutes them. */

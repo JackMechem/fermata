@@ -59,6 +59,38 @@ impl Clip {
     }
 }
 
+/// Below this level (about −80 dBFS) every channel counts as silent, so an edit there is as
+/// clean as one at a crossing.
+const ZERO_LEVEL: f32 = 1e-4;
+
+/// The frame nearest `at`, at most `window` frames away, where an edit makes no click (Logic's
+/// Snap Edits to Zero Crossings): where the channels' sum changes sign (the side of the
+/// crossing nearer zero), or where every channel is close to silent. Earlier frames win ties.
+/// None when there is no such frame in the window.
+pub fn nearest_zero_crossing(channels: &[Vec<f32>], at: usize, window: usize) -> Option<usize> {
+    let frames = channels.first().map(|c| c.len()).unwrap_or(0);
+    if frames == 0 || at >= frames {
+        return None;
+    }
+    let sum = |i: usize| channels.iter().map(|c| c[i]).sum::<f32>();
+    let quiet = |i: usize| channels.iter().all(|c| c[i].abs() <= ZERO_LEVEL);
+    // `i` sits on a crossing with its neighbour `j` and is the one of the pair nearer zero.
+    let crosses = |i: usize, j: usize| {
+        let (a, b) = (sum(i), sum(j));
+        (a == 0.0 || (a > 0.0) != (b > 0.0)) && a.abs() <= b.abs()
+    };
+    let good = |i: usize| quiet(i) || (i > 0 && crosses(i, i - 1)) || (i + 1 < frames && crosses(i, i + 1));
+    for d in 0..=window {
+        if d <= at && good(at - d) {
+            return Some(at - d);
+        }
+        if d > 0 && at + d < frames && good(at + d) {
+            return Some(at + d);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,5 +111,40 @@ mod tests {
         assert_eq!(w.len(), 8 + 2 * 4);
         assert_eq!((i16_at(8), i16_at(10)), (8192, 16384));
         assert_eq!((i16_at(12), i16_at(14)), (-32767, -16384));
+    }
+
+    #[test]
+    fn zero_crossing_finds_the_nearest_sign_change() {
+        // A 100-frame-period sine: crossings at 0, 50, 100, ...
+        let sine: Vec<f32> = (0..1000).map(|i| (i as f32 * std::f32::consts::TAU / 100.0).sin() * 0.5).collect();
+        let ch = vec![sine.clone()];
+        let z = nearest_zero_crossing(&ch, 140, 20).unwrap();
+        assert!((z as i64 - 150).abs() <= 1, "{z}");
+        assert!(sine[z].abs() < 0.02);
+        let z = nearest_zero_crossing(&ch, 112, 20).unwrap();
+        assert!((z as i64 - 100).abs() <= 1, "{z}");
+        // Nothing within reach of the peak at 125.
+        assert_eq!(nearest_zero_crossing(&ch, 125, 10), None);
+        // Out of range.
+        assert_eq!(nearest_zero_crossing(&ch, 5000, 10), None);
+    }
+
+    #[test]
+    fn zero_crossing_uses_the_channels_sum_or_silence() {
+        // Left and right in opposite phase: the sum is silent everywhere, so any frame will do.
+        let l: Vec<f32> = (0..200).map(|i| if i % 2 == 0 { 0.3 } else { -0.3 }).collect();
+        let r: Vec<f32> = l.iter().map(|v| -v).collect();
+        assert_eq!(nearest_zero_crossing(&[l.clone(), r], 77, 5), Some(77));
+        // A DC offset never crosses, but a stretch of near-silence counts.
+        let mut dc = vec![0.4f32; 300];
+        for v in &mut dc[200..210] {
+            *v = 0.00005;
+        }
+        assert_eq!(nearest_zero_crossing(&[dc.clone()], 190, 15), Some(200));
+        assert_eq!(nearest_zero_crossing(&[dc], 100, 15), None);
+        // The side of a crossing nearer zero, and the earlier frame on a tie.
+        let step = vec![0.5f32, 0.4, 0.1, -0.3, -0.5, 0.2, -0.2];
+        assert_eq!(nearest_zero_crossing(&[step.clone()], 3, 2), Some(2));
+        assert_eq!(nearest_zero_crossing(&[step], 6, 0), Some(6));
     }
 }

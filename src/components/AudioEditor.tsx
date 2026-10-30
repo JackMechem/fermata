@@ -307,7 +307,8 @@ export function AudioEditor({ track, region }: { track: Track; region: Region | 
       const gain = audio ? dbGain(audio.gain_db) : 1;
       const isSel = selectedRegions.includes(r.id);
       if (audio && !waveCache.has(audio.clip)) ensureWave(audio.clip, requestDraw);
-      drawRegion(ctx, r, track, x, g.top, w, g.h, isSel, pps, W, shift, fades, !!audio && (isSel || hoverRef.current === r.id), false, gain * amp);
+      // drawRegion scales the waveform by the region's gain itself.
+      drawRegion(ctx, r, track, x, g.top, w, g.h, isSel, pps, W, shift, fades, !!audio && (isSel || hoverRef.current === r.id), false, amp);
       if (!audio) continue;
       const wave = waveCache.get(audio.clip);
       const offset = audio.offset + shift;
