@@ -34,11 +34,13 @@ pub fn set_key_forwarder(f: Forwarder) {
     *FORWARDER.write() = Some(f);
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn has_forwarder() -> bool {
     FORWARDER.read().is_some()
 }
 
 /// Passes `k` to the forwarder; false if there is none.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub(crate) fn forward(k: KeyInfo) -> bool {
     match &*FORWARDER.read() {
         Some(f) => {

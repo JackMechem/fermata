@@ -27,9 +27,6 @@ here has been checked by eye in the app yet unless it says so.
     Inspector's fade rows; the Drag pop-up; the Scroll to Playhead button; the recovery sheet
     after `kill -9` during a take.
 - **Small fixes:**
-  - `isInstrument` in `src/fxHost.ts` compares plug-in ids exactly, so pasting an instrument
-    copied from a slot whose plug-in was found at another path (`Session::find_plugin`) is
-    refused.
   - The Compressor's "Lookahead" and the Classic Opto's "Peak Reduction" labels may overlap
     their knobs by a pixel or two.
 - **Larger:**

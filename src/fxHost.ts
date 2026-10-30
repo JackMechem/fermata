@@ -92,7 +92,14 @@ export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): Me
   const instrument = slot === INSTRUMENT_SLOT;
   const clip = pluginClip;
   // An instrument only pastes into an instrument slot, an effect only into an Audio FX slot.
-  const isInstrument = (id: string) => id === BUILTIN_SYNTH || !!getState().plugins.find((p) => p.id === id)?.is_instrument;
+  // Like Session::find_plugin: a plug-in found at another path matches by its class id.
+  const cid = (id: string) => id.slice(id.lastIndexOf("|") + 1).toLowerCase();
+  const isInstrument = (id: string) => {
+    if (id === BUILTIN_SYNTH) return true;
+    const { plugins } = getState();
+    const desc = plugins.find((p) => p.id === id) ?? (id.includes("|") ? plugins.find((p) => p.id.includes("|") && cid(p.id) === cid(id)) : undefined);
+    return !!desc?.is_instrument;
+  };
   const fits = !!clip && isInstrument(clip.plugin_id) === instrument;
   const targets = pasteTargets(track);
   const items: MenuItem[] = [
