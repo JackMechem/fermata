@@ -8,14 +8,15 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
-- **Step Sequencer:** pattern regions on software instrument tracks (Track › New Pattern
-  Region, or Create Pattern Region in an instrument track's right-click menu), edited as rows
-  of steps in a new editor tab beside the Piano Roll and Event List (also in its own window).
-  Note On, Velocity, Gate and Tie edit modes with click-and-drag painting, per-row pitch (with
-  the General MIDI drum names and Learn), mute, solo, step rate and length (polymeter),
-  pattern length, rate, swing and loop, and the playing step lit during playback. Pattern
-  regions show their steps in the Tracks area, play in every render, and convert to and from
-  MIDI regions.
+- **Autosave after recording** (Settings › General › After Recording, on by default): the
+  autosave is written as soon as a take is placed, and after Bounce in Place, Freeze and
+  imports.
+- **Recovering an interrupted recording:** takes being recorded when Fermata crashed, was
+  killed or lost power are repaired and offered in the Recover sheet, placed where they would
+  have landed (cycle takes as a take folder).
+- Saves are atomic; a damaged project file falls back to the autosave, then the newest backup
+  (or `project.json.bak` when Backups is set to 0). A panic on the main thread writes an
+  emergency autosave.
 - **Comps and MIDI take folders:** a take folder keeps several comps (Create New Comp,
   Duplicate Comp, Rename Comp, Delete Comp and the comp list in its menu; the name bar shows
   the comp heard). Settings › Recording › MIDI › Create take folders makes each MIDI cycle pass
@@ -24,13 +25,35 @@ All notable changes to Fermata are recorded here. The format follows
   every repetition (Crossfade Loop Repetitions), and Settings › Editing › Crossfade Time and
   Crossfade Curve set the take folder, X-Fade and Crossfade menu crossfades (comp boundaries
   are now 20 ms by default instead of 10 ms).
-- **Linear Phase EQ** (EQ category): the Channel EQ's eight bands with linear phase, in the
-  Channel EQ's own editor, with a **Quality** pop-up (Low, Medium, High: 21, 43 or 85 ms of
-  latency at 48 kHz, made up by delay compensation). Settings change without clicks, follow
-  automation, and render identically in bounces and freezes.
-- **Delay compensation changes glide:** inserting or removing a latent plug-in, changing a
-  plug-in's latency or switching Low Latency Mode while playing now crossfades each compensated
-  path (track outputs, sends and auxes) to its new delay over 15 ms instead of clicking.
+- **Record MIDI in Replace mode:** Settings › Recording › Overlapping Recordings › MIDI ›
+  Replace clears the notes and controllers in the recorded range of the regions underneath,
+  and a **Replace** button in the control bar makes every recording, audio and MIDI, replace.
+  Merge now merges recorded controllers too, not only notes.
+- **Chase: Notes:** starting playback, jumping or cycling back in the middle of a long note
+  starts it, as in Logic. Settings › MIDI › Chase switches note and controller chase.
+- **Tracks-area tools:** Left-click and Ctrl-click (⌘-click) Tool pop-ups in the Tracks
+  area's bar and Logic's Tool menu (T, then the tool's letter), with the Pointer, Pencil
+  (empty MIDI regions), Eraser, Scissors (Alt+click for equal pieces), Glue, Mute, Fade (fades
+  and crossfades by dragging) and Marquee tools, each with its own pointer.
+- **Marquee selection:** a time range across tracks (the Ctrl-click tool by default). Delete,
+  Cut, Copy and Paste act on the part of the regions inside it, and a Pointer click inside
+  splits the regions at its edges.
+- **Drag modes No Overlap, Shuffle R and Shuffle L** (the Drag pop-up in the Tracks area):
+  No Overlap shortens a region that an edit overlaps; the Shuffle modes keep a track's regions
+  butted together, closing gaps on delete and trim and swapping neighbours on a drag. Drags
+  are drawn where they will land.
+- **Settings › Editing › Move Automation with Regions** (Never, Always, Ask): a region moved
+  along its track takes the automation under it along, in the same undo step.
+- **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
+  and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
+  Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps
+  automatically. Bounce, export, freeze and Join render them as playback does.
+- **Region gain handle:** hovering over an audio region shows its gain at the top centre of
+  its name bar; drag it up or down (Shift for fine steps) to change the gain of every selected
+  audio region by the same amount, with the waveform following, or double-click it for 0 dB.
+  A drag is one undo step.
+- **Snap Edits to Zero Crossings** (Edit menu, and a key command): splits, trims and range
+  edits of audio regions move to the nearest zero crossing within 5 ms. Saved with the project.
 - **Arranging commands** from Logic's Edit menu (also in the Tracks area's Edit and Functions
   menus, with Logic's keys where free): **Select** All Following (Shift+F), Inside Locators,
   Muted, Overlapped, Same Colored, Equal or Similar Regions, Invert Selection (Shift+I);
@@ -44,13 +67,6 @@ All notable changes to Fermata are recorded here. The format follows
 - **Strip Silence** (Edit › Strip Silence…): splits audio regions around the parts above a
   threshold, with Logic's minimum time, pre-attack and post-release settings and a preview of
   the cuts on the region's waveform.
-- **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
-  fader offsets the level of every strip assigned to it without moving their faders (an
-  outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be
-  nested. Volume automation, bounces, exports and frozen tracks follow the VCA.
-- **Pre-fader side-chains:** a **Pre / Post** switch beside the Side Chain pop-up of the
-  Compressor, Noise Gate and De-Esser keys the effect from the source before its fader, so a
-  trigger track pulled all the way down still works. Existing projects stay post-fader.
 - **Arrangement track** (the top global track, View › Show Global Tracks): named sections
   (Intro, Verse, Chorus…) that tile the timeline, added with +, renamed from Logic's name
   pop-up, coloured by name, and resized by their right edge. Dragging a section moves it with
@@ -60,65 +76,13 @@ All notable changes to Fermata are recorded here. The format follows
 - **Markers with their own lengths:** set from the marker menu's Length submenu, the Marker
   List's new Length column, or by dragging the end of a marker's bar. Clicking a marker selects
   it (Delete removes it); with Cycle on, or dragged into the cycle strip, it sets the locators.
-- **Automation lanes, curves, stacks and Stereo Out:** the **+** on a lane header opens more
-  lanes below a track, each with its own parameter; **Show Used Automation** (Shift+A) shows
-  every lane with data. Ctrl+Shift-drag (Control-Shift on macOS, or Alt+Shift) bends a segment
-  into a curve; double-click straightens it. Folder stacks automate their volume and mute,
-  and **Track › Show Output Track** shows Stereo Out with lanes for its volume and plug-ins.
-  Bounces and exports render all of it.
-
-- **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
-  name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state
-  included) and Channel EQ, resets the strip, and saves settings to load in any project.
-  Paste, Reset and loading apply to all selected strips as one undo step.
-- **Clip indicators:** each strip's peak readout holds its highest peak until reset, turns red
-  over 0 dBFS and lights the top of the meter (and the end of the track header's meter); click
-  to reset, Alt-click (or the key command Reset All Clip Indicators) to reset all.
-- **Gain-reduction meter** beside a strip's level meter when it has a Compressor, Limiter,
-  Noise Gate or De-Esser.
-- **Tracks-area tools:** Left-click and Ctrl-click (⌘-click) Tool pop-ups in the Tracks
-  area's bar and Logic's Tool menu (T, then the tool's letter), with the Pointer, Pencil
-  (empty MIDI regions), Eraser, Scissors (Alt+click for equal pieces), Glue, Mute, Fade (fades
-  and crossfades by dragging) and Marquee tools, each with its own pointer.
-- **Marquee selection:** a time range across tracks (the Ctrl-click tool by default). Delete,
-  Cut, Copy and Paste act on the part of the regions inside it, and a Pointer click inside
-  splits the regions at its edges.
-- **MIDI Learn and controller assignments** (Fermata › Control Surfaces): Learn Assignment
-  for Last Touched Parameter (Ctrl+L) or a control's right-click Learn MIDI Assignment assigns
-  the next control change or pitch bend to a fader, pan, send, Mute, Solo, Record, Stereo Out,
-  Channel EQ setting, built-in effect or VST3 parameter, or a transport button. Assigned
-  controllers move their parameter like the mouse (written as automation in Touch, Latch and
-  Write) and don't reach the instrument. The Controller Assignments window (Ctrl+Shift+L) lists,
-  edits (Jump or Pickup, range) and deletes them; they're saved with the settings.
-- **Step Input Keyboard** (View › Step Input Keyboard, Ctrl+Alt+Shift+K, or the Piano Roll's
-  bar): enter notes one step at a time at the playhead, from its own keyboard, a MIDI keyboard
-  or Musical Typing, with note values 1/1 to 1/128 (dotted, triplet), velocities ppp to fff or
-  as played, Rest, Back, Chord, Sustain and Quantize, and key commands for them. Notes go into
-  the Piano Roll's region under the playhead, which grows or is made as needed; each step is
-  one undo step.
-- **Record MIDI in Replace mode:** Settings › Recording › Overlapping Recordings › MIDI ›
-  Replace clears the notes and controllers in the recorded range of the regions underneath,
-  and a **Replace** button in the control bar makes every recording, audio and MIDI, replace.
-  Merge now merges recorded controllers too, not only notes.
-- **Chase: Notes:** starting playback, jumping or cycling back in the middle of a long note
-  starts it, as in Logic. Settings › MIDI › Chase switches note and controller chase.
-- **Project alternatives** (File › Project Alternatives): versions of a project in one
-  folder, sharing its audio files: New Alternative…, switching (the current one is saved
-  first), and Edit Alternatives… to rename or delete them.
-- **Backups and File › Revert to:** each save keeps the version it replaces, per alternative
-  (Settings › General › Backups, 10 by default), listed by date and time; reverting keeps the
-  current state as a backup too. **File › Revert to Saved.**
-- **User project templates:** File › Save as Template… saves the tracks, routing, plug-ins and
-  settings without regions; they appear under My Templates in the Project Chooser, where a
-  right-click renames or deletes them.
-- **Track alternatives** (Track › Track Alternatives and a pop-up in the track header): New,
-  Duplicate, Rename and Delete sets of regions for a track, and switch between them, with undo.
-
-- **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
-  24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
-  format is remembered with the other bounce options.
-- **File › Export Selected Tracks as Audio Files…** (Ctrl+E): Export All Tracks for just the
-  selected tracks.
+- **Overview:** the Tracks area's horizontal scroll bar is now a miniature of the whole
+  project (regions, playhead, cycle, markers, project end) with a box for the visible area:
+  drag it to scroll, drag its edges to zoom, click elsewhere to jump there (View › Show
+  Overview).
+- **Scroll to Playhead** button beside Catch (Alt+\`); a second Stop also brings the playhead into view.
+- **Settings › Editing › Mouse Wheel Scrolls:** Horizontally (time) makes a mouse's vertical
+  wheel scroll through time in the Tracks area and Piano Roll, with Shift for vertical.
 - **Region playback parameters** in the Inspector's Region section, as in Logic: Quantize
   (straight and triplet values) with Q-Swing, Transpose, Velocity, Dynamics, Gate Time and
   Delay (ticks or ms) for MIDI regions, and Delay for audio regions. They apply at playback
@@ -130,37 +94,80 @@ All notable changes to Fermata are recorded here. The format follows
   value or double-click to type it, filter by event type, add events at the playhead with +,
   delete with Backspace; the event at the playhead is highlighted and Catch follows it. The
   note selection is shared with the Piano Roll, and the list can have a window of its own.
+- **Step Sequencer:** pattern regions on software instrument tracks (Track › New Pattern
+  Region, or Create Pattern Region in an instrument track's right-click menu), edited as rows
+  of steps in a new editor tab beside the Piano Roll and Event List (also in its own window).
+  Note On, Velocity, Gate and Tie edit modes with click-and-drag painting, per-row pitch (with
+  the General MIDI drum names and Learn), mute, solo, step rate and length (polymeter),
+  pattern length, rate, swing and loop, and the playing step lit during playback. Pattern
+  regions show their steps in the Tracks area, play in every render, and convert to and from
+  MIDI regions.
+- **Step Input Keyboard** (View › Step Input Keyboard, Ctrl+Alt+Shift+K, or the Piano Roll's
+  bar): enter notes one step at a time at the playhead, from its own keyboard, a MIDI keyboard
+  or Musical Typing, with note values 1/1 to 1/128 (dotted, triplet), velocities ppp to fff or
+  as played, Rest, Back, Chord, Sustain and Quantize, and key commands for them. Notes go into
+  the Piano Roll's region under the playhead, which grows or is made as needed; each step is
+  one undo step.
+- **Controller curves** in the Piano Roll's controller lane: the Line tool draws ramps along a
+  Linear, Exponential, Logarithmic or S-Curve shape at a chosen Ramp Density, joins the
+  points it starts and ends on, and Create Ramp and Thin Out fill and thin the selected points.
+- **MIDI Learn and controller assignments** (Fermata › Control Surfaces): Learn Assignment
+  for Last Touched Parameter (Ctrl+L) or a control's right-click Learn MIDI Assignment assigns
+  the next control change or pitch bend to a fader, pan, send, Mute, Solo, Record, Stereo Out,
+  Channel EQ setting, built-in effect or VST3 parameter, or a transport button. Assigned
+  controllers move their parameter like the mouse (written as automation in Touch, Latch and
+  Write) and don't reach the instrument. The Controller Assignments window (Ctrl+Shift+L) lists,
+  edits (Jump or Pickup, range) and deletes them; they're saved with the settings.
 - **More built-in effects:** **Chorus**, **Flanger**, **Phaser** and **Tremolo** (Modulation;
   the Tremolo syncs to the tempo, locked to the bar), **Overdrive** and **Distortion**
   (Distortion; Soft, Hard, Tube and Fuzz curves, 4× oversampled, level-compensated drive) and
   **Gain** (Utility: gain, phase invert, swap, mono, balance). Each has its panel, automation,
   factory presets and freeze and bounce support.
-- **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
-  and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
-  Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps
-  automatically. Bounce, export, freeze and Join render them as playback does.
-- **Overview:** the Tracks area's horizontal scroll bar is now a miniature of the whole
-  project (regions, playhead, cycle, markers, project end) with a box for the visible area:
-  drag it to scroll, drag its edges to zoom, click elsewhere to jump there (View › Show
-  Overview).
-- **Drag modes No Overlap, Shuffle R and Shuffle L** (the Drag pop-up in the Tracks area):
-  No Overlap shortens a region that an edit overlaps; the Shuffle modes keep a track's regions
-  butted together, closing gaps on delete and trim and swapping neighbours on a drag. Drags
-  are drawn where they will land.
-- **Settings › Editing › Move Automation with Regions** (Never, Always, Ask): a region moved
-  along its track takes the automation under it along, in the same undo step.
-- **Scroll to Playhead** button beside Catch (Alt+\`); a second Stop also brings the playhead into view.
-- **Settings › Editing › Mouse Wheel Scrolls:** Horizontally (time) makes a mouse's vertical
-  wheel scroll through time in the Tracks area and Piano Roll, with Shift for vertical.
-- **Autosave after recording** (Settings › General › After Recording, on by default): the
-  autosave is written as soon as a take is placed, and after Bounce in Place, Freeze and
-  imports.
-- **Recovering an interrupted recording:** takes being recorded when Fermata crashed, was
-  killed or lost power are repaired and offered in the Recover sheet, placed where they would
-  have landed (cycle takes as a take folder).
-- Saves are atomic and keep the previous `project.json` as `project.json.bak`; a damaged
-  project file falls back to the autosave or the backup. A panic on the main thread writes an
-  emergency autosave.
+- **Linear Phase EQ** (EQ category): the Channel EQ's eight bands with linear phase, in the
+  Channel EQ's own editor, with a **Quality** pop-up (Low, Medium, High: 21, 43 or 85 ms of
+  latency at 48 kHz, made up by delay compensation). Settings change without clicks, follow
+  automation, and render identically in bounces and freezes.
+- **Delay compensation changes glide:** inserting or removing a latent plug-in, changing a
+  plug-in's latency or switching Low Latency Mode while playing now crossfades each compensated
+  path (track outputs, sends and auxes) to its new delay over 15 ms instead of clicking.
+- **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
+  name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state
+  included) and Channel EQ, resets the strip, and saves settings to load in any project.
+  Paste, Reset and loading apply to all selected strips as one undo step.
+- **Clip indicators:** each strip's peak readout holds its highest peak until reset, turns red
+  over 0 dBFS and lights the top of the meter (and the end of the track header's meter); click
+  to reset, Alt-click (or the key command Reset All Clip Indicators) to reset all.
+- **Gain-reduction meter** beside a strip's level meter when it has a Compressor, Limiter,
+  Noise Gate or De-Esser.
+- **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
+  fader offsets the level of every strip assigned to it without moving their faders (an
+  outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be
+  nested. Volume automation, bounces, exports and frozen tracks follow the VCA.
+- **Pre-fader side-chains:** a **Pre / Post** switch beside the Side Chain pop-up of the
+  Compressor, Noise Gate and De-Esser keys the effect from the source before its fader, so a
+  trigger track pulled all the way down still works. Existing projects stay post-fader.
+- **Automation lanes, curves, stacks and Stereo Out:** the **+** on a lane header opens more
+  lanes below a track, each with its own parameter; **Show Used Automation** (Shift+A) shows
+  every lane with data. Ctrl+Shift-drag (Control-Shift on macOS, or Alt+Shift) bends a segment
+  into a curve; double-click straightens it. Folder stacks automate their volume and mute,
+  and **Track › Show Output Track** shows Stereo Out with lanes for its volume and plug-ins.
+  Bounces and exports render all of it.
+- **Project alternatives** (File › Project Alternatives): versions of a project in one
+  folder, sharing its audio files: New Alternative…, switching (the current one is saved
+  first), and Edit Alternatives… to rename or delete them.
+- **Backups and File › Revert to:** each save keeps the version it replaces, per alternative
+  (Settings › General › Backups, 10 by default), listed by date and time; reverting keeps the
+  current state as a backup too. **File › Revert to Saved.**
+- **User project templates:** File › Save as Template… saves the tracks, routing, plug-ins and
+  settings without regions; they appear under My Templates in the Project Chooser, where a
+  right-click renames or deletes them.
+- **Track alternatives** (Track › Track Alternatives and a pop-up in the track header): New,
+  Duplicate, Rename and Delete sets of regions for a track, and switch between them, with undo.
+- **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
+  24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
+  format is remembered with the other bounce options.
+- **File › Export Selected Tracks as Audio Files…** (Ctrl+E): Export All Tracks for just the
+  selected tracks.
 - **Separate windows:** the Mixer, the Editors (Piano Roll, Audio Track Editor), built-in
   effect panels and the Channel EQ can be detached into windows of their own, for example on
   another monitor (the pop-out button in their bar, or View › Mixer / Editor in Separate
@@ -184,15 +191,6 @@ All notable changes to Fermata are recorded here. The format follows
 - A LICENSE file (MIT), shipped in every bundle.
 - CI runs the headless checks that need no third-party plug-ins on Linux
   (`scripts/headless-checks.sh`).
-- **Region gain handle:** hovering over an audio region shows its gain at the top centre of
-  its name bar; drag it up or down (Shift for fine steps) to change the gain of every selected
-  audio region by the same amount, with the waveform following, or double-click it for 0 dB.
-  A drag is one undo step.
-- **Snap Edits to Zero Crossings** (Edit menu, and a key command): splits, trims and range
-  edits of audio regions move to the nearest zero crossing within 5 ms. Saved with the project.
-- **Controller curves** in the Piano Roll's controller lane: the Line tool draws ramps along a
-  Linear, Exponential, Logarithmic or S-Curve shape at a chosen Ramp Density, joins the
-  points it starts and ends on, and Create Ramp and Thin Out fill and thin the selected points.
 
 ### Changed
 

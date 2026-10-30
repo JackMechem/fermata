@@ -6,10 +6,17 @@ of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
 ## Open items (2026-10-29)
 
-Left over from finishing the effect panels, separate windows and macOS plug-in work. Nothing
+Left over from the feature round of 2026-10-29 and the stabilisation pass after it. Nothing
 here has been checked by eye in the app yet unless it says so.
 
-- **Look at in the running app:**
+- **Look at in the running app (this round's features):** the Arrangement track (move, copy,
+  delete with content); File › Revert to and Project Alternatives submenus updating on Linux;
+  automation curve bending (Ctrl+Shift-drag) and extra lanes; the Output track; a looped region's
+  loop-end crossfade; the region gain handle; the Tool menu (T) and Marquee; the Mixer's Setting
+  button, peak readouts, gain-reduction bar, VCA slot and VCA strips; the Inspector's Region rows;
+  the new effect panels and Linear Phase EQ; Event List, Step Sequencer and Step Input; Strip
+  Silence; Controller Assignments; the name sheet replacing prompts; sheets holding back keys.
+- **Look at in the running app (earlier):**
   - Effect panels: the Loudness Meter's units at −100.0 and −∞; resizing floating panels from
     every edge and corner; the dock's tabs, float/dock, the preset sheet not being clipped; Esc
     order (frontmost floating panel, then the docked one).
@@ -43,6 +50,13 @@ here has been checked by eye in the app yet unless it says so.
     `tauri dev` and in the .app; ⌘ and ⌥ key commands; the unsigned .dmg opening with
     right-click › Open; `bash scripts/headless-checks.sh` (bash 3.2, no `timeout`).
 - **Small fixes:**
+  - Pattern regions restart their pattern where they're cut, so an Arrangement move or a section
+    edit that cuts across one changes what plays (splitting by hand does the same, by design).
+  - Arrangement moves and section edits don't move the regions of a track's inactive
+    alternatives.
+  - On a live Stop with delay compensation, the audio still in the compensation delay lines plays
+    out at static levels (renders keep reading automation through it; playback doesn't).
+  - MIDI Learn has no VCA level target.
   - The Compressor's "Lookahead" and the Classic Opto's "Peak Reduction" labels may overlap
     their knobs by a pixel or two.
 - **Larger:**
@@ -54,6 +68,10 @@ here has been checked by eye in the app yet unless it says so.
   - CI: run `scripts/headless-checks.sh` on macos-latest too (it runs on macOS now), and open a
     draft PR from `dev` so the Linux headless step runs on GitHub's runners.
   - Signing and notarization on macOS (the entitlements are ready in `src-tauri/`).
+  - Code style: about 60 clippy style warnings in the engine (`needless_range_loop`,
+    `manual_is_multiple_of`, argument counts) and no rustfmt configuration (the code uses long
+    lines, so plain `cargo fmt` would rewrite most files). A `rustfmt.toml` with a wide
+    `max_width`, one formatting pass and a CI `cargo fmt --check` step would settle it.
 
 ## Stage 1: Release hygiene
 
