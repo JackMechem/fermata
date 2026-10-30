@@ -93,7 +93,8 @@ pub struct InPlaceRender {
 impl Session {
     /// Where the last region ends (0 for an empty project): the end of "Whole Project".
     pub fn project_end(&self) -> i64 {
-        self.project.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| r.end()).max().unwrap_or(0)
+        let map = self.tempo_map();
+        self.project.tracks.iter().flat_map(|t| t.regions.iter()).map(|r| crate::region_params::bounds(r, &map).1).max().unwrap_or(0)
     }
 
     /// Renders `[from, to)` plus `tail` frames through the engine, as stereo at the project
@@ -140,7 +141,7 @@ impl Session {
         let mut family = vec![id];
         family.extend(self.project.descendants(id));
         let regions = family.iter().filter_map(|t| self.project.track(*t)).flat_map(|t| t.regions.iter()).filter(|r| !r.muted);
-        span(regions)
+        span(regions, &self.tempo_map())
     }
 
     fn tail_frames(&self, secs: f64) -> i64 {
@@ -240,7 +241,7 @@ impl Session {
         let (track, idx) = self.find_region(id).ok_or_else(|| anyhow!("no such region"))?;
         let mut t = self.project.track(track).unwrap().clone();
         let r = Region { muted: false, ..t.regions[idx].clone() };
-        let (from, to) = (r.start, r.end());
+        let (from, to) = crate::region_params::bounds(&r, &self.tempo_map());
         t.regions = vec![r];
         self.send(Cmd::Regions(track, self.regions_dsp(&t)));
         let iso = self.isolate_track(track, false, true);
@@ -281,7 +282,7 @@ impl Session {
             let Some(mut t) = self.project.track(source).cloned() else { continue };
             let range = match &only {
                 None => self.content_span(source),
-                Some(keep) => span(t.regions.iter().filter(|r| keep.contains(&r.id))),
+                Some(keep) => span(t.regions.iter().filter(|r| keep.contains(&r.id)), &self.tempo_map()),
             };
             let Some((from, to)) = range else { continue };
             if let Some(keep) = &only {
@@ -332,6 +333,7 @@ impl Session {
                 content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
                 loop_end: None,
                 takes: None,
+                params: Default::default(),
             };
             let t = self.project.track_mut(id).unwrap();
             t.name = name;
@@ -372,9 +374,9 @@ impl Session {
     }
 }
 
-fn span<'a>(regions: impl Iterator<Item = &'a Region>) -> Option<(i64, i64)> {
+fn span<'a>(regions: impl Iterator<Item = &'a Region>, map: &crate::tempo::TempoMap) -> Option<(i64, i64)> {
     regions.fold(None, |acc, r| {
-        let (s, e) = (r.start, r.end());
+        let (s, e) = crate::region_params::bounds(r, map);
         Some(acc.map_or((s, e), |(a, b): (i64, i64)| (a.min(s), b.max(e))))
     })
 }

@@ -6540,3 +6540,16 @@ canvas.pr-cursor-line {
 .lb-btn.detach-btn:hover {
   color: var(--text);
 }
+
+/* ---- Region playback parameters (Region inspector) ------------------------------------------
+   Rows tall enough for a number field, with the field and its unit on one line. */
+
+.insp-row.rp-row {
+  height: 26px;
+}
+
+.insp-row.rp-row .insp-value {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}

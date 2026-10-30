@@ -7,6 +7,7 @@ import { currentTick, getState, setState, useStore } from "../store";
 import { formatTime, inputLabel, toBbt } from "../time";
 import { ChannelStrip } from "./ChannelStrip";
 import { FadeRows } from "./FadeRows";
+import { RegionParamRows } from "./RegionParamRows";
 import { NumberField } from "./Form";
 import { useSelectedTrack } from "./TrackHeaders";
 import { isLooped } from "../loops";
@@ -66,6 +67,7 @@ export function Inspector() {
                 <input type="checkbox" checked={isLooped(region)} onChange={() => toggleLoop([region.id])} />
               </Row>
               <Row label="Type">{region.content.type === "audio" ? "Audio" : `MIDI · ${region.content.notes.length} notes`}</Row>
+              <RegionParamRows regions={regions} />
               {region.content.type === "audio" && (
                 <>
                   <Row label="Gain">
@@ -76,6 +78,8 @@ export function Inspector() {
                 </>
               )}
             </>
+          ) : regions.length > 1 ? (
+            <RegionParamRows regions={regions} />
           ) : (
             <div className="insp-empty">No region selected</div>
           )}

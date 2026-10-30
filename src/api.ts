@@ -60,6 +60,25 @@ export interface Region {
   loop_end?: number | null;
   /** Present on take folders (see TakeFolder). */
   takes?: TakeFolder | null;
+  /** Playback parameters (Region inspector); absent = the defaults. See regionParams.ts. */
+  params?: RegionParams;
+}
+
+/** A region's playback parameters, applied as it plays (crates/engine/src/region_params.rs). */
+export interface RegionParams {
+  /** Grid as a fraction of a whole note (16 = 1/16, 12 = 1/12, an eighth triplet); 0 = off. */
+  quantize: number;
+  /** Q-Swing, percent (50 = straight). */
+  swing: number;
+  transpose: number;
+  velocity: number;
+  /** Ratio × 100 (300 = 3:1, 100 = off, 50 = 0.5:1); 0 = Fixed. */
+  dynamics: number;
+  /** Percent (10–200, 100 = unchanged); 0 = Fixed, 201 = Legato. */
+  gate: number;
+  /** Ticks (960 to a quarter note), or milliseconds with delay_ms. */
+  delay: number;
+  delay_ms: boolean;
 }
 
 /** A take folder. Takes and the comp are in take time: a timeline position `p` in the folder
@@ -298,6 +317,8 @@ export interface Snapshot {
   crossfades?: Crossfade[];
   /** Instance ids of VST3 slots whose plug-in isn't installed (their settings are kept). */
   missing?: Id[];
+  /** The notes of MIDI regions with playback parameters, as they play (region-relative). */
+  played?: { region: Id; notes: Note[] }[];
 }
 
 /** session::StripLatency: frames. */

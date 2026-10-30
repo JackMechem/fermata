@@ -33,6 +33,7 @@ CHECKS=(
   "midi_check dir"
   "countin_check dir"
   "tempo_check dir"
+  "region_params_check tone dir"
 )
 # A check that hangs (a transport that never stops, say) fails instead of stalling CI.
 TIMEOUT=${HEADLESS_CHECK_TIMEOUT:-600}

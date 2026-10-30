@@ -267,7 +267,7 @@ solo changes resend every track (`push_all_params`).
 
 ### Regions
 
-`Region { id, name, start, length, muted, color, content, loop_end, takes }`. Times are in
+`Region { id, name, start, length, muted, color, content, loop_end, takes, params }`. Times are in
 samples at the project rate.
 
 - `content` is `Audio { clip, offset, gain_db, fade_in, fade_out }` or
@@ -280,6 +280,19 @@ samples at the project rate.
 - **Take folders**: `takes: Some(TakeFolder)` makes the region play a comp. See below.
 - Order matters: within a track, a region later in `regions` is *newer* and wins where audio
   overlaps. Moving a region pushes it to the end of the list.
+- **Playback parameters**: `params: RegionParams` (`region_params.rs`, session side in
+  `session/region_params.rs`) holds the Region inspector's Quantize, Q-Swing, Transpose,
+  Velocity, Dynamics, Gate Time and Delay; the defaults change nothing and aren't saved. They
+  are applied when `regions_dsp` builds the playback list, so the audio thread does nothing
+  new: a MIDI region with parameters becomes one `RegionDsp::Midi` per pass with transformed
+  notes and a window widened (`lead`, `tail`) to cover notes a negative delay or quantize moved
+  before its start and the end a positive delay moved later (`region_params::pass`); an audio
+  region's delay moves it (`bake`). Quantize and tick delays read the tempo map, so
+  `sync_globals` rebuilds the lists of tracks whose parameters follow it
+  (`push_tempo_regions`). `bake` writes the parameters into a region so it plays the same (Apply
+  Region Parameters, Join, MIDI file export), and `bounds` gives render ranges (Bounce in
+  Place, Export Region, Freeze, the project end). The snapshot's `played` list carries the
+  notes as they play for the Tracks area; the Piano Roll edits the stored notes.
 
 ### Take folders and comps
 
@@ -1104,9 +1117,11 @@ it like any plug-in.
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
 | `session/region_moves.rs` | Moving several regions as one edit. |
 | `session/tempo.rs` | Tempo and Signature track edits, Move MIDI Regions with Tempo. |
+| `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing. |
+| `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
 | `smf.rs` | Standard MIDI File reader and writer. |
 | `audio_io.rs` | Device enumeration and the duplex stream that drives the engine. |
 | `denormals.rs` | `NoDenormals`: flush-to-zero on the audio thread (x86_64 and aarch64). |

@@ -77,7 +77,8 @@ impl Session {
             if t.frozen.is_some() {
                 return Err(anyhow!("{} is already frozen", t.name));
             }
-            let span = t.regions.iter().filter(|r| !r.muted).fold(None, |acc: Option<(i64, i64)>, r| Some(acc.map_or((r.start, r.end()), |(a, b)| (a.min(r.start), b.max(r.end())))));
+            let map = self.tempo_map();
+            let span = t.regions.iter().filter(|r| !r.muted).map(|r| crate::region_params::bounds(r, &map)).fold(None, |acc: Option<(i64, i64)>, (s, e)| Some(acc.map_or((s, e), |(a, b)| (a.min(s), b.max(e)))));
             let Some((from, to)) = span else { return Err(anyhow!("{} has no regions to freeze", t.name)) };
             let name = t.name.clone();
             let iso = self.isolate_track(id, false, true);

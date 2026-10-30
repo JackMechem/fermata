@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fades::{DragMode, FadeShape};
 use crate::prefs::{BitDepth, ClickSettings};
+use crate::region_params::RegionParams;
 use crate::tempo::{SigEvent, TempoEvent};
 
 pub type Id = u64;
@@ -206,6 +207,10 @@ pub struct Region {
     /// comp instead of `content`'s clip. See [`TakeFolder`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub takes: Option<TakeFolder>,
+    /// Playback parameters (Logic's Region inspector: quantize, transpose, velocity, delay
+    /// and so on), applied as the region plays. See [`crate::region_params`].
+    #[serde(default, skip_serializing_if = "RegionParams::is_default")]
+    pub params: RegionParams,
 }
 
 /// A loop can't repeat its region more often than this.
@@ -985,6 +990,7 @@ mod tests {
             content: RegionContent::Audio { clip: 9, offset: 100, gain_db: 0.0, fade_in: 10, fade_out: 30, fade_shape: FadeShape::default() },
             loop_end,
             takes: None,
+            params: Default::default(),
         }
     }
 

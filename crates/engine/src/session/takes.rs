@@ -272,6 +272,7 @@ impl Session {
                     content: RegionContent::Audio { clip: t.clip, offset, gain_db: gain_db + t.gain_db, fade_in, fade_out, fade_shape },
                     loop_end: None,
                     takes: None,
+                    params: Default::default(),
                 });
             }
         }
@@ -333,6 +334,7 @@ impl Session {
                     content: RegionContent::Audio { clip: t.clip, offset: t.offset + a, gain_db: gain_db + t.gain_db, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
                     loop_end: None,
                     takes: None,
+                    params: Default::default(),
                 };
                 if let Some(d) = self.project.track_mut(dst) {
                     d.name = t.name.clone();
@@ -383,6 +385,7 @@ impl Session {
             content: RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: fade, fade_out: fade, fade_shape: FadeShape::default() },
             loop_end: None,
             takes: Some(folder),
+            params: Default::default(),
         };
         let t = self.project.track_mut(track).unwrap();
         let at = t.regions.iter().position(|r| ids.contains(&r.id)).unwrap_or(t.regions.len());

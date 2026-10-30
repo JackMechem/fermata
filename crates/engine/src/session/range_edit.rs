@@ -255,7 +255,7 @@ mod tests {
         let clip = s.add_clip(&path, Clip::from_channels(path.clone(), 48000, vec![ramp]));
         let id = s.project.alloc_id();
         let content = RegionContent::Audio { clip, offset: 0, gain_db: 0.0, fade_in: 1000, fade_out: 2000, fade_shape: Default::default() };
-        s.project.track_mut(t).unwrap().regions.push(Region { id, name: "Ramp".into(), start: 10_000, length: frames as i64, muted: false, color: None, content, loop_end: None, takes: None });
+        s.project.track_mut(t).unwrap().regions.push(Region { id, name: "Ramp".into(), start: 10_000, length: frames as i64, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default() });
         s.push_regions(t);
         (s, t, id)
     }

@@ -461,6 +461,7 @@ mod tests {
             content: RegionContent::Audio { clip: 0, offset: 0, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
             loop_end: None,
             takes: None,
+            params: Default::default(),
         };
         s.project.track_mut(t).unwrap().regions.push(audio(100, 0, 1000));
         s.place_take(t, audio(101, 400, 200)).unwrap();
@@ -501,6 +502,7 @@ mod tests {
             content: RegionContent::Midi { notes: vec![note(0)], cc: Vec::new() },
             loop_end: None,
             takes: None,
+            params: Default::default(),
         });
         assert!(s.merge_midi_take(t, 500, 1500, &[note(0), note(900)]));
         let r = &s.project.track(t).unwrap().regions[0];

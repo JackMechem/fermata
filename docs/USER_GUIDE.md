@@ -200,8 +200,10 @@ Track headers:
 
 ### Inspector
 
-The Inspector shows a **Region** section (mute, position, length, loop, and for audio regions
-gain and the fade rows described under [Fades and crossfades](#fades-and-crossfades)) and a
+The Inspector shows a **Region** section (mute, position, length, loop, the playback
+parameters described under [Region playback parameters](#region-playback-parameters), and for
+audio regions gain and the fade rows described under
+[Fades and crossfades](#fades-and-crossfades)) and a
 **Track** section (type, input, instrument, region or subtrack
 count, group), both collapsed by default, followed by the selected track's channel strip and
 the Stereo Out strip.
@@ -513,6 +515,34 @@ As in Logic, a looping region repeats its own content from its end up to its **l
 - **Gain:** region menu › Gain › +6, +3, +1, -1, -3, -6 dB, Reset to 0 dB, or Normalize (the
   loudest sample reaches 0 dBFS); or the Inspector's Gain field. Gain ranges from -96 to +30 dB.
 - **Reverse** writes a reversed copy of the audio to a new file, so the original stays intact.
+
+### Region playback parameters
+
+As in Logic's Region inspector, a region can play differently from what it holds, without
+changing its notes. With one or more regions selected, the Inspector's Region section shows:
+
+| Row | MIDI regions | Values |
+|---|---|---|
+| **Quantize** | Moves each note's start to the nearest grid point, counted from its bar line (note lengths stay). Follows tempo and signature changes. | Off, 1/1 to 1/64 Note, and the triplets 1/3 (half-note triplets) to 1/96 Note |
+| **Q-Swing** | Moves every second grid point while quantizing: above 50 % later, below earlier (66 % is close to a triplet feel). | 0–100 %, 50 % = straight |
+| **Transpose** | Semitones; notes stop at 0 and 127. | -96 to +96 |
+| **Velocity** | Added to every velocity; the result stays within 1–127. | -99 to +127 |
+| **Dynamics** | Compresses (3:1 … 1.25:1) or expands (0.8:1 … 0.33:1) velocities around 64, before the Velocity offset. Fixed plays every note at 64. | Fixed, 3:1 … 1:1 … 0.33:1 |
+| **Gate Time** | Scales note lengths. Fixed makes every note a 1/64 note; Legato lasts each note until the next one starts. | Fixed, 10–200 %, Legato |
+| **Delay** | Plays the region earlier (negative) or later, in ticks (960 to a quarter note, following the tempo) or ms; the menu beside the value switches the unit and converts it. Audio regions have this row too. | ±3840 ticks, ±2000 ms |
+
+- Set a value with several regions selected and it goes to every one of them (MIDI rows to
+  the MIDI regions). A row whose regions differ shows `*` (number fields show the first
+  region's value). Steps on one field in quick succession are one undo step.
+- The parameters apply wherever the region plays: playback, Bounce, Export, Bounce in Place,
+  Freeze, Join and Export as MIDI File. Notes a negative delay or quantize moves before the
+  region's start still play.
+- The Tracks area draws a MIDI region's notes as they play. The Piano Roll shows and edits
+  the notes as they are stored.
+- Region menu › **Apply Region Parameters** writes the parameters into the regions and resets
+  them, as one undo step: the notes move, change pitch, velocity and length; the region grows
+  to keep notes a delay moved past its edges (a looped region keeps its length, its notes are
+  kept inside it); an audio region moves by its delay. The region plays exactly as before.
 
 ### Colours, names and mute
 
@@ -888,6 +918,9 @@ The lane below the notes shows velocity or a controller. Drag the bar above it t
 - Stopping releases the sustain pedal and re-centres pitch bend.
 - Split, join and trim keep controllers consistent: the later part of a split starts with the
   values in effect at the cut.
+- A region's playback parameters (Quantize, Transpose and the rest; see
+  [Region playback parameters](#region-playback-parameters)) apply as it plays. The Piano Roll
+  shows the notes as stored; region menu › Apply Region Parameters writes them in.
 - The Piano Roll has no Step Input, Event List or Score yet, and controller points have no
   curve shapes.
 

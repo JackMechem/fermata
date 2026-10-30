@@ -13,6 +13,11 @@ All notable changes to Fermata are recorded here. The format follows
   format is remembered with the other bounce options.
 - **File › Export Selected Tracks as Audio Files…** (Ctrl+E): Export All Tracks for just the
   selected tracks.
+- **Region playback parameters** in the Inspector's Region section, as in Logic: Quantize
+  (straight and triplet values) with Q-Swing, Transpose, Velocity, Dynamics, Gate Time and
+  Delay (ticks or ms) for MIDI regions, and Delay for audio regions. They apply at playback
+  and in every render, the Tracks area draws notes as they play, and region menu › Apply
+  Region Parameters writes them into the regions.
 - **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
   and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
   Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps

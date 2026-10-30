@@ -15,6 +15,7 @@ import { tempoMap } from "./tempo";
 import { TRACK_COLORS } from "./view";
 import { isFolder, packTakeFolder, takeFolderMenu } from "./takes";
 import { followingRegion } from "./fades";
+import { isDefault, paramsOf } from "./regionParams";
 
 const project = () => getState().snap?.project;
 const tracks = (): Track[] => project()?.tracks ?? [];
@@ -360,6 +361,8 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
     { label: "Join", hint: fmt("Mod+J"), disabled: ids.length < 2, onClick: () => joinRegions(ids) },
     { label: "Loop", hint: keyHint("loop"), checked: looped.length === regs.length, onClick: () => toggleLoop(ids) },
     { label: "Convert Loops to Real Copies", disabled: !looped.length, onClick: () => convertLoops(ids) },
+    // Writes the Region inspector's playback parameters into the regions (Logic's Normalize).
+    { label: "Apply Region Parameters", disabled: regs.every((x) => isDefault(paramsOf(x))), onClick: () => act("apply_region_params", { ids }) },
     { label: muted ? "Unmute" : "Mute", hint: keyHint("mute-regions"), onClick: () => toggleRegionMute(ids) },
     { label: "Rename…", disabled: ids.length > 1, onClick: rename },
     { label: "Color", children: colorMenu(regs.length === 1 ? r.color : undefined, (c) => act("set_region_color", { ids, color: c }), "Track Color") },

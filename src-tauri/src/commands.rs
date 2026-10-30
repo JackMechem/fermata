@@ -7,7 +7,7 @@ use daw_engine::audio_io::{list_devices, AudioConfig, AudioStatus, DeviceList};
 use daw_engine::fades::{Crossfade, DragMode, FadeInType, FadeOutType};
 use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, InputSel, Project, Region, TrackKind, TrackSend};
 use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
-use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, RangeEdit, RenderOptions, TrackPatch};
+use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, PlayedNotes, RangeEdit, RegionParamsPatch, RenderOptions, TrackPatch};
 use daw_engine::vst3_host::{ParamInfo, PluginDescriptor};
 use daw_engine::tempo::{SigEvent, TempoEvent};
 use daw_engine::{plugin_db, transients, Session};
@@ -42,6 +42,8 @@ pub struct Snapshot {
     crossfades: Vec<Crossfade>,
     /// Instance ids of VST3 slots whose plug-in isn't installed (or didn't load).
     missing: Vec<Id>,
+    /// The notes of MIDI regions with playback parameters as they play, for drawing.
+    played: Vec<PlayedNotes>,
 }
 
 pub fn snapshot(s: &Session) -> Snapshot {
@@ -62,6 +64,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         warning: None,
         crossfades: s.crossfades(),
         missing: s.missing_plugins().iter().map(|p| p.uid).collect(),
+        played: s.played_notes(),
     }
 }
 
@@ -1391,4 +1394,19 @@ pub fn crossfade_regions(state: State<AppState>, ids: Vec<Id>, length: i64, kind
 #[tauri::command]
 pub fn set_drag_mode(state: State<AppState>, mode: DragMode) -> Snapshot {
     snap(&state, |s| s.set_drag_mode(mode))
+}
+
+/// Sets region playback parameters (Region inspector) on every region in `ids`. Steps on one
+/// value of the same regions share an undo step.
+#[tauri::command]
+pub fn set_region_params(state: State<AppState>, ids: Vec<Id>, patch: RegionParamsPatch) -> Snapshot {
+    let stepped = patch.swing.is_some() || patch.transpose.is_some() || patch.velocity.is_some() || patch.delay.is_some();
+    let key = stepped.then(|| format!("region-params:{}:{ids:?}", patch.label()));
+    edit(&state, patch.label(), key, false, |s| s.set_region_params(&ids, &patch))
+}
+
+/// Apply Region Parameters: writes the playback parameters into the regions and resets them.
+#[tauri::command]
+pub fn apply_region_params(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
+    edit(&state, "Apply Region Parameters", None, false, |s| s.apply_region_params(&ids))
 }

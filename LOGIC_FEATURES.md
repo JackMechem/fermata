@@ -445,13 +445,13 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Region parameters (p. 363–371)
 
-- [~] Region inspector (p. 363). *Mute, position, length, loop, gain and fades; no playback parameters.*
-- [ ] Non-destructive MIDI quantize in the inspector, with Q-Swing (p. 366, 369)
+- [~] Region inspector (p. 363). *Mute, position, length, loop, playback parameters, gain and fades; no default region settings.*
+- [x] Non-destructive MIDI quantize in the inspector, with Q-Swing (p. 366, 369). *Straight and triplet values; no swing presets (8F Swing A–F).*
 - [ ] Advanced quantize: Q-Strength, Q-Range, Q-Flam, Q-Velocity, Q-Length (p. 371)
-- [ ] MIDI region transpose, velocity, dynamics and gate time (p. 366)
-- [ ] Region delay in ticks or ms (p. 364, 366)
+- [x] MIDI region transpose, velocity, dynamics and gate time (p. 366)
+- [x] Region delay in ticks or ms (p. 364, 366). *For audio regions too.*
 - [ ] Audio region transpose and fine tune (p. 364)
-- [ ] Apply region parameters permanently (p. 369)
+- [x] Apply region parameters permanently (p. 369). *One command, Apply Region Parameters, for all of them.*
 - [ ] Dequantize (key commands)
 - [ ] Default region settings (p. 363)
 
@@ -1107,6 +1107,6 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 8. **Track alternatives and project alternatives/backups**, so engineers can try ideas safely.
 9. **Region playback parameters** (non-destructive quantize, transpose, velocity, delay) and
    **MIDI controller learn / controller assignments**, which also lays the groundwork for
-   control surfaces.
+   control surfaces. *Region playback parameters are done.*
 10. **More bounce formats** (FLAC, MP3/AAC, AIFF), **export of selected tracks**, and **VCA
     faders**, to finish the mixing and delivery path.

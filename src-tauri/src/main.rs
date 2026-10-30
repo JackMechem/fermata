@@ -292,6 +292,8 @@ fn main() {
             windows::close_panel_window,
             windows::focus_panel_window,
             windows::broadcast_snapshot,
+            commands::set_region_params,
+            commands::apply_region_params,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

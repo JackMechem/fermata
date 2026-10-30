@@ -21,6 +21,7 @@ import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
 import { toggleOverview } from "./Overview";
 import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
+import { playedNotes } from "../regionParams";
 
 // ---- peaks ----------------------------------------------------------------------------------
 
@@ -147,7 +148,8 @@ export function drawRegion(
     const [fi, fo] = fades ?? [r.content.fade_in, r.content.fade_out];
     drawFades(ctx, r, x - shift * pps, x, w, bodyTop, bodyH, fi, fo, pps, content, handles, ghost ? undefined : regionCrossfades(r.id));
   } else if (showBody && r.content.type === "midi") {
-    const notes = r.content.notes;
+    // As they play: with the region's playback parameters (quantize, transpose, ...) applied.
+    const notes = playedNotes(getState().snap?.played, r.id) ?? r.content.notes;
     if (notes.length) {
       let lo = 127;
       let hi = 0;

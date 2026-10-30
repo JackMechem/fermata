@@ -179,6 +179,7 @@ folder is kept when anything failed.
 | `countin_check` | scratch dir | Recording with a count-in from bar 1, where the transport runs at negative positions, three times without an engine error. |
 | `tempo_check` | scratch dir | The tempo map and signature changes: the click across changes, plug-in transport positions, bar numbering, Move MIDI Regions with Tempo, quantize, a MIDI file round trip, undo, and that a project without changes keeps the old timing exactly. |
 | `midi_check` | scratch dir | Piano Roll edits, muted notes, controller playback and chasing, split/join/trim with controllers, MIDI file export and import. |
+| `region_params_check` | audio file, scratch dir | Region playback parameters in offline renders of the built-in synth and the tone: quantize, transpose, velocity, dynamics and gate play exactly the notes worked out by hand; delays in ms and ticks (across a tempo change, and before a region's start); quantize after a tempo change; an audio region's delay; Apply Region Parameters plays the same and undoes in one step; coalesced undo; saving. |
 | `undo_check` | audio file | Undo and redo through a sequence of edits. |
 | `import_check` | project dir, files... | Imports files onto new tracks and reports what was created. |
 | `test_tone` | output `.wav` path | Not a check: writes the test tone the checks play (3 s of 440 Hz at -21.5 dBFS, stereo, 32-bit float, 48 kHz). |
@@ -270,7 +271,7 @@ These keep the code maintainable and the merges clean.
 - **Model compatibility.** Every new field in `model.rs` or `prefs.rs` gets `#[serde(default)]`
   (or a struct-level `#[serde(default)]`), and optional fields usually also
   `skip_serializing_if = "Option::is_none"`, so older projects and settings files still load.
-- **Struct literals.** Every `Region { .. }` literal needs `loop_end` and `takes`, and every
+- **Struct literals.** Every `Region { .. }` literal needs `loop_end`, `takes` and `params`, and every
   `Note` literal needs `muted`. Tests and examples build these by hand.
 - **Undo.** Every user edit goes through a checkpointed command (`edit`, `try_edit`,
   `edit_made`). Performance switches (mute, solo, arm, monitor) and transport are not undoable.

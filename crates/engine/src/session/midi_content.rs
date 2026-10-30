@@ -161,7 +161,7 @@ impl Session {
                 .collect();
             let cc = part.cc.iter().map(|c| CcEvent { start: to_samples(c.start) - rstart, kind: c.kind, value: c.value }).collect();
             let rid = self.project.alloc_id();
-            self.project.track_mut(tid).unwrap().regions.push(Region { id: rid, name, start: rstart, length, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None });
+            self.project.track_mut(tid).unwrap().regions.push(Region { id: rid, name, start: rstart, length, muted: false, color: None, content: RegionContent::Midi { notes, cc }, loop_end: None, takes: None, params: Default::default() });
             self.push_regions(tid);
             made.push(rid);
         }
@@ -183,7 +183,8 @@ impl Session {
         for t in &self.project.tracks {
             let mut part = SmfTrack { name: t.name.clone(), ..Default::default() };
             // A looped region exports every pass, as it plays.
-            for r in t.regions.iter().filter(|r| ids.contains(&r.id)).flat_map(|r| r.real_copies()) {
+            // Playback parameters are applied, so the file holds what plays.
+            for r in t.regions.iter().filter(|r| ids.contains(&r.id)).flat_map(|r| crate::region_params::bake(r, &map).real_copies()) {
                 let RegionContent::Midi { notes, cc } = &r.content else { continue };
                 for n in notes.iter().filter(|n| !n.muted && n.start >= 0 && n.start < r.length) {
                     let on = ticks(r.start + n.start);

@@ -17,6 +17,7 @@ pub mod plugin_db;
 pub mod prefs;
 pub mod presets;
 pub mod recorder;
+pub mod region_params;
 pub mod session;
 pub mod smf;
 pub mod synth;

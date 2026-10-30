@@ -336,6 +336,7 @@ mod tests {
             content: RegionContent::Audio { clip: 10, offset, gain_db: 0.0, fade_in: 0, fade_out: 0, fade_shape: Default::default() },
             loop_end: None,
             takes: Some(f),
+            params: Default::default(),
         }
     }
 
