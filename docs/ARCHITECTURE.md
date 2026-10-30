@@ -536,6 +536,11 @@ Details of each stage:
   lanes, run the plain edit and then rearrange or shorten regions. Internal edits (range
   edits, Bounce in Place, Repeat, Move to New Track) call the plain ones and are left alone.
   `src/dragModes.ts` mirrors the rules so the Tracks area can draw a drag's outcome.
+- **Dragging regions past the last track** (`src/newTrackDrag.ts` decides which source lanes get
+  a new track, `session/new_track_drag.rs` applies it): `move_regions_to_new_tracks` and
+  `copy_regions_to_new_tracks` make the tracks as Move to New Track does (`duplicate_tracks`
+  without content), put them last and outside any stack, then run `drag_move_regions` or
+  `drag_paste_regions` once with everything, so the drag modes apply and it's one undo step.
 - **Move Automation with Regions** (`prefs.editing.move_automation`) is applied by the same
   move and nudge calls: `auto_move.rs` carries each moved region's stretch of every lane on
   its track to the new place, bridging the old one, and the track's lanes are resent with

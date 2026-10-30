@@ -6,8 +6,18 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Dragging regions below the last track** creates a new track, as in Logic: the region is
+  drawn on a new lane there while you drag, and the drop makes a track with the source track's
+  settings (audio or software instrument, as the region). A selection spanning tracks gets one
+  new track per source lane past the end. Alt-drag copies do the same, and one undo removes it
+  all.
+
 ### Fixed
 
+- Dragging a region onto a frozen track lost it, and dragging one off a frozen track doubled
+  it. Both now leave the region where it was, with the existing "is frozen" message.
 - On Linux, one audio block taking longer than the buffer's length ended the app with SIGXCPU.
   Opening a heavy plug-in's editor could do it. It's now a dropout at worst.
 

@@ -1945,3 +1945,24 @@ pub fn color_regions_by_track(state: State<AppState>, ids: Vec<Id>) -> Snapshot 
 pub fn color_tracks_by_region(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
     edit(&state, "Color Tracks by Region", None, false, |s| s.color_tracks_by_region(&ids))
 }
+
+/// The undo label of a drag past the last track: `verb` is "Move" or "Copy".
+fn new_track_label(verb: &str, regions: usize, tracks: usize) -> String {
+    format!("{verb} {} to New {}", plural(regions, "Region", "Regions"), plural(tracks, "Track", "Tracks"))
+}
+
+/// A drag past the last track: `lanes` are (source track, moves) for the regions that go onto
+/// a new track each, `moves` the regions landing on existing tracks. One undo step.
+#[tauri::command]
+pub fn move_regions_to_new_tracks(state: State<AppState>, moves: Vec<daw_engine::session::RegionMove>, lanes: Vec<(Id, Vec<daw_engine::session::RegionMove>)>, automation: Option<bool>) -> R<Made> {
+    let regions = moves.len() + lanes.iter().map(|l| l.1.len()).sum::<usize>();
+    edit_made(&state, &new_track_label("Move", regions, lanes.len()), false, |s| Ok(s.drag_regions_to_new_tracks(&moves, &lanes, automation)))
+}
+
+/// An Alt-drag past the last track: as `move_regions_to_new_tracks`, with copies in place of
+/// moves. Returns the copies.
+#[tauri::command]
+pub fn copy_regions_to_new_tracks(state: State<AppState>, items: Vec<(Id, Region)>, lanes: Vec<(Id, Vec<Region>)>) -> R<Made> {
+    let regions = items.len() + lanes.iter().map(|l| l.1.len()).sum::<usize>();
+    edit_made(&state, &new_track_label("Copy", regions, lanes.len()), false, |s| Ok(s.drag_copy_regions_to_new_tracks(&items, &lanes)))
+}

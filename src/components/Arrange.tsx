@@ -27,6 +27,7 @@ import { drawPatternMini } from "../stepSeq";
 import { dragOutcome, type Outcome } from "../dragModes";
 import { moveAutomationAnswer } from "../moveAutomation";
 import { movedStart, placedAt } from "../musicalMove";
+import { lanesPast, newLaneId, newLanes, sourceTracks, splitDrop } from "../newTrackDrag";
 import { gainScale } from "../regionGain";
 import { drawGainHandle, gainDragging, onGainHandle, startGainDrag, withLiveGain } from "../regionGainDrag";
 import { activeTool, drawToolOverlay, escapeMarquee, notePointer, pressOnMarquee, toolHover, toolLeave, toolMouseDown, type ToolView } from "../trackTools";
@@ -66,6 +67,12 @@ interface Drag {
 function dragTarget(layout: Layout, i: number, dTrack: number, tracks: Track[]): number {
   const ti = stepVisible(layout, i, dTrack);
   return tracks[ti]?.kind === tracks[i].kind ? ti : i;
+}
+
+/** The new lanes a move in progress makes, by the index of the track each comes from. */
+function dragNewLanes(layout: Layout, d: Drag | null, tracks: Track[]): Map<number, number> {
+  if (d?.kind !== "move") return new Map();
+  return newLanes(layout.heights, sourceTracks(tracks, d.ids), d.dTrack);
 }
 
 function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
@@ -192,6 +199,30 @@ export function drawRegion(
     ctx.lineWidth = style === "glass" ? 1 : 1.5;
     ctx.stroke();
   }
+}
+
+/** A lane a drag past the last track will create: the look of a file drag's new-track ghost
+ *  (see the drop target in `draw`), named at its left edge. */
+function drawNewLane(ctx: CanvasRenderingContext2D, y: number, h: number, W: number, accent: string, ink: string) {
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = 0.12;
+  ctx.fillRect(0, y, W, h);
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(1, y + 1, W - 2, h - 2);
+  ctx.setLineDash([]);
+  const label = "New track";
+  ctx.font = "600 11px Inter, system-ui, sans-serif";
+  const tagH = Math.min(18, h - 4);
+  const tagY = y + Math.min(4, (h - tagH) / 2);
+  ctx.beginPath();
+  ctx.roundRect(4, tagY, ctx.measureText(label).width + 12, tagH, 4);
+  ctx.fill();
+  ctx.fillStyle = ink;
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, 10, tagY + tagH / 2 + 0.5);
 }
 
 /** A looping region's repetitions after its body (`x` is the timeline origin in pixels): the
@@ -383,6 +414,12 @@ export function Arrange() {
     ctx.fillStyle = theme.arrangeBg;
     ctx.fillRect(0, 0, W, H);
 
+    // Lanes a drag past the last track will create, below it.
+    const drag = dragRef.current;
+    const newLaneOf = dragNewLanes(layout, drag, project.tracks);
+    const newLaneH = getState().trackHeight;
+    const newLanesBottom = layout.total + newLaneOf.size * newLaneH;
+    const newLaneTop = (lane: number) => layout.total + lane * newLaneH - vp.top;
     // Lanes (hidden tracks, shown in hide mode, are dimmed)
     const multi = getState().selectedTracks;
     project.tracks.forEach((t, i) => {
@@ -399,9 +436,13 @@ export function Arrange() {
       ctx.fillStyle = theme.lane;
       ctx.fillRect(0, layout.output.top - vp.top, W, layout.output.height + layout.output.autoRows - 1);
     }
+    for (let k = 0; k < newLaneOf.size; k++) {
+      ctx.fillStyle = theme.lane;
+      ctx.fillRect(0, newLaneTop(k), W, newLaneH - 1);
+    }
 
     // Grid, through the tempo map: bar lines, and beats when they are far enough apart.
-    const gridBottom = Math.min(H, layout.total - vp.top);
+    const gridBottom = Math.min(H, newLanesBottom - vp.top);
     forEachGridLine(tempoMap(project), Math.max(0, vp.left / pps), (vp.left + W) / pps, pps, { beatsMinPx: 9 }, (pos, kind) => {
       ctx.fillStyle = kind === "bar" ? theme.barLine : theme.beatLine;
       ctx.fillRect(kind === "bar" ? Math.round(pos * pps - vp.left) + 0.5 : Math.round(pos * pps - vp.left + 0.5), 0, 1, gridBottom);
@@ -443,8 +484,13 @@ export function Arrange() {
       ctx.restore();
     });
 
+    // The new lanes' ghosts, as a file dragged below the last track draws its own.
+    if (newLaneOf.size) {
+      const css = getComputedStyle(document.documentElement);
+      for (let k = 0; k < newLaneOf.size; k++) drawNewLane(ctx, newLaneTop(k), newLaneH, W, css.getPropertyValue("--accent").trim() || "#4c9eff", css.getPropertyValue("--accent-ink").trim() || "#fff");
+    }
+
     // Regions
-    const drag = dragRef.current;
     const spbSnap = (v: number) => snapPos(project, v, getState().snapMode, getState().pxPerBeat);
     // In the No Overlap and Shuffle drag modes, where the drag will leave every region.
     let outcome: Map<Id, Outcome> | null = null;
@@ -454,6 +500,8 @@ export function Arrange() {
       let length = r.length;
       let loop = r.loop_end;
       let ti = i;
+      // Past the last track: the new lane it lands on.
+      let lane: number | undefined;
       let shift = 0;
       let fades: [number, number] | undefined;
       if (drag && !still && drag.ids.includes(r.id)) {
@@ -461,7 +509,8 @@ export function Arrange() {
           const from = getGrabbedStart();
           start = movedStart(tempoMap(project), r.start, from, Math.max(0, spbSnap(from + drag.dx)), getState().snapMode !== "off");
           if (loop != null) loop += start - r.start;
-          ti = dragTarget(layout, i, drag.dTrack, project.tracks);
+          lane = newLaneOf.get(i);
+          if (lane === undefined) ti = dragTarget(layout, i, drag.dTrack, project.tracks);
         } else if (r.id === drag.grabbed && drag.fade !== undefined && r.content.type === "audio") {
           fades = drag.kind === "fadeIn" ? [drag.fade, r.content.fade_out] : [r.content.fade_in, drag.fade];
         } else if (r.id === drag.grabbed && drag.loopEnd !== undefined) {
@@ -484,14 +533,15 @@ export function Arrange() {
       } else if (o?.len !== undefined) loop = start + o.len;
       // A looping region's fade-out is drawn where the loop ends.
       if (r.content.type === "audio" && loopEnd(start, length, loop) > start + length) fades = [fades?.[0] ?? r.content.fade_in, 0];
-      const y = layout.tops[ti] - vp.top + 1;
+      const y = (lane !== undefined ? newLaneTop(lane) : layout.tops[ti] - vp.top) + 1;
       // Open take folders' rows sit below the lane; regions keep the lane's own height.
-      const th = layout.heights[ti] - layout.takeRows[ti];
-      return { start, length, loop, ti, shift, fades, y, th, hidden: project.tracks[ti].hidden, gone };
+      const th = lane !== undefined ? newLaneH : layout.heights[ti] - layout.takeRows[ti];
+      return { start, length, loop, ti, lane, shift, fades, y, th, hidden: lane === undefined && project.tracks[ti].hidden, gone };
     };
     const mode = project.drag_mode ?? "overlap";
     if (drag && !drag.copy && mode !== "overlap" && mode !== "xfade") {
       const lanes = new Map(project.tracks.map((t) => [t.id, t.regions.map((r) => ({ id: r.id, start: r.start, len: regionEnd(r) - r.start }))]));
+      for (const lane of newLaneOf.values()) lanes.set(newLaneId(lane), []);
       const grabbed = project.tracks.flatMap((t) => t.regions).find((r) => r.id === drag.grabbed);
       if (drag.kind === "move") {
         const moved = project.tracks.flatMap((t, i) =>
@@ -499,7 +549,7 @@ export function Arrange() {
             .filter((r) => drag.ids.includes(r.id))
             .map((r) => {
               const g = place(r, i);
-              return { id: r.id, track: project.tracks[g.ti].id, start: g.start };
+              return { id: r.id, track: g.lane !== undefined ? newLaneId(g.lane) : project.tracks[g.ti].id, start: g.start };
             }),
         );
         outcome = dragOutcome(mode, lanes, { kind: "move", moved });
@@ -924,6 +974,7 @@ export function Arrange() {
     const startX = e.clientX;
     const startY = e.clientY;
     const startContentY = h.y;
+    const startScrollTop = scrollRef.current!.scrollTop;
     const startIndex = h.ti;
     let moved = false;
     dragRef.current = { kind, ids: kind === "move" ? sel : [r.id], dx: 0, dTrack: 0, grabbed: r.id };
@@ -945,7 +996,10 @@ export function Arrange() {
       moved = true;
       const d = dragRef.current!;
       d.dx = dxPx / pps;
-      d.dTrack = visibleSteps(live.current.layout, startIndex, indexAt(live.current.layout, startContentY + dyPx));
+      // Scrolling with the wheel mid-drag counts, so a long project's empty area can be reached.
+      const y = startContentY + dyPx + scrollRef.current!.scrollTop - startScrollTop;
+      const past = kind === "move" ? lanesPast(y, live.current.layout.total, getState().trackHeight) : 0;
+      d.dTrack = visibleSteps(live.current.layout, startIndex, indexAt(live.current.layout, y)) + past;
       d.copy = kind === "move" && ev.altKey;
       if (kind === "fadeIn" || kind === "fadeOut") {
         const other = r.content.type === "audio" ? (kind === "fadeIn" ? r.content.fade_out : r.content.fade_in) : 0;
@@ -989,15 +1043,23 @@ export function Arrange() {
           if (ti < 0) return [];
           const reg = tracks[ti].regions.find((x) => x.id === id)!;
           const target = tracks[dragTarget(layout, ti, d.dTrack, tracks)];
-          return [{ reg, id, start: movedStart(tempoMap(project), reg.start, r.start, newStart, musical), track: target.id }];
+          return [{ reg, id, source: ti, start: movedStart(tempoMap(project), reg.start, r.start, newStart, musical), track: target.id }];
         });
+        // Past the last track: new tracks for the lanes that fell off the end, in the one edit.
+        const { onTracks, onNew } = splitDrop(moves, dragNewLanes(layout, d, tracks));
         if (d.copy) {
           // Option-drag: copies at the drop position in one undo step; the copies get selected.
-          const items = moves.map((m) => [m.track, placedAt(m.reg, m.start)]);
-          actMade("paste_regions", { items, offset: 0, label: "Copy Regions" }).then((made) => made && setState({ selectedRegions: made }));
+          const items = onTracks.map((m) => [m.track, placedAt(m.reg, m.start)]);
+          const lanes = onNew.map((l) => [tracks[l.source].id, l.moves.map((m) => placedAt(m.reg, m.start))]);
+          (lanes.length ? actMade("copy_regions_to_new_tracks", { items, lanes }) : actMade("paste_regions", { items, offset: 0, label: "Copy Regions" })).then((made) => made && setState({ selectedRegions: made }));
         } else {
-          const plain = moves.map(({ id, start, track }) => ({ id, start, track }));
-          moveAutomationAnswer(project, plain).then((automation) => act("move_regions", { moves: plain, automation }));
+          const plain = onTracks.map(({ id, start, track }) => ({ id, start, track }));
+          const lanes = onNew.map((l) => [tracks[l.source].id, l.moves.map(({ id, start }) => ({ id, start }))]);
+          // Regions going onto a new track leave their automation behind, so only the others ask.
+          moveAutomationAnswer(project, plain).then((automation) => {
+            if (lanes.length) actMade("move_regions_to_new_tracks", { moves: plain, lanes, automation });
+            else act("move_regions", { moves: plain, automation });
+          });
         }
       } else if (d.loopEnd !== undefined) {
         const end = Math.round(d.loopEnd);

@@ -259,6 +259,7 @@ instead and enforce rules that would otherwise only fail in the running app.
 | `regionGain.test.ts` | The region gain handle's geometry and arithmetic. |
 | `fades.test.ts` | Fade curves and crossfades for drawing, mirroring `fades.rs`. |
 | `dragModes.test.ts` | The drag preview's copy of `drag_modes.rs`, with the Rust module's cases. |
+| `newTrackDrag.test.ts` | Which source lanes a drag past the last track makes new tracks for (`src/newTrackDrag.ts`). |
 | `comps.test.ts` | Take folder comp names and the folder's name bar label. |
 | `arrangement.test.ts` | The Arrangement track's drawing and drag helpers. |
 | `tools.test.ts` | The Tracks area's tools (`src/tools.ts`) and the marquee (`src/marquee.ts`). |

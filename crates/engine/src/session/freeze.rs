@@ -250,6 +250,20 @@ impl Session {
         }
         let Some(name) = hit.first().map(|h| h.1.clone()) else { return Ok(()) };
         let mut target = self.project.clone();
+        // A region moved across is now on no track or two once the frozen track is put back, so
+        // it goes back to where it was as well.
+        let mut moved_in: Vec<Id> = Vec::new();
+        let mut moved_off: Vec<Id> = Vec::new();
+        for (b, _) in &hit {
+            let now = self.project.track(b.id).map_or(&[][..], |t| &t.regions[..]);
+            moved_in.extend(now.iter().filter(|r| !b.regions.iter().any(|o| o.id == r.id)).map(|r| r.id));
+            moved_off.extend(b.regions.iter().filter(|r| !now.iter().any(|o| o.id == r.id)).map(|r| r.id));
+        }
+        for t in target.tracks.iter_mut().filter(|t| !hit.iter().any(|(b, _)| b.id == t.id)) {
+            t.regions.retain(|r| !moved_off.contains(&r.id));
+            let back = before.track(t.id).map_or(&[][..], |b| &b.regions[..]);
+            t.regions.extend(back.iter().filter(|r| moved_in.contains(&r.id)).cloned());
+        }
         for (b, _) in hit {
             if let Some(t) = target.track_mut(b.id) {
                 t.regions = b.regions;
@@ -264,5 +278,48 @@ impl Session {
             self.undo_stack.pop();
         }
         Err(anyhow!("{name} is frozen. Unfreeze it to edit its regions and plug-ins."))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::audio_io::AudioConfig;
+    use crate::session::RegionMove;
+
+    fn session_with_two_tracks() -> (Session, Id, Id, Id) {
+        let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
+        let mut s = Session::new(cfg, Vec::new());
+        let a = s.add_track(TrackKind::Instrument, InputSel::Mono(0), None, None).unwrap();
+        let b = s.add_track(TrackKind::Instrument, InputSel::Mono(0), None, None).unwrap();
+        let id = s.project.alloc_id();
+        let content = RegionContent::Midi { notes: Vec::new(), cc: Vec::new() };
+        s.project.track_mut(a).unwrap().regions.push(Region { id, name: "M".into(), start: 0, length: 1000, muted: false, color: None, content, loop_end: None, takes: None, params: Default::default(), pattern: None });
+        (s, a, b, id)
+    }
+
+    fn place(s: &Session, id: Id) -> Vec<Id> {
+        s.project.tracks.iter().filter(|t| t.regions.iter().any(|r| r.id == id)).map(|t| t.id).collect()
+    }
+
+    #[test]
+    fn a_region_moved_onto_a_frozen_track_stays_where_it_was() {
+        let (mut s, a, b, id) = session_with_two_tracks();
+        s.project.track_mut(b).unwrap().frozen = Some(FreezeInfo { clip: 0, start: 0 });
+        s.checkpoint("Move Region", None, false);
+        s.move_regions(&[RegionMove { id, start: 0, track: Some(b) }]);
+        assert!(s.frozen_guard().is_err());
+        assert_eq!(place(&s, id), vec![a]);
+        assert!(s.undo_stack.is_empty(), "nothing changed, so no undo step");
+    }
+
+    #[test]
+    fn a_region_moved_off_a_frozen_track_isnt_doubled() {
+        let (mut s, a, b, id) = session_with_two_tracks();
+        s.project.track_mut(a).unwrap().frozen = Some(FreezeInfo { clip: 0, start: 0 });
+        s.checkpoint("Move Region", None, false);
+        s.move_regions(&[RegionMove { id, start: 0, track: Some(b) }]);
+        assert!(s.frozen_guard().is_err());
+        assert_eq!(place(&s, id), vec![a]);
     }
 }

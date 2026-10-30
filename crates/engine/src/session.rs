@@ -44,6 +44,7 @@ mod markers;
 mod takes;
 mod region_moves;
 pub use region_moves::RegionMove;
+mod new_track_drag;
 mod tempo;
 mod builtin;
 pub use builtin::{builtin_effects, BuiltinInfo, FxTick};
@@ -2082,18 +2083,22 @@ impl Session {
         made
     }
 
+    /// Whether `r` can go on `track`: its kind, and for audio a clip that's loaded.
+    fn region_fits(&self, track: Id, r: &Region) -> bool {
+        match (self.project.track(track).map(|t| t.kind), &r.content) {
+            (Some(TrackKind::Audio), RegionContent::Audio { clip, .. }) => self.clips.contains_key(clip),
+            (Some(TrackKind::Instrument), RegionContent::Midi { .. }) => true,
+            _ => false,
+        }
+    }
+
     /// Places copies of `regions` (each with the track it goes on), shifted by `offset`.
     /// Regions that don't fit their track's kind are skipped. Returns the new ids.
     pub fn paste_regions(&mut self, items: &[(Id, Region)], offset: i64) -> Vec<Id> {
         let mut made = Vec::new();
         let mut touched = Vec::new();
         for (track, r) in items {
-            let fits = match (self.project.track(*track).map(|t| t.kind), &r.content) {
-                (Some(TrackKind::Audio), RegionContent::Audio { clip, .. }) => self.clips.contains_key(clip),
-                (Some(TrackKind::Instrument), RegionContent::Midi { .. }) => true,
-                _ => false,
-            };
-            if !fits {
+            if !self.region_fits(*track, r) {
                 continue;
             }
             let id = self.project.alloc_id();

@@ -589,6 +589,12 @@ The pointer changes over a region's hot zones:
   to the grid where it lands, and the others in the selection keep their distance from it in
   bars and beats, so a region dragged from a 120 BPM section into a 90 BPM one still lands on
   its beat. Alt-drag copies do the same. With Snap off, the others keep their distance in time.
+- **Drag below the last track** to make a new track: a dashed lane appears under the last track
+  with the region on it, and on release a new track of the same kind (audio or software
+  instrument) holds the region, with the source track's settings, as Move to New Track, but below
+  every track and outside any stack. Each source lane of a selection that falls past the end gets
+  its own track; regions still landing on tracks move as usual. Alt-drag copies do the same. It's
+  one undo step, and the automation stays on the source track.
 - A moved region comes to the front, so it plays over whatever it now overlaps.
 - The **Drag mode** decides what happens to the regions an edit overlaps or leaves a gap
   between; see [Drag modes](#drag-modes).
