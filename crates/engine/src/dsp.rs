@@ -286,6 +286,8 @@ pub struct TrackDsp {
     fold_idx: Option<usize>,
     /// For folder stacks: what they do to their subtracks this block.
     fold: FoldState,
+    /// Where the output and each send read the delay line, gliding when a delay changes.
+    pdc_taps: pdc::PdcTaps,
 }
 
 impl TrackDsp {
@@ -328,6 +330,7 @@ impl TrackDsp {
             pre_key_r: vec![0.0; MAX_BLOCK],
             fold_idx: None,
             fold: FoldState::default(),
+            pdc_taps: pdc::PdcTaps::default(),
         }
     }
 
@@ -1174,7 +1177,13 @@ impl Engine {
                     Some(t) => {
                         t.pdc = params;
                         match line {
-                            Some(l) => t.delay.replace(l),
+                            Some(mut l) => {
+                                // The taps glide from where they read now: keep that audio.
+                                if let Some(old) = &t.delay {
+                                    l.take_history(old);
+                                }
+                                t.delay.replace(l)
+                            }
                             None => None,
                         }
                     }
@@ -1645,13 +1654,13 @@ impl Engine {
                 }
             }
             // The delay line keeps the post-plug-in signal; the output and the sends read it
-            // at their own delays.
-            let delayed = !live && pdc.max_delay() > 0 && t.delay.is_some();
-            if delayed {
-                if let Some(d) = &mut t.delay {
-                    d.write(l, r);
-                }
+            // at their own delays (none while live), gliding to a new delay (see `pdc.rs`).
+            // It's written even while nothing reads it, so a glide always finds real audio.
+            if let Some(d) = &mut t.delay {
+                d.write(l, r);
             }
+            let tap_delay = |d: u32| if live { 0 } else { d };
+            let pdc_fade = (pdc::FADE_SECS * sr) as u32;
 
             let audible = match role {
                 Some(Role::Member { heard }) => heard,
@@ -1668,10 +1677,12 @@ impl Engine {
                     (Some(s), Some(j)) if j > ti && iso.map(|i| i.feeds(role, tail[j - ti - 1].id)).unwrap_or(true) => {
                         if s.pre_fader {
                             let target = if audible { s.gain } else { 0.0 };
+                            let tap = &mut t.pdc_taps.sends[k];
+                            tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
                             match &t.delay {
-                                Some(d) if delayed && pdc.sends[k] > 0 => {
+                                Some(d) if !tap.is_direct() => {
                                     let (sl, sr) = (&mut self.tap_l[..n], &mut self.tap_r[..n]);
-                                    d.read(pdc.sends[k] as usize, sl, sr);
+                                    d.read_tap(tap, sl, sr);
                                     mix_send(&mut tail[j - ti - 1], sl, sr, &mut t.send_gains[k], target, smooth);
                                 }
                                 _ => mix_send(&mut tail[j - ti - 1], l, r, &mut t.send_gains[k], target, smooth),
@@ -1710,8 +1721,11 @@ impl Engine {
                     t.pre_key_r[i] = r[i] * g;
                 }
             }
-            if let (true, Some(d)) = (delayed && pdc.output > 0, &t.delay) {
-                d.read(pdc.output as usize, l, r);
+            t.pdc_taps.output.aim(tap_delay(pdc.output), pdc_fade);
+            // Post-fader sends that read where the output reads share its result.
+            let out_tap = t.pdc_taps.output;
+            if let (false, Some(d)) = (out_tap.is_direct(), &t.delay) {
+                d.read_tap(&mut t.pdc_taps.output, l, r);
             }
             let (dl, dr) = match t.out_idx {
                 // An isolated render captures the tap track, and anything feeding a stack
@@ -1750,17 +1764,22 @@ impl Engine {
             for k in 0..SEND_SLOTS {
                 if let (Some(s), Some(j)) = (p.sends[k], t.send_idx[k]) {
                     if !s.pre_fader && j > ti && iso.map(|i| i.feeds(role, tail[j - ti - 1].id)).unwrap_or(true) {
+                        let tap = &mut t.pdc_taps.sends[k];
+                        tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
                         match &t.delay {
-                            Some(d) if delayed && pdc.sends[k] != pdc.output => {
+                            Some(d) if *tap != out_tap => {
                                 let (sl, sr) = (&mut self.tap_l[..n], &mut self.tap_r[..n]);
-                                d.read(pdc.sends[k] as usize, sl, sr);
+                                d.read_tap(tap, sl, sr);
                                 for i in 0..n {
                                     sl[i] *= self.gain_l[i];
                                     sr[i] *= self.gain_r[i];
                                 }
                                 mix_send(&mut tail[j - ti - 1], sl, sr, &mut t.send_gains[k], s.gain, smooth);
                             }
-                            _ => mix_send(&mut tail[j - ti - 1], l, r, &mut t.send_gains[k], s.gain, smooth),
+                            _ => {
+                                t.pdc_taps.sends[k] = t.pdc_taps.output;
+                                mix_send(&mut tail[j - ti - 1], l, r, &mut t.send_gains[k], s.gain, smooth)
+                            }
                         }
                     }
                 }

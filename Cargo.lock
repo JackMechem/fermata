@@ -807,6 +807,7 @@ dependencies = [
  "log",
  "midir",
  "parking_lot",
+ "realfft",
  "rtrb",
  "rubato",
  "serde",

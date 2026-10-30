@@ -962,7 +962,7 @@ sustain, modulation and expression.
 
 Fermata has a built-in eight-band **Channel EQ** with analyzer, and fifteen built-in effects (Compressor, Limiter, Noise Gate, De-Esser, Reverb, Delay, Chorus, Flanger, Phaser, Tremolo, Overdrive, Distortion, Gain, Tuner, Loudness Meter); everything else comes from VST3.
 
-- [~] EQ: Channel EQ, Linear Phase EQ, Match EQ, Single Band EQ, Vintage Console, Graphic and Tube EQs. *Channel EQ only.*
+- [~] EQ: Channel EQ, Linear Phase EQ, Match EQ, Single Band EQ, Vintage Console, Graphic and Tube EQs. *Channel EQ and Linear Phase EQ (with a Low/Medium/High quality setting).*
 - [~] Dynamics: Compressor (with circuit models), Limiter, Adaptive Limiter, Multipressor, Noise Gate, Expander, Enveloper, DeEsser 2. *Compressor with five circuits, Limiter (with an Adaptive mode), Noise Gate and De-Esser; no Multipressor, Expander or Enveloper.*
 - [~] Reverb: ChromaVerb, Space Designer (convolution), Quantec Room Simulator, SilverVerb. *One algorithmic Reverb (plate and five room types); no convolution.*
 - [~] Delay: Delay Designer, Echo, Stereo Delay, Tape Delay, Sample Delay. *One Delay with Stereo, Ping-Pong, Tape and Digital modes; no Delay Designer or Sample Delay.*

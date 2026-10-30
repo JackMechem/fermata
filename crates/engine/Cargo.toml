@@ -21,6 +21,8 @@ rubato = "0.15"
 # Pure-Rust FLAC encoder for bounces. Default features off: they add serde support and logging
 # we don't need; `par` encodes blocks on several threads.
 flacenc = { version = "0.5", default-features = false, features = ["par"] }
+# Real FFTs for the Linear Phase EQ's FIR design and convolution (already in the tree via rubato).
+realfft = "3.5"
 
 # Native PipeWire, PulseAudio and JACK drivers alongside ALSA, and real-time scheduling for
 # the audio thread (via rtkit over D-Bus).

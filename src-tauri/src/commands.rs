@@ -1821,3 +1821,24 @@ pub fn delete_comp(state: State<AppState>, region: Id, index: usize) -> Snapshot
 pub fn set_loop_crossfade(state: State<AppState>, ids: Vec<Id>, on: bool) -> Snapshot {
     edit(&state, "Crossfade Loop Repetitions", None, false, |s| s.set_loop_crossfade(&ids, on))
 }
+
+/// Sets several of a built-in effect's parameters at once (plain units), as one undo step: a
+/// point dragged in the Linear Phase EQ's graph moves its frequency and gain together, and a
+/// drag of the same set merges into one step.
+#[tauri::command]
+pub fn set_builtin_params(state: State<AppState>, track: Id, slot: i64, values: Vec<(u32, f32)>) -> R<Snapshot> {
+    let slot = slot_index(slot);
+    with(&state, |s| values.iter().for_each(|(id, _)| s.touched_slot(track, slot, *id)));
+    let set_all = |s: &mut Session| values.iter().try_for_each(|&(id, v)| s.set_builtin_param(track, slot, id, v));
+    if with(&state, |s| s.automation_writing(track)) {
+        return try_snap(&state, set_all);
+    }
+    let uid = with(&state, |s| {
+        let inserts = if track == daw_engine::model::MASTER_ID { Some(&s.project.master.inserts) } else { s.project.track(track).map(|t| &t.inserts) };
+        inserts.and_then(|i| i.get(slot)).and_then(|p| p.as_ref()).map(|p| p.uid)
+    });
+    let mut ids: Vec<u32> = values.iter().map(|v| v.0).collect();
+    ids.sort_unstable();
+    let key = uid.map(|uid| format!("fxparams:{uid}:{ids:?}"));
+    try_edit(&state, "Plug-in Parameter", key, false, set_all)
+}

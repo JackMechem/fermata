@@ -1674,6 +1674,29 @@ Drive into a waveshaper, after Logic's Distortion.
 - Factory presets include Warm Saturation, Crunch, Hard Clip, Tube Grit, Fuzz Box and Parallel
   Drum Smash.
 
+#### Linear Phase EQ
+
+The Channel EQ's eight bands with linear phase, after Logic's Linear Phase EQ (in the EQ
+category of the slot menu and the Library). Every frequency is delayed by the same amount, so
+boosts and cuts change the tone without smearing transients or shifting the phase between
+tracks: useful on Stereo Out for mastering, or on parallel and multi-miked sources.
+
+- The panel is the Channel EQ's: drag a point for frequency and gain, scroll for Q, double-click
+  a point to switch its band off, and the band controls below. A drag that moves frequency and
+  gain together is one undo step. Every band parameter can be automated and learned.
+- **Quality** sets the filter's length: **Low**, **Medium** (the default) or **High**. Longer
+  filters follow narrow and low-frequency bands more precisely (a low cut at 30 Hz needs High)
+  and add more latency: about 21, 43 or 85 ms at 44.1 or 48 kHz, shown beside the pop-up.
+  Delay compensation makes it up, so the track stays in time, but it isn't suited to tracks you
+  play live through (Low Latency Mode switches it off there).
+- Changes are worked out in the background and crossfaded in over 20 ms, so moving a control
+  never clicks. While automation sweeps a band, the filter follows in steps of about 25 ms;
+  bounces follow it at the same points every time.
+- With every band flat it is an exact delay: switching it in changes nothing but the timing,
+  which compensation takes out.
+- Factory presets: Flat, Gentle Mastering Lift, Low End Cleanup, Mid Scoop, Vocal Presence and
+  Air.
+
 #### Gain
 
 Level, polarity and channel tools with no latency, after Logic's Gain.
@@ -1794,6 +1817,11 @@ and sends line up at Stereo Out.
   The whole mix plays that much behind the playhead, like extra output latency.
 - Sends are compensated too, pre- and post-fader.
 - Bypassed plug-ins still count, so switching a plug-in off doesn't shift the rest of the mix.
+- Changes while playing don't click: when a latent plug-in is inserted or removed, a plug-in's
+  latency changes (the Linear Phase EQ's Quality, a Compressor's Lookahead), or Low Latency
+  Mode switches, each delayed path glides to its new delay with a 15 ms crossfade instead of
+  jumping. You hear a brief blend of the two timings rather than a click. Bounces always start
+  with the delays settled.
 - Automation, the metronome and recordings follow the compensation.
 - The Audio FX label of a strip shows its plug-in latency (each slot's tooltip has its own),
   and the status line shows the total ("PDC 10.0 ms").

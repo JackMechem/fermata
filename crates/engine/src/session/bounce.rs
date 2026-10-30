@@ -118,6 +118,25 @@ impl Session {
         Ok(audio)
     }
 
+    /// Renders `[from, to)` of the full mix like [`Session::render`], making `edit` once `at`
+    /// frames have played, with the transport running: its commands reach the engine between
+    /// two blocks, as edits made while playing do. For checks of what changes sound like
+    /// mid-playback. Needs a running audio device (`edit`'s commands queue for the engine
+    /// instead of being applied at once, which would wait for the render).
+    pub fn render_with_edit(&mut self, from: i64, to: i64, at: i64, edit: &mut dyn FnMut(&mut Session)) -> Result<Vec<Vec<f32>>> {
+        if self.audio.is_none() || self.rec_punch.is_some() || to <= from {
+            return Err(anyhow!("Can't render: no audio device, recording, or an empty range"));
+        }
+        let engine = self.engine.clone();
+        engine.lock().process(&[], 0, &mut [], 0);
+        if self.builtin_latency_changed() {
+            self.update_pdc();
+        }
+        let mut guard = engine.lock();
+        let audio = guard.render_with_edit(from, to, at, &mut || edit(self));
+        Ok(audio)
+    }
+
     /// The isolate settings for rendering `tap` through its channel strip. Its subtracks play
     /// unless they (or a stack between them and `tap`, or their VCA) are muted; `tap` itself always plays,
     /// whatever its mute and the project's solos say.

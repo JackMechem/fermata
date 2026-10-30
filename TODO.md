@@ -107,10 +107,10 @@ Goal: finish a mix and deliver it without leaving Fermata.
 - [x] Clip indicators and a gain-reduction meter on the strip
 - [x] FLAC and AIFF bounce; export the selected tracks
 - [ ] MP3 and AAC bounce (needs an encoder whose licence suits)
-- [ ] Delay compensation changes while playing without clicks
+- [x] Delay compensation changes while playing without clicks
 - [x] More built-in effects: modulation (chorus, flanger, phaser, tremolo), distortion, a Gain
       utility
-- [ ] A linear-phase EQ
+- [x] A linear-phase EQ
 
 ## Stage 6: Advanced production
 

@@ -149,6 +149,12 @@ impl BuiltinDsp {
         for &(id, v) in values {
             b.set(id, v);
         }
+        // Settle at those values before playing. Here, off the audio thread, an effect that
+        // works in the background (the Linear Phase EQ's filter design) may wait for it, so it
+        // doesn't start out at its defaults.
+        b.fx.set_offline(true);
+        b.fx.reset();
+        b.fx.set_offline(false);
         b.publish();
         b
     }
@@ -212,6 +218,11 @@ impl BuiltinDsp {
     pub fn reset(&mut self) {
         self.fx.reset();
         self.fresh = true;
+    }
+
+    /// Tells the effect whether the engine is rendering offline (see `Effect::set_offline`).
+    pub fn set_offline(&mut self, offline: bool) {
+        self.fx.set_offline(offline);
     }
 }
 

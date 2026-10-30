@@ -24,6 +24,13 @@ All notable changes to Fermata are recorded here. The format follows
   every repetition (Crossfade Loop Repetitions), and Settings › Editing › Crossfade Time and
   Crossfade Curve set the take folder, X-Fade and Crossfade menu crossfades (comp boundaries
   are now 20 ms by default instead of 10 ms).
+- **Linear Phase EQ** (EQ category): the Channel EQ's eight bands with linear phase, in the
+  Channel EQ's own editor, with a **Quality** pop-up (Low, Medium, High: 21, 43 or 85 ms of
+  latency at 48 kHz, made up by delay compensation). Settings change without clicks, follow
+  automation, and render identically in bounces and freezes.
+- **Delay compensation changes glide:** inserting or removing a latent plug-in, changing a
+  plug-in's latency or switching Low Latency Mode while playing now crossfades each compensated
+  path (track outputs, sends and auxes) to its new delay over 15 ms instead of clicking.
 - **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
   fader offsets the level of every strip assigned to it without moving their faders (an
   outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be

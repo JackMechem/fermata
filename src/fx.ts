@@ -9,6 +9,7 @@ import { DistortionPanel, OverdrivePanel } from "./components/fx/Distortion";
 import { GainPanel } from "./components/fx/Gain";
 import { GatePanel } from "./components/fx/Gate";
 import { LimiterPanel } from "./components/fx/Limiter";
+import { LinearPhaseEqPanel } from "./components/fx/LinearPhaseEq";
 import { LoudnessPanel } from "./components/fx/Loudness";
 import { ChorusPanel, FlangerPanel, PhaserPanel, TremoloPanel } from "./components/fx/Modulation";
 import { ReverbPanel } from "./components/fx/Reverb";
@@ -56,6 +57,8 @@ export interface FxPanelProps {
   touch: (id: number, on: boolean) => void;
   /** The latest meter values, in the order of `info.meters` (updated about 30 times a second). */
   meters: number[];
+  /** Sets several parameters as one undo step (a drag that moves more than one). */
+  setMany?: (values: [number, number][]) => void;
 }
 
 /**
@@ -78,4 +81,5 @@ export const FX_PANELS: Record<string, ComponentType<FxPanelProps>> = {
   "builtin:overdrive": OverdrivePanel,
   "builtin:distortion": DistortionPanel,
   "builtin:gain": GainPanel,
+  "builtin:linear-phase-eq": LinearPhaseEqPanel,
 };

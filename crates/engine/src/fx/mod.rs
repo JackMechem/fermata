@@ -22,11 +22,13 @@ pub mod deesser;
 pub mod delay;
 pub mod distortion;
 mod dyn_common;
+pub mod fir;
 pub mod flanger;
 pub mod gain;
 pub mod gate;
 mod lfo;
 pub mod limiter;
+pub mod linear_phase_eq;
 pub mod loudness;
 pub mod overdrive;
 mod oversample;
@@ -123,6 +125,13 @@ pub trait Effect: Send {
     fn meters(&self, out: &mut [f32; MAX_METERS]) {
         let _ = out;
     }
+    /// The engine is rendering offline (a bounce, export or freeze) or playing live again.
+    /// Offline, `process` and `reset` may block, so an effect that does work in the background
+    /// while playing (the Linear Phase EQ's filter design) can wait for it instead, and land
+    /// changes at the same point of every render.
+    fn set_offline(&mut self, offline: bool) {
+        let _ = offline;
+    }
 }
 
 /// A built-in effect's description in the registry.
@@ -131,7 +140,7 @@ pub struct EffectInfo {
     pub id: &'static str,
     pub name: &'static str,
     /// The Library and slot menu category: "Dynamics", "Reverb", "Delay", "Modulation",
-    /// "Distortion", "Utility", "Metering".
+    /// "Distortion", "Utility", "Metering", "EQ".
     pub category: &'static str,
     pub params: &'static [ParamSpec],
     /// Names of the meter values the effect reports, in order.
@@ -167,6 +176,7 @@ pub fn registry() -> Vec<EffectInfo> {
         overdrive::info(),
         distortion::info(),
         gain::info(),
+        linear_phase_eq::info(),
     ]
 }
 
@@ -193,6 +203,7 @@ pub fn factory_presets(id: &str) -> &'static [FactoryPreset] {
         "builtin:overdrive" => overdrive::PRESETS,
         "builtin:distortion" => distortion::PRESETS,
         "builtin:gain" => gain::PRESETS,
+        "builtin:linear-phase-eq" => linear_phase_eq::PRESETS,
         _ => &[],
     }
 }

@@ -7463,4 +7463,25 @@ canvas.pr-cursor-line {
   opacity: 1;
 }
 
+/* ---- Linear Phase EQ ------------------------------------------------------------------- */
 
+/* The Channel EQ editor in an effect panel: edge to edge, as in the Channel EQ's own panel. */
+.fx-body > .eq-panel {
+  width: auto;
+  margin: -12px -14px -14px;
+}
+
+.fx-body.bypassed > .eq-panel .eq-graph,
+.fx-body.bypassed > .eq-panel .eq-bands {
+  opacity: 0.55;
+}
+
+.lpeq-quality {
+  min-width: 82px;
+  height: 24px;
+}
+
+.lpeq-latency {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}

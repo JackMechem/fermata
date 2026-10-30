@@ -125,6 +125,25 @@ pub fn coefficients(eq: &ChannelEq, sample_rate: f64) -> EqCoeffs {
     out
 }
 
+impl EqCoeffs {
+    /// The EQ's gain (linear, output gain included) at `w` radians per sample: what the
+    /// Linear Phase EQ realizes with linear phase. 1 when the EQ is off or flat.
+    pub fn magnitude(&self, w: f64) -> f64 {
+        if !self.active {
+            return 1.0;
+        }
+        let (c1, c2) = (w.cos(), (2.0 * w).cos());
+        let mut power = 1.0;
+        for s in &self.sections[..self.count] {
+            // |b0 + b1 z^-1 + b2 z^-2|² on the unit circle, and the same for the poles.
+            let num = s.b0 * s.b0 + s.b1 * s.b1 + s.b2 * s.b2 + 2.0 * (s.b0 * s.b1 + s.b1 * s.b2) * c1 + 2.0 * s.b0 * s.b2 * c2;
+            let den = 1.0 + s.a1 * s.a1 + s.a2 * s.a2 + 2.0 * (s.a1 + s.a1 * s.a2) * c1 + 2.0 * s.a2 * c2;
+            power *= num.max(0.0) / den.max(1e-300);
+        }
+        power.sqrt() * self.output as f64
+    }
+}
+
 /// Per-channel filter memory for one strip.
 pub struct EqState {
     z: [[[f64; 2]; MAX_SECTIONS]; 2],

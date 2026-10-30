@@ -574,6 +574,14 @@ The solver is in `session/pdc.rs`, the delay lines in `dsp/pdc.rs`:
 - `update_pdc` sends `Cmd::Pdc` only for tracks whose compensation changed, with a new
   `DelayLine` only when the old one is too short (lines have room for at least 8192 frames).
   `Cmd::PdcGlobal` carries `total` and the Low Latency Mode flag.
+- **Changes glide:** the output and each send read the line through a `Tap` (`TrackDsp::
+  pdc_taps`). When its delay changes (a new `PdcParams`, or the track going live), a tap
+  crossfades from the old read position to the new one over `FADE_SECS` (15 ms, raised
+  cosine); a change during a fade waits for it to finish. The line is written whenever it
+  exists, read or not, so the position faded to always holds real audio, and a line replaced
+  by a longer one takes the old one's audio over (`DelayLine::take_history`). A post-fader send
+  whose tap matches the output's shares its read. Side-chain keys leave before the line, so
+  they have no compensation to change.
 - **Live tracks** (an armed audio track that is recording; in Low Latency Mode any monitored
   track) skip their compensation delay, and in Low Latency Mode the plug-ins over the limit
   (`low_latency_skip` bits) are not run.
@@ -586,9 +594,12 @@ The solver is in `session/pdc.rs`, the delay lines in `dsp/pdc.rs`:
 lock held, faster than real time:
 
 - It saves the transport state, turns off cycle, metronome, count-in, live MIDI, the analyzer
-  and Low Latency Mode, clears every delay line, plays `[from, to)` and then `tail` frames with
-  the transport stopped (so effects ring out), drops the leading latency, and restores
-  everything.
+  and Low Latency Mode, clears every delay line and settles its taps, tells built-in effects
+  it is offline (`Effect::set_offline`: they may block, so background work lands at the same
+  point every render), plays `[from, to)` and then `tail` frames with the transport stopped
+  (so effects ring out), drops the leading latency, and restores everything.
+- `render_with_edit` (`Session::render_with_edit`) runs an edit partway through a render, for
+  checks of changes made while playing (`pdc_glide_check`).
 - `Isolate { tracks, tap, fader, effects }` renders one track (with the subtracks feeding it)
   captured before Stereo Out instead of the full mix. `tracks` lists who plays and whether
   each is heard, overriding live mute and solo. Used by Export All Tracks, Export Region,
@@ -1149,7 +1160,8 @@ events, converting ticks through the file's own map. The UI is
   frames, `key` being the side-chain signal or `None`; `ctx` has the sample rate, tempo,
   whether the transport plays and the song position in beats, which tempo-synced LFOs lock
   to), `reset`, and optionally `latency`
-  (lookahead, for PDC), `tail_secs` (for freeze and render tails) and `meters`. Every buffer is
+  (lookahead, for PDC), `tail_secs` (for freeze and render tails), `meters` and `set_offline`
+  (an offline render is running, so `process` may block). Every buffer is
   allocated in the constructor; `process`, `set_param` and `reset` must not allocate, lock or
   block.
 - **`EffectInfo`**: the registry entry: the plug-in id (`builtin:compressor`, ...), name,
@@ -1163,6 +1175,16 @@ events, converting ticks through the file's own map. The UI is
   Limiter), the delay line and note values in `fx/delay.rs`, which the Reverb and the
   modulation effects reuse, `fx/lfo.rs` (LFO, smoother, feedback guard) and `fx/oversample.rs`
   (4× half-band oversampling for the distortion effects, with a fixed latency they report).
+- **Linear Phase EQ** (`fx/linear_phase_eq.rs`, `fx/fir.rs`): the Channel EQ's bands
+  (`eq::coefficients`, `EqCoeffs::magnitude`) realized as a linear-phase FIR designed by
+  frequency sampling (magnitude on a grid 4× the kernel, zero phase, inverse FFT, Blackman
+  window, odd length so the delay is a whole `(taps - 1) / 2` frames) and run by uniformly
+  partitioned FFT convolution with a 128-tap direct head, so it adds no latency of its own.
+  Each instance has a worker thread: parameter changes reach it through atomics, it designs at
+  most every 25 ms and passes `Kernel`s over `rtrb` queues (used ones go back to it to be
+  freed); the `Convolver` crossfades old and new kernel outputs over 20 ms, sharing the input
+  spectra. Offline it waits for the worker instead. The panel reuses the Channel EQ editor
+  (`EqEditor` in `Eq.tsx`) through `src/linearPhaseEq.ts`.
 
 To add an effect: write `fx/<name>.rs` with `pub fn info() -> EffectInfo` and
 `pub const PRESETS`, list it in `registry()` and `factory_presets()`, and optionally add a panel

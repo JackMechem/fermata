@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { call, EQ_SLOT, MASTER_ID, type ChannelEq, type EqBand, type Id, type Project } from "../api";
 import { BAND_COLORS, bandSections, defaultEq, eqSections, formatFreq, isFlat, responseDb } from "../eqMath";
 import { getState, onTick, setState, useStore } from "../store";
@@ -154,7 +154,23 @@ const FINE = 0.2;
  * worked out from the start of the drag: applying each move's few pixels to an already rounded
  * value would round most of them away.
  */
-function Scrub({ text, value, onScrub, onReset, title, onContextMenu }: { text: string; value: number; onScrub: (start: number, px: number) => void; onReset: () => void; title?: string; onContextMenu?: (e: React.MouseEvent) => void }) {
+function Scrub({
+  text,
+  value,
+  onScrub,
+  onReset,
+  title,
+  onContextMenu,
+  onGrab,
+}: {
+  text: string;
+  value: number;
+  onScrub: (start: number, px: number) => void;
+  onReset: () => void;
+  title?: string;
+  onContextMenu?: (e: React.MouseEvent) => void;
+  onGrab?: (on: boolean) => void;
+}) {
   return (
     <div
       className="scrub"
@@ -165,6 +181,7 @@ function Scrub({ text, value, onScrub, onReset, title, onContextMenu }: { text: 
         const start = value;
         let last = e.clientY;
         let px = 0;
+        onGrab?.(true);
         const move = (ev: MouseEvent) => {
           px += (last - ev.clientY) * (ev.shiftKey ? FINE : 1);
           last = ev.clientY;
@@ -173,6 +190,7 @@ function Scrub({ text, value, onScrub, onReset, title, onContextMenu }: { text: 
         const up = () => {
           window.removeEventListener("mousemove", move);
           window.removeEventListener("mouseup", up);
+          onGrab?.(false);
         };
         window.addEventListener("mousemove", move);
         window.addEventListener("mouseup", up);
@@ -184,6 +202,26 @@ function Scrub({ text, value, onScrub, onReset, title, onContextMenu }: { text: 
   );
 }
 
+/** A control of the editor, for Learn and Touch: a band's field, or the output level. */
+export type EqControl = { band: number; field: "on" | "freq" | "gain" | "q" } | { band: null; field: "output" };
+
+export interface EqEditorProps {
+  eq: ChannelEq;
+  sr: number;
+  /** Every edit, as the whole new setting. */
+  onChange: (eq: ChannelEq) => void;
+  /** Toolbar controls before the Analyzer button, after it, and before the Output level. */
+  lead?: ReactNode;
+  tools?: ReactNode;
+  extra?: ReactNode;
+  /** The strip whose spectrum the analyzer shows; without one there is no analyzer. */
+  analyzerTrack?: Id;
+  /** A control's right-click handler (Learn MIDI Assignment). */
+  learn?: (c: EqControl) => ((e: React.MouseEvent) => void) | undefined;
+  /** A drag starts or ends, with the controls it moves (for Touch and Latch automation). */
+  onGrab?: (controls: EqControl[], on: boolean) => void;
+}
+
 /**
  * The Channel EQ editor for one strip (MASTER_ID = Stereo Out): toolbar, graph and bands. It
  * fills the box it is given (docked in the bottom section or in a floating window, see
@@ -193,8 +231,49 @@ export function EqPanel({ track: trackId }: { track: Id }) {
   const project = useStore((s) => s.snap?.project);
   const eq = eqOf(project, trackId);
   const sr = project?.sample_rate ?? 48000;
+  if (!eq) return null;
+  return (
+    <EqEditor
+      eq={eq}
+      sr={sr}
+      onChange={(e) => updateEq(trackId, e)}
+      analyzerTrack={trackId}
+      lead={
+        <button className={"eq-toggle" + (eq.on ? " on" : "")} onClick={() => updateEq(trackId, { ...eq, on: !eq.on })} title="Turn the EQ on or off">
+          {eq.on ? "On" : "Bypassed"}
+        </button>
+      }
+      tools={
+        <>
+          <button className="eq-toggle" onClick={() => updateEq(trackId, defaultEq())} title="Reset every band">
+            Reset
+          </button>
+          <PresetButton effect={CHANNEL_EQ} track={trackId} slot={EQ_SLOT} instance={`eq:${trackId}`} current={JSON.stringify(eq)} normalize={(p) => JSON.stringify(p.eq)} defaultName="Flat" />
+          <button className="eq-toggle" onClick={() => copyEq(eq)} title="Copy these EQ settings">
+            Copy
+          </button>
+          <button
+            className="eq-toggle"
+            onClick={() => (eqClipboard() ? pasteEq([trackId]) : setState({ toast: { text: "Copy a Channel EQ first", at: Date.now() } }))}
+            title="Paste copied EQ settings onto this strip"
+          >
+            Paste
+          </button>
+        </>
+      }
+      learn={(c) => learnContext(c.band === null ? { type: "eq_output", track: trackId } : { type: "eq", track: trackId, band: c.band, field: c.field })}
+    />
+  );
+}
+
+/**
+ * The graph and band controls of the Channel EQ, for any eight-band setting: a strip's
+ * Channel EQ (EqPanel) or the Linear Phase EQ's parameters (fx/LinearPhaseEq.tsx).
+ */
+export function EqEditor({ eq, sr, onChange, lead, tools, extra, analyzerTrack, learn, onGrab }: EqEditorProps) {
   const [sel, setSel] = useState<number | null>(null);
-  const [analyzer, setAnalyzer] = useState(true);
+  const [analyzerOn, setAnalyzer] = useState(true);
+  const analyzer = analyzerOn && analyzerTrack !== undefined;
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const spectrum = useRef<Float32Array | null>(null);
@@ -205,12 +284,13 @@ export function EqPanel({ track: trackId }: { track: Id }) {
 
   // Feed the analyzer from this strip while the editor is open.
   useEffect(() => {
-    call("set_analyzer", { track: analyzer ? trackId : null });
+    if (analyzerTrack === undefined) return;
+    call("set_analyzer", { track: analyzer ? analyzerTrack : null });
     spectrum.current = null;
     return () => {
       call("set_analyzer", { track: null });
     };
-  }, [trackId, analyzer]);
+  }, [analyzerTrack, analyzer]);
 
   const draw = () => {
     const cv = canvasRef.current;
@@ -335,7 +415,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
     const ro = new ResizeObserver(() => draw());
     if (wrapRef.current) ro.observe(wrapRef.current);
     const off = onTick((t) => {
-      if (!t.spectrum || t.spectrum[0] !== trackId) return;
+      if (!t.spectrum || t.spectrum[0] !== analyzerTrack) return;
       const fresh = t.spectrum[1];
       const prev = spectrum.current;
       // Fast attack, slow release, like an analyzer's peak response.
@@ -346,14 +426,13 @@ export function EqPanel({ track: trackId }: { track: Id }) {
       ro.disconnect();
       off();
     };
-  }, [trackId]);
-
-  if (!eq) return null;
+  }, [analyzerTrack]);
 
   const setBand = (i: number, patch: Partial<EqBand>) => {
-    const cur = live.current.eq!;
-    updateEq(trackId, { ...cur, bands: cur.bands.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
+    const cur = live.current.eq;
+    onChange({ ...cur, bands: cur.bands.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
   };
+  const grab = (band: number, fields: ("freq" | "gain" | "q")[]) => (on: boolean) => onGrab?.(fields.map((field) => ({ band, field })), on);
 
   const onCanvasDown = (e: React.MouseEvent) => {
     const rect = canvasRef.current!.getBoundingClientRect();
@@ -391,6 +470,8 @@ export function EqPanel({ track: trackId }: { track: Id }) {
     const startY = e.clientY;
     const f0 = band.freq;
     const g0 = band.gain;
+    const held = grab(best, isCut ? ["freq"] : ["freq", "gain"]);
+    held(true);
     const move = (ev: MouseEvent) => {
       const fine = ev.shiftKey ? 0.2 : 1;
       const freq = xf(fx(f0, W) + (ev.clientX - startX) * fine, W);
@@ -400,6 +481,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
     const up = () => {
       window.removeEventListener("mousemove", move);
       window.removeEventListener("mouseup", up);
+      held(false);
     };
     window.addEventListener("mousemove", move);
     window.addEventListener("mouseup", up);
@@ -417,35 +499,24 @@ export function EqPanel({ track: trackId }: { track: Id }) {
   return (
     <div className="eq-panel">
       <div className="eq-toolbar">
-        <button className={"eq-toggle" + (eq.on ? " on" : "")} onClick={() => updateEq(trackId, { ...eq, on: !eq.on })} title="Turn the EQ on or off">
-          {eq.on ? "On" : "Bypassed"}
-        </button>
-        <button className={"eq-toggle" + (analyzer ? " on" : "")} onClick={() => setAnalyzer(!analyzer)} title="Show the post-EQ spectrum">
-          Analyzer
-        </button>
-        <button className="eq-toggle" onClick={() => updateEq(trackId, defaultEq())} title="Reset every band">
-          Reset
-        </button>
-        <PresetButton effect={CHANNEL_EQ} track={trackId} slot={EQ_SLOT} instance={`eq:${trackId}`} current={JSON.stringify(eq)} normalize={(p) => JSON.stringify(p.eq)} defaultName="Flat" />
-        <button className="eq-toggle" onClick={() => copyEq(eq)} title="Copy these EQ settings">
-          Copy
-        </button>
-        <button
-          className="eq-toggle"
-          onClick={() => (eqClipboard() ? pasteEq([trackId]) : setState({ toast: { text: "Copy a Channel EQ first", at: Date.now() } }))}
-          title="Paste copied EQ settings onto this strip"
-        >
-          Paste
-        </button>
+        {lead}
+        {analyzerTrack !== undefined && (
+          <button className={"eq-toggle" + (analyzer ? " on" : "")} onClick={() => setAnalyzer(!analyzer)} title="Show the post-EQ spectrum">
+            Analyzer
+          </button>
+        )}
+        {tools}
         <span className="eq-spacer" />
+        {extra}
         <span className="dim">Output</span>
         <Scrub
           text={`${eq.output_db > 0 ? "+" : ""}${eq.output_db.toFixed(1)} dB`}
           value={eq.output_db}
           // The current EQ, not this render's: bands may change while the drag runs.
-          onScrub={(v0, px) => updateEq(trackId, { ...live.current.eq!, output_db: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10 })}
-          onReset={() => updateEq(trackId, { ...live.current.eq!, output_db: 0 })}
-          onContextMenu={learnContext({ type: "eq_output", track: trackId })}
+          onScrub={(v0, px) => onChange({ ...live.current.eq, output_db: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10 })}
+          onReset={() => onChange({ ...live.current.eq, output_db: 0 })}
+          onContextMenu={learn?.({ band: null, field: "output" })}
+          onGrab={(on) => onGrab?.([{ band: null, field: "output" }], on)}
         />
       </div>
       <div className="eq-graph" ref={wrapRef} onMouseDown={onCanvasDown} onWheel={onWheel}>
@@ -460,7 +531,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                 className={"eq-band-toggle" + (b.on ? " on" : "")}
                 style={{ ["--band" as string]: BAND_COLORS[i] }}
                 onClick={() => setBand(i, { on: !b.on })}
-                onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "on" })}
+                onContextMenu={learn?.({ band: i, field: "on" })}
                 title={`${BAND_NAMES[i]} on/off`}
               >
                 <BandIcon kind={b.kind} />
@@ -471,7 +542,8 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                 value={b.freq}
                 onScrub={(v0, px) => setBand(i, { freq: Math.round(Math.min(20000, Math.max(20, v0 * Math.pow(1.01, px))) * 10) / 10 })}
                 onReset={() => setBand(i, { freq: defaults.bands[i].freq })}
-                onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "freq" })}
+                onContextMenu={learn?.({ band: i, field: "freq" })}
+                onGrab={grab(i, ["freq"])}
               />
               {isCut ? (
                 <button
@@ -487,7 +559,8 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                   value={b.gain}
                   onScrub={(v0, px) => setBand(i, { gain: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10, on: true })}
                   onReset={() => setBand(i, { gain: 0 })}
-                  onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "gain" })}
+                  onContextMenu={learn?.({ band: i, field: "gain" })}
+                  onGrab={grab(i, ["gain"])}
                 />
               )}
               {isCut && b.slope > 12 ? (
@@ -498,7 +571,8 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                   value={b.q}
                   onScrub={(v0, px) => setBand(i, { q: Math.round(Math.min(18, Math.max(0.1, v0 * Math.pow(1.01, px))) * 100) / 100 })}
                   onReset={() => setBand(i, { q: defaults.bands[i].q })}
-                  onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "q" })}
+                  onContextMenu={learn?.({ band: i, field: "q" })}
+                  onGrab={grab(i, ["q"])}
                 />
               )}
             </div>

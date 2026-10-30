@@ -82,6 +82,17 @@ impl Engine {
     /// instrument gets its note-offs. Allocates the result on the calling thread; `process`
     /// itself stays allocation-free.
     pub fn render(&mut self, from: i64, to: i64, tail: i64, isolate: Option<Isolate>, progress: &mut dyn FnMut(f64)) -> Vec<Vec<f32>> {
+        self.render_with(from, to, tail, isolate, progress, None)
+    }
+
+    /// Like [`Engine::render`], calling `edit` once `at` frames have played: the commands it
+    /// queues reach the engine between two blocks, with the transport running, as edits made
+    /// while playing do. For checks of what happens when something changes mid-playback.
+    pub fn render_with_edit(&mut self, from: i64, to: i64, at: i64, edit: &mut dyn FnMut()) -> Vec<Vec<f32>> {
+        self.render_with(from, to, 0, None, &mut |_| {}, Some((at, edit)))
+    }
+
+    fn render_with(&mut self, from: i64, to: i64, tail: i64, isolate: Option<Isolate>, progress: &mut dyn FnMut(f64), edit: Option<(i64, &mut dyn FnMut())>) -> Vec<Vec<f32>> {
         // Apply edits that are still queued, so the render hears the latest settings.
         self.process(&[], 0, &mut [], 0);
         let saved = Saved {
@@ -123,12 +134,15 @@ impl Engine {
         self.snap_gains = true;
         // Nothing is live in a render, and no audio from before it leaks in.
         self.pdc.low_latency = false;
+        self.set_effects_offline(true);
         self.reset_effects();
         self.silence_instruments();
         for t in &mut self.tracks {
             if let Some(d) = &mut t.delay {
                 d.clear();
             }
+            // No glide left over from playing live: every render starts the same.
+            t.pdc_taps = super::pdc::PdcTaps::at(&t.pdc);
         }
 
         let mut done = 0i64;
@@ -150,7 +164,15 @@ impl Engine {
                 }
             }
         };
-        run(self, to - from, &mut out);
+        match edit {
+            Some((at, edit)) => {
+                let at = at.clamp(0, to - from);
+                run(self, at, &mut out);
+                edit();
+                run(self, to - from - at, &mut out);
+            }
+            None => run(self, to - from, &mut out),
+        }
         // The tail: notes end and the transport stops, but instruments and plug-ins keep
         // processing so releases, reverbs and delays are captured.
         self.playing = false;
@@ -164,6 +186,7 @@ impl Engine {
         // Live playback starts clean too, not with the render's ringing tail.
         self.reset_effects();
         self.silence_instruments();
+        self.set_effects_offline(false);
         // What the render played isn't for the meters, nor for the clip indicators they feed.
         for t in &self.tracks {
             t.meter.take();
@@ -187,6 +210,16 @@ impl Engine {
         self.status.recording.store(self.recording, Ordering::Relaxed);
         self.status.cpu_load.store(self.load.to_bits(), Ordering::Relaxed);
         out
+    }
+
+    /// Tells every built-in effect whether a render is running (see `Effect::set_offline`).
+    fn set_effects_offline(&mut self, on: bool) {
+        let slots = self.tracks.iter_mut().flat_map(|t| t.inserts.iter_mut()).chain(self.master_inserts.iter_mut());
+        for ins in slots.flatten() {
+            if let Plugin::Builtin(b) = &mut ins.plugin {
+                b.set_offline(on);
+            }
+        }
     }
 
     /// How far a render's capture lags the timeline: Stereo Out's total latency for the full

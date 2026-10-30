@@ -148,13 +148,19 @@ export function FxPanelContent({ uid }: { uid: Id }) {
     setLive((cur) => ({ ...cur, [id]: value }));
     act("set_builtin_param", { track, slot: at.slot, id, value });
   };
+  const setMany = (values: [number, number][]) => {
+    const now = performance.now();
+    for (const [id, v] of values) local.current.set(id, { v, at: now });
+    setLive((cur) => ({ ...cur, ...Object.fromEntries(values) }));
+    act("set_builtin_params", { track, slot: at.slot, values });
+  };
   const touch = (id: number, on: boolean) => {
     // Stereo Out isn't automated.
     if (track === MASTER_ID) return;
     const spec = info.params.find((p) => p.id === id);
     act("automation_touch", { track, param: { type: "plugin", value: { uid, param: id, name: `${at.plugin.name}: ${spec?.name ?? id}` } }, touching: on });
   };
-  const props: FxPanelProps = { info, track, uid, values, set, touch, meters };
+  const props: FxPanelProps = { info, track, uid, values, set, touch, meters, setMany };
   const Panel = FX_PANELS[info.id] ?? GenericPanel;
   return (
     <div className={"fx-body" + (at.plugin.bypass ? " bypassed" : "")}>
