@@ -5,6 +5,7 @@ pub mod audio_io;
 pub mod auto_move;
 pub mod automation;
 pub mod clip;
+pub mod controllers;
 pub mod decode;
 pub mod denormals;
 pub mod drag_modes;

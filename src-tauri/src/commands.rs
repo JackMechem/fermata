@@ -10,6 +10,8 @@ use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
 use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, PlayedNotes, RangeEdit, RegionParamsPatch, RenderOptions, TrackPatch};
 use daw_engine::vst3_host::{ParamInfo, PluginDescriptor};
 use daw_engine::tempo::{SigEvent, TempoEvent};
+use daw_engine::controllers::{CtlTarget, Takeover};
+use daw_engine::session::AssignmentRow;
 use daw_engine::{plugin_db, transients, Session};
 use serde::Serialize;
 use tauri::{Emitter, State};
@@ -237,6 +239,7 @@ pub fn set_count_in(state: State<AppState>, on: bool) -> Snapshot {
 
 #[tauri::command]
 pub fn set_master_volume(state: State<AppState>, db: f32) -> Snapshot {
+    with(&state, |s| s.touched(CtlTarget::MasterVolume));
     edit(&state, "Stereo Out Volume", Some("master-volume".into()), false, |s| s.set_master_volume(db))
 }
 
@@ -296,6 +299,7 @@ pub fn update_track(state: State<AppState>, id: Id, patch: TrackPatch) -> Snapsh
     };
     // Moves recorded as automation belong to the pass's undo step.
     let label = label.filter(|_| !with(&state, |s| s.automation_writing(id)));
+    with(&state, |s| s.touched_patch(id, &patch));
     match label {
         Some((label, field)) => edit(&state, label, Some(format!("track:{id}:{field}")), false, |s| s.update_track_linked(id, patch)),
         None => snap(&state, |s| s.update_track_linked(id, patch)),
@@ -671,6 +675,9 @@ pub fn reset_input_level(state: State<AppState>) -> R<Option<serde_json::Value>>
 #[tauri::command]
 pub fn set_eq(state: State<AppState>, track: Id, eq: ChannelEq) -> R<()> {
     with(&state, |s| {
+        if let Some(old) = s.eq_of(track) {
+            s.touched_eq(track, &old, &eq);
+        }
         s.checkpoint("Channel EQ", Some(format!("eq:{track}")), false);
         s.set_eq(track, eq);
         s.frozen_guard().map_err(|e| e.to_string())
@@ -785,6 +792,7 @@ pub fn set_send(state: State<AppState>, track: Id, slot: usize, send: Option<Tra
 /// A send knob drag; consecutive changes to one send make one undo step.
 #[tauri::command]
 pub fn set_send_level(state: State<AppState>, track: Id, slot: usize, level_db: f32) -> Snapshot {
+    with(&state, |s| s.touched(CtlTarget::Send { track, slot: slot as u8 }));
     // Moves recorded as automation belong to the pass's undo step.
     if with(&state, |s| s.automation_writing(track)) {
         return snap(&state, |s| s.set_send_level_linked(track, slot, level_db));
@@ -926,6 +934,9 @@ pub fn clear_automation(state: State<AppState>, track: Id, param: Option<AutoPar
 /// The UI grabbed or let go of a fader, knob or slider. Writing in Touch and Latch follows it.
 #[tauri::command]
 pub fn automation_touch(state: State<AppState>, track: Id, param: AutoParam, touching: bool) -> Snapshot {
+    if touching {
+        with(&state, |s| s.touched_auto(track, &param));
+    }
     snap(&state, |s| s.automation_touch(track, param, touching))
 }
 
@@ -1272,6 +1283,7 @@ pub fn list_builtin_effects() -> Vec<daw_engine::session::BuiltinInfo> {
 #[tauri::command]
 pub fn set_builtin_param(state: State<AppState>, track: Id, slot: i64, id: u32, value: f32) -> R<Snapshot> {
     let slot = slot_index(slot);
+    with(&state, |s| s.touched_slot(track, slot, id));
     if with(&state, |s| s.automation_writing(track)) {
         return try_snap(&state, |s| s.set_builtin_param(track, slot, id, value));
     }
@@ -1485,4 +1497,35 @@ pub fn marquee_delete(state: State<AppState>, tracks: Vec<Id>, start: i64, end: 
 #[tauri::command]
 pub fn marquee_copy(state: State<AppState>, tracks: Vec<Id>, start: i64, end: i64) -> Vec<(usize, Region)> {
     with(&state, |s| s.marquee_copy(&tracks, start, end))
+}
+
+// ---- Control Surfaces: controller assignments ----------------------------------------------
+
+/// The Controller Assignments window's list.
+#[tauri::command]
+pub fn controller_assignments(state: State<AppState>) -> Vec<AssignmentRow> {
+    with(&state, |s| s.controller_assignments())
+}
+
+/// Learn Assignment: the next controller moved is assigned to `target`, or (null) to the last
+/// touched parameter. Returns the parameter's name.
+#[tauri::command]
+pub fn start_learn(state: State<AppState>, target: Option<CtlTarget>) -> R<String> {
+    with(&state, |s| s.start_learn(target)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cancel_learn(state: State<AppState>) {
+    with(&state, |s| s.cancel_learn())
+}
+
+/// Changes an assignment's takeover mode and range (global settings, not an undo step).
+#[tauri::command]
+pub fn update_controller_assignment(state: State<AppState>, index: usize, mode: Takeover, min: f32, max: f32) -> R<Vec<AssignmentRow>> {
+    with(&state, |s| s.update_controller_assignment(index, mode, min, max).map(|_| s.controller_assignments())).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn delete_controller_assignment(state: State<AppState>, index: usize) -> R<Vec<AssignmentRow>> {
+    with(&state, |s| s.delete_controller_assignment(index).map(|_| s.controller_assignments())).map_err(|e| e.to_string())
 }

@@ -401,6 +401,13 @@ impl Session {
         let uids: Vec<Id> = self.controllers.keys().copied().collect();
         for uid in uids {
             let gestures = self.controllers.get_mut(&uid).map(|c| c.take_gestures()).unwrap_or_default();
+            // The last parameter moved in the editor is the one Learn Assignment learns.
+            if let Some(id) = gestures.iter().rev().find_map(|g| match g {
+                Gesture::Begin(id) | Gesture::Perform(id, _) => Some(*id),
+                Gesture::End(_) => None,
+            }) {
+                self.touched_plugin(uid, id);
+            }
             if gestures.is_empty() || !playing {
                 continue;
             }

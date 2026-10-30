@@ -860,12 +860,12 @@ external hardware.
 
 ### Controller assignments (p. 1201–1222)
 
-- [ ] Learn a controller assignment (⌘L) (p. 1203)
-- [ ] Easy view (p. 1202–1204)
+- [x] Learn a controller assignment (⌘L) (p. 1203)
+- [x] Easy view (p. 1202–1204) *(the Controller Assignments window: controller, parameter, Jump/Pickup, range, delete)*
 - [ ] Expert view: zones, modes, value scaling, feedback (p. 1204–1221)
 - [ ] OSC message paths; game controllers (p. 1207–1208, 1219)
 - [ ] Assign hardware buttons to key commands (p. 1222)
-- [ ] Write automation from external controllers (p. 643)
+- [x] Write automation from external controllers (p. 643)
 
 ### Remote control (p. 98)
 
@@ -1107,6 +1107,6 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 8. **Track alternatives and project alternatives/backups**, so engineers can try ideas safely.
 9. **Region playback parameters** (non-destructive quantize, transpose, velocity, delay) and
    **MIDI controller learn / controller assignments**, which also lays the groundwork for
-   control surfaces. *Region playback parameters are done.*
+   control surfaces. *Both are done.*
 10. **More bounce formats** (FLAC, MP3/AAC, AIFF), **export of selected tracks**, and **VCA
     faders**, to finish the mixing and delivery path.

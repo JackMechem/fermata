@@ -8,6 +8,7 @@ import { clampValue, formatValue, fromNorm, parseValue, tidy, toNorm } from "../
 import { findFxSlot } from "../../fxHost";
 import { useStore } from "../../store";
 import { openMenuAt, type MenuItem } from "../Menu";
+import { useFxLearn } from "../../learn";
 
 export { formatValue, toNorm, fromNorm, tidy, parseValue, clampValue };
 
@@ -39,6 +40,7 @@ export function FxKnob({
 }) {
   const pos = useRef(toNorm(spec, value));
   const [editing, setEditing] = useState(false);
+  const learn = useFxLearn(spec.id);
   const n = toNorm(spec, value);
   // Bipolar ranges (a gain from -24 to +24 dB) fill from the centre.
   const origin = spec.min < 0 && spec.max > 0 ? toNorm(spec, 0) : 0;
@@ -81,7 +83,7 @@ export function FxKnob({
   return (
     <div className="fx-knob" style={{ minWidth: Math.max(size + 16, 64) }}>
       <div className="fx-label">{label ?? spec.name}</div>
-      <div className="knob" style={{ width: size, height: size }} onMouseDown={down} onDoubleClick={() => onChange(spec.default)} title={`${spec.name}: ${format(spec, value)}`}>
+      <div className="knob" style={{ width: size, height: size }} onMouseDown={down} onDoubleClick={() => onChange(spec.default)} onContextMenu={learn} title={`${spec.name}: ${format(spec, value)}`}>
         <svg width={size} height={size}>
           <path d={arc(-SWEEP, SWEEP)} className="knob-ring" />
           {Math.abs(a1 - a0) > 0.5 && <path d={arc(Math.min(a0, a1), Math.max(a0, a1))} className="knob-arc" />}
@@ -117,8 +119,9 @@ export function FxKnob({
 /** An on/off button for a toggle parameter. */
 export function FxToggle({ spec, value, onChange, label }: { spec: FxParamSpec; value: number; onChange: (v: number) => void; label?: string }) {
   const on = value >= 0.5;
+  const learn = useFxLearn(spec.id);
   return (
-    <button className={"fx-toggle" + (on ? " on" : "")} onClick={() => onChange(on ? 0 : 1)} title={spec.name}>
+    <button className={"fx-toggle" + (on ? " on" : "")} onClick={() => onChange(on ? 0 : 1)} onContextMenu={learn} title={spec.name}>
       {label ?? spec.name}
     </button>
   );
@@ -128,9 +131,10 @@ export function FxToggle({ spec, value, onChange, label }: { spec: FxParamSpec; 
 export function FxChoice({ spec, value, onChange, label }: { spec: FxParamSpec; value: number; onChange: (v: number) => void; label?: string }) {
   const labels = spec.kind.type === "choice" ? spec.kind.labels : [];
   const cur = clampValue(spec, value);
+  const learn = useFxLearn(spec.id);
   if (labels.length > 4) {
     return (
-      <div className="fx-choice">
+      <div className="fx-choice" onContextMenu={learn}>
         <div className="fx-label">{label ?? spec.name}</div>
         <button className="fx-popup" onMouseDown={(e) => openMenuAt(e.currentTarget, labels.map((l, i) => ({ label: l, checked: i === cur, onClick: () => onChange(i) })))}>
           {labels[cur]}
@@ -139,7 +143,7 @@ export function FxChoice({ spec, value, onChange, label }: { spec: FxParamSpec; 
     );
   }
   return (
-    <div className="fx-choice">
+    <div className="fx-choice" onContextMenu={learn}>
       <div className="fx-label">{label ?? spec.name}</div>
       <div className="fx-segments">
         {labels.map((l, i) => (

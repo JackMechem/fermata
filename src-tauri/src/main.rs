@@ -59,6 +59,7 @@ fn main() {
     let prefs = settings::load();
     let mut session = Session::new(prefs.audio, plugins);
     session.set_prefs(prefs.prefs);
+    session.load_controller_assignments(plugin_db::config_dir().join("controller-assignments.json"));
     // `fermata path/to/Song.fermata` opens a project at launch.
     if let Some(path) = args.iter().skip(1).find(|a| a.trim_end_matches('/').ends_with(".fermata")) {
         match session.open(std::path::Path::new(path)) {
@@ -305,6 +306,11 @@ fn main() {
             commands::marquee_split,
             commands::marquee_delete,
             commands::marquee_copy,
+            commands::controller_assignments,
+            commands::start_learn,
+            commands::cancel_learn,
+            commands::update_controller_assignment,
+            commands::delete_controller_assignment,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

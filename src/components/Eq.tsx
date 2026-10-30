@@ -9,6 +9,7 @@ import { fmt } from "../keymap";
 import { CHANNEL_EQ, copyEq, eqClipboard, eqMenu, pasteEq } from "../fxHost";
 import { openMenu } from "./Menu";
 import { PresetButton } from "./fx/Presets";
+import { learnContext } from "../learn";
 
 // ---- state helpers ------------------------------------------------------------------------
 
@@ -153,10 +154,11 @@ const FINE = 0.2;
  * worked out from the start of the drag: applying each move's few pixels to an already rounded
  * value would round most of them away.
  */
-function Scrub({ text, value, onScrub, onReset, title }: { text: string; value: number; onScrub: (start: number, px: number) => void; onReset: () => void; title?: string }) {
+function Scrub({ text, value, onScrub, onReset, title, onContextMenu }: { text: string; value: number; onScrub: (start: number, px: number) => void; onReset: () => void; title?: string; onContextMenu?: (e: React.MouseEvent) => void }) {
   return (
     <div
       className="scrub"
+      onContextMenu={onContextMenu}
       title={title ?? "Drag up/down · Shift for fine · double-click to reset"}
       onMouseDown={(e) => {
         e.preventDefault();
@@ -443,6 +445,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
           // The current EQ, not this render's: bands may change while the drag runs.
           onScrub={(v0, px) => updateEq(trackId, { ...live.current.eq!, output_db: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10 })}
           onReset={() => updateEq(trackId, { ...live.current.eq!, output_db: 0 })}
+          onContextMenu={learnContext({ type: "eq_output", track: trackId })}
         />
       </div>
       <div className="eq-graph" ref={wrapRef} onMouseDown={onCanvasDown} onWheel={onWheel}>
@@ -457,6 +460,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                 className={"eq-band-toggle" + (b.on ? " on" : "")}
                 style={{ ["--band" as string]: BAND_COLORS[i] }}
                 onClick={() => setBand(i, { on: !b.on })}
+                onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "on" })}
                 title={`${BAND_NAMES[i]} on/off`}
               >
                 <BandIcon kind={b.kind} />
@@ -467,6 +471,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                 value={b.freq}
                 onScrub={(v0, px) => setBand(i, { freq: Math.round(Math.min(20000, Math.max(20, v0 * Math.pow(1.01, px))) * 10) / 10 })}
                 onReset={() => setBand(i, { freq: defaults.bands[i].freq })}
+                onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "freq" })}
               />
               {isCut ? (
                 <button
@@ -482,6 +487,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                   value={b.gain}
                   onScrub={(v0, px) => setBand(i, { gain: Math.round(Math.max(-24, Math.min(24, v0 + px * 0.1)) * 10) / 10, on: true })}
                   onReset={() => setBand(i, { gain: 0 })}
+                  onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "gain" })}
                 />
               )}
               {isCut && b.slope > 12 ? (
@@ -492,6 +498,7 @@ export function EqPanel({ track: trackId }: { track: Id }) {
                   value={b.q}
                   onScrub={(v0, px) => setBand(i, { q: Math.round(Math.min(18, Math.max(0.1, v0 * Math.pow(1.01, px))) * 100) / 100 })}
                   onReset={() => setBand(i, { q: defaults.bands[i].q })}
+                  onContextMenu={learnContext({ type: "eq", track: trackId, band: i, field: "q" })}
                 />
               )}
             </div>

@@ -6,6 +6,7 @@ import { emptySendMenu, outputLabel, outputMenu, sendLabel, sendMenu, setSendLev
 import { useStore } from "../store";
 import { dbToFader, faderToDb, formatDb } from "../time";
 import { openMenuAt } from "./Menu";
+import { learnContext } from "../learn";
 
 /** A small unipolar level knob, on the fader's taper. Shift-drag adjusts finely; double-click
  *  is 0 dB. */
@@ -74,7 +75,7 @@ function SendSlot({ track, slot, send }: { track: Track; slot: number; send: Sen
   if (!send) return <div className="slot empty send" onMouseDown={menu} title="Add a send" />;
   const name = aux ? sendLabel(aux) : "—";
   return (
-    <div className={"slot filled send" + (send.muted ? " muted" : "")}>
+    <div className={"slot filled send" + (send.muted ? " muted" : "")} onContextMenu={learnContext({ type: "send", track: track.id, slot })}>
       <span className="slot-name" onMouseDown={menu} title={`${aux ? `${name} → ${aux.name}` : name}${send.pre_fader ? " · pre fader" : ""}${send.muted ? " · muted" : ""}`}>
         {dragging ? formatDb(send.level_db) : name}
       </span>

@@ -595,6 +595,14 @@ impl PluginController {
         }
     }
 
+    /// Sets a parameter as a control surface would: moves the controller (and so the editor)
+    /// and queues the value for the processor, like an edit made in the plug-in's own editor.
+    pub fn edit_param(&self, id: u32, value: f64) {
+        let v = value.clamp(0.0, 1.0);
+        self.set_param_value(id, v);
+        let _ = self.shared._handler.edits.lock().push((id, v));
+    }
+
     /// The editor's begin/perform/end edit calls since the last call, oldest first.
     pub fn take_gestures(&mut self) -> Vec<Gesture> {
         let mut out = Vec::new();

@@ -12,6 +12,7 @@ import { onTick, useStore } from "../../store";
 import { EqPanel } from "../Eq";
 import { FxControl, FxMeter, FxSideChain, isReductionMeter } from "./common";
 import { PresetButton, type Preset } from "./Presets";
+import { FxLearnContext } from "../../learn";
 
 /** Values set from this panel within this long win over the tick's (which lag a little). */
 const LOCAL_MS = 500;
@@ -157,7 +158,10 @@ export function FxPanelContent({ uid }: { uid: Id }) {
   const Panel = FX_PANELS[info.id] ?? GenericPanel;
   return (
     <div className={"fx-body" + (at.plugin.bypass ? " bypassed" : "")}>
-      <Panel {...props} />
+      {/* Lets every control offer Learn MIDI Assignment for its parameter. */}
+      <FxLearnContext.Provider value={{ track, uid }}>
+        <Panel {...props} />
+      </FxLearnContext.Provider>
     </div>
   );
 }

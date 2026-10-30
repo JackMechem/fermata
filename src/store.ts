@@ -99,6 +99,8 @@ export interface State {
   /** Where a marquee copy starts, so Paste keeps the time before its first region; null for
    *  copied regions. */
   clipboardStart: number | null;
+  /** The Controller Assignments window (Control Surfaces). */
+  showControllerAssignments: boolean;
 }
 
 export interface MidiSelection {
@@ -151,6 +153,7 @@ let state: State = {
   tools: DEFAULT_TOOLS,
   marquee: null,
   clipboardStart: null,
+  showControllerAssignments: false,
 };
 
 const listeners = new Set<() => void>();

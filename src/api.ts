@@ -379,6 +379,10 @@ export interface Tick {
   peak_holds?: [Id, number][];
   /** Gain reduction (dB) of the strips with a built-in dynamics effect. */
   gain_reduction?: [Id, number][];
+  /** The parameter a controller assignment is being learned for (MIDI Learn). */
+  learn?: string | null;
+  /** What the learn that just finished assigned; sent once. */
+  learned?: string | null;
 }
 
 export interface DeviceInfo {

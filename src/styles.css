@@ -6834,3 +6834,74 @@ canvas.pr-cursor-line {
 .popup.tool-popup.cmd {
   margin-right: 4px;
 }
+
+/* ---- MIDI Learn: the learn banner and the Controller Assignments window ---------------------- */
+
+.learn-banner {
+  position: fixed;
+  top: 58px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 110;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 6px 6px 6px 14px;
+  border-radius: 7px;
+  background: var(--toast-bg);
+  box-shadow: var(--menu-shadow);
+  font-size: 12px;
+}
+
+.learn-banner b {
+  font-weight: 600;
+}
+
+.ctl-head,
+.ctl-row {
+  display: grid;
+  grid-template-columns: 74px 46px minmax(0, 1.1fr) minmax(0, 1.6fr) 86px 64px 64px auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.ctl-head {
+  padding: 0 16px 6px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.ctl-list {
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 4px 16px 10px;
+}
+
+.ctl-row {
+  padding: 3px 0;
+}
+
+.ctl-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ctl-controller,
+.ctl-channel {
+  font-variant-numeric: tabular-nums;
+}
+
+.ctl-port {
+  color: var(--dim);
+}
+
+/* A button has no mode or range: its note spans those three columns. */
+.ctl-row .ctl-button {
+  grid-column: span 3;
+}
+
+/* The track or plug-in isn't in this project. */
+.ctl-row.unavailable > span {
+  color: var(--faint);
+}

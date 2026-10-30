@@ -17,7 +17,7 @@ export interface KeyCommand {
   keys: string[];
 }
 
-export const KEY_GROUPS = ["Transport", "Navigation", "View", "Tracks", "Editing", "Windows"] as const;
+export const KEY_GROUPS = ["Transport", "Navigation", "View", "Tracks", "Editing", "Windows", "Control Surfaces"] as const;
 
 export const KEY_COMMANDS: KeyCommand[] = [
   { id: "play", label: "Play / Stop", group: "Transport", keys: ["Space"] },
@@ -74,6 +74,9 @@ export const KEY_COMMANDS: KeyCommand[] = [
 
   { id: "project-settings", label: "Project Settings…", group: "Windows", keys: ["Alt+P"] },
   { id: "settings-keys", label: "Key Commands…", group: "Windows", keys: ["Alt+K"] },
+
+  { id: "learn-assignment", label: "Learn Assignment for Last Touched Parameter", group: "Control Surfaces", keys: ["Mod+L"] },
+  { id: "controller-assignments", label: "Controller Assignments…", group: "Control Surfaces", keys: ["Mod+Shift+L"] },
 ];
 
 /** Accelerators of the native menu (src-tauri/src/menu.rs); they can't be changed here. */

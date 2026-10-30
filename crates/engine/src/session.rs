@@ -58,6 +58,8 @@ mod strip_meters;
 pub use strip_meters::PeakHolds;
 mod strip_settings;
 mod marquee;
+mod controllers;
+pub use controllers::{controller_label, AssignmentRow};
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -108,6 +110,10 @@ pub struct Tick {
     pub peak_holds: Vec<(Id, f32)>,
     /// Gain reduction (positive dB) of the strips with a built-in dynamics effect.
     pub gain_reduction: Vec<(Id, f32)>,
+    /// The parameter a controller assignment is being learned for (Learn Assignment).
+    pub learn: Option<String>,
+    /// What the learn that just finished assigned; shown once.
+    pub learned: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -197,6 +203,8 @@ pub struct Session {
     captured_states: HashMap<Id, String>,
     /// The clip indicators' held peaks (see `session/strip_meters.rs`).
     peak_holds: PeakHolds,
+    /// Controller assignments (see `session/controllers.rs`).
+    controls: controllers::Controls,
 }
 
 /// A project snapshot taken before an edit.
@@ -327,6 +335,7 @@ impl Session {
             unsaved_journals: Vec::new(),
             captured_states: HashMap::new(),
             peak_holds: PeakHolds::default(),
+            controls: Default::default(),
         };
         s.restart_audio();
         s.sync_globals();
@@ -2483,7 +2492,8 @@ impl Session {
             drop(g);
         }
         let written = self.auto_idle();
-        before != self.open_editors().len() || written || latency_changed
+        let controlled = self.controller_idle();
+        before != self.open_editors().len() || written || latency_changed || controlled
     }
 
     /// Plays a MIDI message on the current MIDI target track (the selected instrument track).
@@ -2549,6 +2559,8 @@ impl Session {
             fx: self.fx_ticks(),
             peak_holds,
             gain_reduction: self.gain_reductions(),
+            learn: self.learning(),
+            learned: self.take_learned(),
         }
     }
 

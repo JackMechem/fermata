@@ -230,7 +230,7 @@ status, the audio devices, and the number of MIDI inputs.
 
 | Menu | Items |
 |---|---|
-| Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Quit Fermata |
+| Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Select All, Delete |
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
@@ -1553,6 +1553,64 @@ tracks and on monitored audio tracks, and those tracks skip their compensation d
 audio track that is recording always skips its own compensation delay. Bounces and exports
 ignore Low Latency Mode.
 
+### Controller assignments (MIDI Learn)
+
+A knob, fader or button on a MIDI controller can drive a mixer control, a plug-in parameter or
+a transport button, as with Logic's Control Surfaces › Learn Assignment.
+
+**Learning an assignment:**
+
+1. Move the control in Fermata: a fader, pan knob, send knob, Mute, Solo or Record button, a
+   Channel EQ setting, a built-in effect's knob, or a parameter in a plug-in's own window.
+2. Press **Ctrl+L** (Fermata › Control Surfaces › Learn Assignment for Last Touched
+   Parameter). A banner says "Move a controller to assign it to …".
+3. Move a knob or fader (or press a button) on your controller. The banner closes and a message
+   names the assignment. **Cancel** or Esc stops learning without assigning anything; Ctrl+L
+   again does too.
+
+Or right-click the control and choose **Learn MIDI Assignment**. That works on the channel
+strip's fader, pan knob and send knobs (for Mute, Solo and Record, click the button and press
+Ctrl+L), on the Channel EQ
+editor's band buttons, frequency, gain, Q and Output fields, and on every control of a
+built-in effect. For a VST3 plug-in, show the parameter on an automation lane and right-click
+the lane's parameter pop-up in the track header, or move it in the plug-in's window and press
+Ctrl+L.
+
+Control changes (CC 0–119) and pitch bend can be learned, on any MIDI input and channel. A
+controller drives one parameter: learning it again moves it to the new one.
+
+**How assignments behave:**
+
+- A controller moves its parameter as the mouse would. Levels follow the fader's taper, so the
+  controller's travel matches the fader's. Each move is an undo step (consecutive moves of one
+  control make one step), except VST3 parameters, whose own edits aren't undo steps either.
+- While playing in Touch, Latch or Write, controller moves are written as automation. The
+  controller holds the parameter while it moves and lets go half a second after it stops,
+  which ends a Touch pass.
+- Mute, Solo, Record Enable, a Channel EQ band's on/off and the transport buttons are
+  **buttons**: a press (a value above 63) toggles them and the release does nothing, so
+  momentary buttons work.
+- Messages from an assigned controller are taken: they don't also play the selected instrument
+  or get recorded, as in Logic. They still show in Settings › MIDI › Monitor.
+- Assignments are global settings, kept when you quit and used in every project. They refer to
+  tracks and plug-ins by their position in the project's numbering, so an assignment learned
+  in one project acts on the same-numbered track in another.
+
+**The Controller Assignments window** (Fermata › Control Surfaces › Controller Assignments…,
+Ctrl+Shift+L) lists every assignment: the controller (CC number or Pitch Bend, channel and
+input port) and the parameter. For each one:
+
+- **Mode**: **Jump** (default) moves the parameter to the controller's value at once.
+  **Pickup** ignores the controller until it reaches or passes the parameter's current value,
+  so the value doesn't jump; once caught, it follows. Moving the parameter some other way
+  (the mouse, automation, undo) lets go of it again.
+- **Min %** and **Max %**: the stretch of the parameter's travel the controller sweeps. Min
+  above Max turns the controller round.
+- **Delete** removes it; that controller plays the instrument again.
+
+An assignment whose track or plug-in isn't in the open project is greyed and does nothing.
+**Learn Transport Button…** assigns a button to Play / Stop, Record or Cycle.
+
 ---
 
 ## 13. Automation
@@ -1985,6 +2043,13 @@ shown.
 |---|---|
 | Alt+P | Project Settings… |
 | Alt+K | Key Commands… |
+
+### Control Surfaces
+
+| Key | Command |
+|---|---|
+| Ctrl+L | Learn Assignment for Last Touched Parameter (again: cancel) |
+| Ctrl+Shift+L | Controller Assignments… |
 
 ### Menu bar shortcuts (fixed)
 

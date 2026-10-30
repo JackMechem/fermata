@@ -18,6 +18,7 @@ import { fxKey, usePanelShown } from "../fxDockState";
 import { clipResetTargets, isClip, peakText, reducesGain } from "../stripMeters";
 import { resetClipIndicators, stripSettingMenu } from "../stripSettings";
 import { fmt } from "../keymap";
+import { stripLearnMenu } from "../learn";
 
 const PAN = { type: "pan" } as const;
 
@@ -192,7 +193,7 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   };
 
   return (
-    <div className={"strip" + (selected ? " selected" : "")} onMouseDown={() => track && !selected && api.selectTrack(track.id)}>
+    <div className={"strip" + (selected ? " selected" : "")} onMouseDown={() => track && !selected && api.selectTrack(track.id)} onContextMenu={(e) => stripLearnMenu(e, isMaster ? null : id)}>
       <div className="strip-section">
         {folder ? (
           <div className="slot static" />

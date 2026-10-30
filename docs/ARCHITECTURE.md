@@ -65,7 +65,7 @@ flowchart LR
 | **`recorder`** | `recorder.rs` | Every 10 ms, drains the ring buffer of each armed track into its WAV file and an in-memory copy, and keeps a peak preview for the UI. | Touch the engine or the project. |
 | **`ui-tick`** | `src-tauri/src/main.rs` | Every 33 ms: locks the session, builds a `Tick` (playhead, meters, input levels, recording previews, CPU, latency, analyzer spectrum, warnings, meters of open built-in effect panels, the clip indicators' held peaks, each strip's gain reduction) and emits it as the `tick` event. | Edit anything. |
 | **MIDI refresh** | `main.rs` | Every 3 s: `Session::refresh_midi`, so devices plugged in later get connected. | |
-| **MIDI input callbacks** | midir, in `midi_io.rs` (one per port) | Drop system messages, apply the velocity curve, push into the `live_midi` ring the engine reads, and log the message for Settings › MIDI. | |
+| **MIDI input callbacks** | midir, in `midi_io.rs` (one per port) | Drop system messages, take assigned controllers (all of them while learning) into a queue for `Session::idle` (controller assignments), apply the velocity curve, push the rest into the `live_midi` ring the engine reads, and log the message for Settings › MIDI. | |
 | **Async command workers** | Tauri's async runtime (`#[tauri::command(async)]`) | Offline renders (bounce, export, Bounce in Place, Freeze), plug-in rescans, waveform and transient requests, device lists, recent projects, the input level check, folder listings. Renders hold the session lock and the engine lock for their whole length; the parts that edit tracks or plug-ins are handed back to the main thread with `run_on_main_thread`. | Touch plug-in controllers. |
 | **Autosave writer** | `main.rs::autosave` | Writes an `AutosaveJob` (already serialized on the main thread) to disk, atomically. | |
 | **Plug-in scan subprocess** | `plugin_db.rs` | `fermata --scan-vst3 <bundle>` loads one bundle in a child process and prints its descriptors, so a crashing plug-in can't take the app down. Four scan worker threads start the children and wait for them (at first launch before the window opens, otherwise from Rescan). | Load plug-ins in the app's own process. |
@@ -608,6 +608,7 @@ The config folder is `$XDG_CONFIG_HOME/fermata`, else `%APPDATA%\fermata`, else
 | `plugin-scan.json` | `plugin_db.rs` | The last scan's report (bundles, plug-ins, failures with reasons), for Settings › Plug-ins. |
 | `presets/<effect>/<name>.json` | `presets.rs` | User presets of the built-in effects and the Channel EQ (see [Presets](#presets)). |
 | `channel-strips/<name>.json` | `strip_settings.rs` | Saved channel strip settings (see [Channel strip settings](#channel-strip-settings)). |
+| `controller-assignments.json` | `session/controllers.rs` | MIDI Learn's controller assignments: controller (port without ALSA's client:port numbers, channel, CC number or pitch bend), target (track id and parameter, plug-in instance id with its plug-in id, Channel EQ setting, Stereo Out or transport), mode and range. Global, like Logic's; written atomically. |
 
 Interface-only state lives in the webview's `localStorage`:
 
@@ -932,7 +933,7 @@ drawings. The common pattern:
   `components/Menu.tsx` (`MenuHost`); `src/ops.ts` builds the track, region and lane menus.
 - Dialogs are chosen by `state.dialog` (`new-tracks`, `settings`, `chooser`, `bounce`,
   `bounce-in-place`, `project-settings`, `recovery`), plus separately flagged sheets (group
-  settings, Marker List, Channel EQ, Musical Typing).
+  settings, Marker List, Channel EQ, Musical Typing, Controller Assignments).
 - Native file dialogs and confirmations use `@tauri-apps/plugin-dialog` (`src/files.ts`).
 
 ### Detached windows
@@ -1161,6 +1162,7 @@ it like any plug-in.
 | `session/markers.rs` | Marker edits and the Autopunch range. |
 | `session/takes.rs` | Recording into take folders, Autopunch trimming, comp edits, Flatten, Merge, Pack, Unpack. |
 | `session/auto_write.rs` | Automation writing (Touch, Latch, Write), plug-in editors following automation, lane edit commands. |
+| `session/controllers.rs` | Controller assignments: the last touched parameter, learning, the saved list, applying controller moves through the normal edit paths (undo steps, automation touches that let go 0.5 s after the controller stops). Run from `idle`. |
 | `session/builtin.rs` | Built-in effects in slots: instantiation, parameters, side-chains, meters for open panels. |
 | `session/presets.rs` | Copy and paste of plug-ins and Channel EQ; loading and saving presets. |
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
@@ -1177,10 +1179,11 @@ it like any plug-in.
 | `audio_io.rs` | Device enumeration and the duplex stream that drives the engine. |
 | `denormals.rs` | `NoDenormals`: flush-to-zero on the audio thread (x86_64 and aarch64). |
 | `recorder.rs` | The recording disk-writer thread and live previews. |
-| `midi_io.rs` | MIDI inputs (midir), velocity curves, the MIDI activity log. |
+| `midi_io.rs` | MIDI inputs (midir), velocity curves, the MIDI activity log, assigned controllers taken off the live path (`inject_from` feeds a message in as a port would, for tests). |
 | `plugin_db.rs` | Out-of-process plug-in scanning, the cache, the scan report, the config folder. |
 | `prefs.rs` | `Prefs` (Settings) and the metronome and bit-depth types saved in projects. |
 | `clip.rs` | Audio held in memory and the waveform overview. |
+| `controllers.rs` | Controller assignments, the pure part: targets, reading CC and pitch bend, port names without ALSA's numbers, the fader taper, ranges, Jump and Pickup. |
 | `decode.rs` | Decoding audio files in any supported format, resampling, WAV writing. |
 | `audio_file.rs` (+ `audio_file/`) | Writing bounces: `AudioFormat` (WAV, AIFF, FLAC via `flacenc`), `BitDepth`, the shared dithering `Quantizer`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
@@ -1231,6 +1234,8 @@ it like any plug-in.
 | `time.ts` | Samples to bars/beats and back. |
 | `transport.ts` | Cycle, Autopunch and locate helpers. |
 | `keymap.ts` | `KEY_COMMANDS`, `MENU_SHORTCUTS`, key normalisation. |
+| `controllers.ts` | Controller assignment types and labels, strip and lane targets; pure, tested. |
+| `learn.ts` | MIDI Learn: Learn Assignment, the right-click Learn menus, `FxLearnContext` for effect panels. |
 | `keyFormat.ts` | Shortcuts written the way each platform does ("Ctrl+Shift+Z", "⇧⌘Z"); pure, tested. |
 | `tempo.ts` | The UI's mirror of `tempo.rs`, cached per snapshot. |
 | `prefs.ts` | Mirror of the settings, startup behaviour (`runStartup`), recovery offers, nudge sizes. |
@@ -1302,6 +1307,7 @@ it like any plug-in.
 | `ProjectChooser.tsx` | Project Chooser. |
 | `Bounce.tsx` | Bounce, Export and Bounce in Place dialogs. |
 | `MarkerList.tsx` | Marker List. |
+| `ControllerAssignments.tsx` | The Controller Assignments window and the learn banner. |
 | `GlobalTracks.tsx` | The Tempo and Signature global tracks. |
 | `Overview.tsx` | The overview strip under the tracks (in place of the horizontal scroll bar): cached region layer, visible-area box, playhead, scroll and zoom drags. |
 | `fx/FxWindow.tsx` | Floating panel windows for built-in effects; the generic panel. |

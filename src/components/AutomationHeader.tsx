@@ -3,6 +3,8 @@ import { MODE_LABELS, modeMenu, paramLabel, paramMenu, VOLUME } from "../automat
 import { Icon } from "../icons";
 import { useStore } from "../store";
 import { openMenuAt } from "./Menu";
+import { autoParamTarget } from "../controllers";
+import { learnContext } from "../learn";
 
 /** The automation mode pop-up: green in Read, orange-red in the writing modes, as in Logic. */
 export function AutoModeButton({ track, compact }: { track: Track; compact?: boolean }) {
@@ -29,6 +31,7 @@ export function AutomationControls({ track }: { track: Track }) {
       <button
         className="popup auto-param"
         title="Parameter shown on the lane"
+        onContextMenu={learnContext(autoParamTarget(track.id, param))}
         onMouseDown={async (e) => {
           const el = e.currentTarget;
           openMenuAt(el, await paramMenu(track));

@@ -24,6 +24,13 @@ All notable changes to Fermata are recorded here. The format follows
 - **Marquee selection:** a time range across tracks (the Ctrl-click tool by default). Delete,
   Cut, Copy and Paste act on the part of the regions inside it, and a Pointer click inside
   splits the regions at its edges.
+- **MIDI Learn and controller assignments** (Fermata › Control Surfaces): Learn Assignment
+  for Last Touched Parameter (Ctrl+L) or a control's right-click Learn MIDI Assignment assigns
+  the next control change or pitch bend to a fader, pan, send, Mute, Solo, Record, Stereo Out,
+  Channel EQ setting, built-in effect or VST3 parameter, or a transport button. Assigned
+  controllers move their parameter like the mouse (written as automation in Touch, Latch and
+  Write) and don't reach the instrument. The Controller Assignments window (Ctrl+Shift+L) lists,
+  edits (Jump or Pickup, range) and deletes them; they're saved with the settings.
 - **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
   24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
   format is remembered with the other bounce options.

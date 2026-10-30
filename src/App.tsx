@@ -48,6 +48,8 @@ import { installDetach, receiveSnapshot, toggleDetached } from "./detach";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { moveAutomationAnswer } from "./moveAutomation";
 import { resetClipIndicators } from "./stripSettings";
+import { learnLastTouched, openControllerAssignments } from "./learn";
+import { ControllerAssignmentsSheet, LearnBanner } from "./components/ControllerAssignments";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -256,6 +258,12 @@ function handleMenu(id: string) {
     case "marker-list":
       openMarkerList();
       break;
+    case "learn-assignment":
+      learnLastTouched();
+      break;
+    case "controller-assignments":
+      openControllerAssignments();
+      break;
     case "pack-takes":
       packTakeFolder();
       break;
@@ -375,6 +383,8 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "marker-list": () => handleMenu("marker-list"),
   "pack-takes": () => handleMenu("pack-takes"),
   "tool-menu": openToolMenu,
+  "learn-assignment": () => handleMenu("learn-assignment"),
+  "controller-assignments": () => handleMenu("controller-assignments"),
 };
 
 function nudgeRegions(dir: number) {
@@ -468,6 +478,7 @@ export default function App() {
   const showTyping = useStore((s) => s.showTyping);
   const groupSheet = useStore((s) => s.groupSheet);
   const showMarkerList = useStore((s) => s.showMarkerList);
+  const showControllerAssignments = useStore((s) => s.showControllerAssignments);
   const panes = useStore((s) => s.paneSizes);
   useEffect(loadPaneSizes, []);
   useEffect(() => {
@@ -568,6 +579,8 @@ export default function App() {
       {s.dialog === "recovery" && <RecoverySheet />}
       {groupSheet !== null && <GroupSheet />}
       {showMarkerList && <MarkerList />}
+      {showControllerAssignments && <ControllerAssignmentsSheet />}
+      <LearnBanner />
       <FxWindows />
       {showTyping && <MusicalTyping />}
       <MenuHost />

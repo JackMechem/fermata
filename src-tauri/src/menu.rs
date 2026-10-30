@@ -18,12 +18,18 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         website: Some("https://github.com/JackMechem/fermata".into()),
         ..Default::default()
     };
+    // Logic Pro › Control Surfaces. The keys live in the keymap.
+    let control_surfaces = SubmenuBuilder::new(app, "Control Surfaces")
+        .item(&item("learn-assignment", "Learn Assignment for Last Touched Parameter", None)?)
+        .item(&item("controller-assignments", "Controller Assignments…", None)?)
+        .build()?;
     let app_menu = SubmenuBuilder::new(app, "Fermata")
         .item(&PredefinedMenuItem::about(app, Some("About Fermata"), Some(about))?)
         .separator()
         .item(&item("settings", "Settings…", Some("CmdOrCtrl+,"))?)
         .item(&item("settings-appearance", "Appearance…", None)?)
         .item(&item("settings-keys", "Key Commands…", None)?)
+        .item(&control_surfaces)
         .separator()
         .item(&PredefinedMenuItem::quit(app, Some("Quit Fermata"))?)
         .build()?;
