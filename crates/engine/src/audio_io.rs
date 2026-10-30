@@ -438,7 +438,19 @@ fn start_null(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>
     (Some(AudioIo { stop: Some(stop_tx), thread: Some(thread) }), status)
 }
 
+/// cpal's real-time promotion sets the process's soft RLIMIT_RTTIME to a single buffer (10.7 ms at
+/// 512 samples), and the default action for the SIGXCPU it raises ends the process with a core
+/// dump. One slow block must only cost a dropout, so ignore it. The 200 ms hard limit still holds,
+/// and the engine sheds load well before that (`OVERLOAD_SECS`).
+fn survive_slow_blocks() {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        libc::signal(libc::SIGXCPU, libc::SIG_IGN);
+    }
+}
+
 pub fn start(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>, AudioStatus) {
+    survive_slow_blocks();
     if cfg.output.as_deref() == Some(NULL_OUTPUT) && host_by_name("ALSA").is_none() {
         return start_null(engine, cfg);
     }
@@ -516,5 +528,16 @@ pub fn start(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>,
     } else {
         let _ = thread.join();
         (None, status)
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    #[test]
+    fn sigxcpu_does_not_end_the_process() {
+        super::survive_slow_blocks();
+        let mut old: libc::sigaction = unsafe { std::mem::zeroed() };
+        assert_eq!(unsafe { libc::sigaction(libc::SIGXCPU, std::ptr::null(), &mut old) }, 0);
+        assert_eq!(old.sa_sigaction, libc::SIG_IGN);
     }
 }

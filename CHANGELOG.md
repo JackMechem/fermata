@@ -6,6 +6,11 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- On Linux, one audio block taking longer than the buffer's length ended the app with SIGXCPU.
+  Opening a heavy plug-in's editor could do it. It's now a dropout at worst.
+
 ## [0.1.0-alpha.3] - 2026-10-30
 
 ### Fixed

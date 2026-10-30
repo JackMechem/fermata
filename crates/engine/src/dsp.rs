@@ -144,8 +144,9 @@ fn check_output(status: &EngineStatus, ins: &mut InsertDsp, l: &mut [f32], r: &m
     }
 }
 
-/// How long the callbacks may run late back to back before the engine sheds load. Past about
-/// 200 ms the kernel kills a real-time thread that never sleeps (RLIMIT_RTTIME).
+/// How long the callbacks may run late back to back before the engine sheds load. Past 200 ms
+/// the kernel kills a real-time thread that never sleeps (RLIMIT_RTTIME's hard limit; its soft
+/// limit's SIGXCPU is ignored, see `audio_io::survive_slow_blocks`).
 const OVERLOAD_SECS: f64 = 0.06;
 /// How long it then outputs silence without processing, so the thread catches up and sleeps.
 const SHED_SECS: f64 = 0.25;

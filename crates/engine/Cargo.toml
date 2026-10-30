@@ -28,3 +28,4 @@ realfft = "3.5"
 # the audio thread (via rtkit over D-Bus).
 [target.'cfg(target_os = "linux")'.dependencies]
 cpal = { version = "0.18", features = ["pipewire", "pulseaudio", "jack", "realtime-dbus"] }
+libc = "0.2"

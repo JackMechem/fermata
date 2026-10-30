@@ -804,6 +804,7 @@ dependencies = [
  "cpal",
  "flacenc",
  "hound",
+ "libc",
  "log",
  "midir",
  "parking_lot",
