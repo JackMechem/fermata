@@ -81,6 +81,8 @@ Goal: clean, fast audio editing and comping without workarounds.
 - [x] Several comps per take folder; MIDI cycle recording into take folders
 - [x] Move automation with regions
 - [x] Trim AAC/M4A encoder delay exactly on import
+- [x] Logic's arranging commands: select by criteria, section edits between the locators, Trim,
+      Remove Gaps, Paste Replace, Strip Silence
 
 ## Stage 4: MIDI and control
 

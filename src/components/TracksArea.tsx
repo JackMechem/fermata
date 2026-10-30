@@ -22,6 +22,7 @@ import { ToolPopups } from "./TrackTools";
 import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste } from "../trackTools";
 import { showUsedAutomation } from "../automation";
 import { zeroCrossingsItem } from "../zeroCrossings";
+import { arrangeEditItems, arrangeFunctionItems, pasteItems } from "../arrangeCmds";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 /** Logic's Drag pop-up; only Overlap and X-Fade so far. */
@@ -48,6 +49,7 @@ export function editMenu(): MenuItem[] {
     { label: "Cut", hint: keyHint("cut"), disabled: !sel.length && !marquee, onClick: () => marqueeCut() || ops.cutRegions() },
     { label: "Copy", hint: keyHint("copy"), disabled: !sel.length && !marquee, onClick: () => marqueeCopy() || ops.copyRegions() },
     { label: "Paste", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => marqueePaste() || ops.pasteRegions() },
+    ...pasteItems(),
     { label: "Duplicate", hint: fmt("Mod+D"), onClick: ops.duplicate },
     { label: "Repeat", disabled: !sel.length, children: [1, 2, 3, 4, 8, 16].map((n) => ({ label: n === 1 ? "Once" : `${n} Times`, onClick: () => ops.repeatRegions(n) })) },
     { separator: true },
@@ -56,6 +58,7 @@ export function editMenu(): MenuItem[] {
     { label: "Loop Regions", hint: keyHint("loop"), disabled: !sel.length, checked: regs.length > 0 && regs.every(isLooped), onClick: () => ops.toggleLoop() },
     { label: "Convert Loops to Real Copies", disabled: !regs.some(isLooped), onClick: () => ops.convertLoops() },
     { label: "Set Locators by Regions", hint: keyHint("set-locators"), disabled: !sel.length, onClick: () => ops.setLocatorsByRegions() },
+    ...arrangeEditItems(),
     { separator: true },
     zeroCrossingsItem(),
     { separator: true },
@@ -90,6 +93,8 @@ export function TracksArea() {
     { label: "Import Audio File…", hint: fmt("Mod+Shift+I"), onClick: importAudioDialog },
     { label: "Import MIDI File…", onClick: importMidiDialog },
     { label: "Export Selection as MIDI File…", onClick: exportSelectionMidi },
+    { separator: true },
+    ...arrangeFunctionItems(),
     { separator: true },
     { label: "Show Output Track", checked: getState().showOutput, onClick: () => setState({ showOutput: !getState().showOutput }) },
     { label: "Hide Track", hint: keyHint("hide-tracks"), onClick: () => ops.hideTracks() },

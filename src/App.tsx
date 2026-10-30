@@ -59,6 +59,8 @@ import { newAlternative, revertToBackup, revertToSaved, saveAsTemplate, switchAl
 import { deleteTrackAlternative, newTrackAlternative, renameTrackAlternative, trackForAlternatives } from "./trackAlternatives";
 import { NameSheetHost } from "./components/NameSheet";
 import { AlternativesSheet } from "./components/AlternativesSheet";
+import { ARRANGE_COMMANDS, runArrangeCommand } from "./arrangeCmds";
+import { StripSilenceHost } from "./components/StripSilence";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -86,6 +88,7 @@ function handleMenu(id: string) {
   // Edit commands act on the notes while the Piano Roll has focus.
   if (pianoRollMenu(id)) return;
   if (eventListMenu(id)) return;
+  if (runArrangeCommand(id)) return;
   switch (id) {
     case "new":
       setState({ dialog: "chooser", chooserTab: "new" });
@@ -442,6 +445,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "learn-assignment": () => handleMenu("learn-assignment"),
   "controller-assignments": () => handleMenu("controller-assignments"),
   "step-input": () => handleMenu("step-input"),
+  ...ARRANGE_COMMANDS,
 };
 
 function nudgeRegions(dir: number) {
@@ -655,6 +659,7 @@ export default function App() {
       {showStepInput && <StepInput />}
       <MenuHost />
       <NameSheetHost />
+      <StripSilenceHost />
       <Toast />
     </div>
   );

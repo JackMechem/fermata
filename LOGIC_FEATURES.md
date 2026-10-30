@@ -400,40 +400,40 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Arranging: advanced editing (p. 288–332)
 
-- [~] Marquee selection; marquee ruler (p. 301–302). *Delete, Cut, Copy, Paste and the Pointer click; no marquee ruler, no playback of the marquee range.*
+- [~] Marquee selection; marquee ruler (p. 301–302). *Delete, Cut, Copy, Paste, the Pointer click, the section edits and Crop; no marquee ruler, no playback of the marquee range.*
 - [~] Split at the marquee or locators (p. 320). *At the marquee, by a Pointer click inside it.*
 - [x] Rubber-band region selection in the Tracks area (p. 299)
-- [ ] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300)
+- [x] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300). *Also All Following (of the same track) and Invert Selection.*
 - [x] Drag modes (p. 295): Overlap, No Overlap, X-Fade, Shuffle R and Shuffle L.
 - [ ] Alignment guides (p. 290)
 - [ ] Full snap modes and relative snap (p. 290–292)
 - [ ] Horizontal auto zoom (p. 292)
 - [ ] Scrubbing (p. 296)
 - [~] Waveform vertical zoom (p. 297). *In the Audio Track Editor only.*
-- [ ] Paste at the original position; Paste Replace (p. 303)
-- [ ] Move to playhead (pickup clock) (p. 305)
-- [ ] Move to recorded position (p. 305)
+- [x] Paste at the original position; Paste Replace (p. 303)
+- [x] Move to playhead (pickup clock) (p. 305)
+- [ ] Move to recorded position (p. 305). *Regions don't keep their recorded position yet.*
 - [ ] Slip and rotate by the nudge value (p. 306)
 - [ ] Nudge value in ticks, frames and samples (p. 306)
-- [ ] Insert silence, cut, insert or repeat a section between the locators across all tracks (p. 307–310)
-- [ ] Remove gaps between regions (p. 308)
+- [x] Insert silence, cut, insert or repeat a section between the locators across all tracks (p. 307–310). *Or within the marquee on its tracks. The tempo and signature tracks stay put, as with the Arrangement track.*
+- [x] Remove gaps between regions (p. 308)
 - [ ] Region anchor / shift playback position (p. 311)
 - [ ] Convert repetitions to loops (p. 313, 328)
 - [ ] Resize adjacent regions together (junction) (p. 314)
-- [ ] Resize to the same length or to the playhead (p. 314)
-- [ ] Remove overlaps, trim to the next region, fill within locators (p. 315)
+- [x] Resize to the same length or to the playhead (p. 314)
+- [x] Remove overlaps, trim to the next region, fill within locators (p. 315)
 - [ ] Solo regions; lock solo status (p. 316–317)
 - [ ] Time-stretch MIDI regions (p. 317)
 - [ ] Split into equal portions (p. 320)
 - [ ] Demix MIDI by channel or note pitch (p. 321–322)
-- [ ] Join per track (p. 323)
+- [x] Join per track (p. 323)
 - [~] Mixdown options for joined audio, with crossfades (p. 324). *Join mixes through the playback path, so crossfades are kept; no options.*
 - [ ] MIDI aliases (p. 326–328)
-- [ ] Name regions by track, tracks by region, colour tracks by region and the reverse (key commands)
-- [ ] Delete and shuffle the following regions (p. 332)
-- [ ] Crop regions outside the locators or marquee (key commands)
+- [x] Name regions by track, tracks by region, colour tracks by region and the reverse (key commands)
+- [x] Delete and shuffle the following regions (p. 332)
+- [x] Crop regions outside the locators or marquee (key commands)
 - [ ] Folders: pack MIDI regions into a folder region, unpack (p. 358–360)
-- [ ] Remove Silence (strip silence) (p. 355–357)
+- [x] Remove Silence (strip silence) (p. 355–357). *Threshold, minimum time, pre-attack and post-release, with a preview; no Search Zero Crossings.*
 
 ### Fades and crossfades (p. 348–353)
 

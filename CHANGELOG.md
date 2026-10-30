@@ -31,6 +31,19 @@ All notable changes to Fermata are recorded here. The format follows
 - **Delay compensation changes glide:** inserting or removing a latent plug-in, changing a
   plug-in's latency or switching Low Latency Mode while playing now crossfades each compensated
   path (track outputs, sends and auxes) to its new delay over 15 ms instead of clicking.
+- **Arranging commands** from Logic's Edit menu (also in the Tracks area's Edit and Functions
+  menus, with Logic's keys where free): **Select** All Following (Shift+F), Inside Locators,
+  Muted, Overlapped, Same Colored, Equal or Similar Regions, Invert Selection (Shift+I);
+  **Section Between Locators**: Insert Silence, Cut Section, Repeat Section and Insert Cut
+  Section across every track (regions cut at the locators, automation, markers and arrangement
+  sections move with their time), or within the marquee; **Trim**: region start or end to the
+  playhead, end to the next region, Fill Within Locators, Remove Overlaps, Resize to Same
+  Length, Crop Outside Locators or Marquee; **Move Region to Playhead** (;), Remove Gaps, Delete
+  and Shuffle, Paste at Original Position, Paste Replace, Join Regions per Track, and naming or
+  colouring regions by their track and tracks by their region.
+- **Strip Silence** (Edit › Strip Silence…): splits audio regions around the parts above a
+  threshold, with Logic's minimum time, pre-attack and post-release settings and a preview of
+  the cuts on the region's waveform.
 - **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
   fader offsets the level of every strip assigned to it without moving their faders (an
   outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be

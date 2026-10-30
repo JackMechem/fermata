@@ -49,6 +49,7 @@ CHECKS=(
   "comping_check dir"
   "pdc_glide_check dir"
   "linphase_check dir"
+  "arrange_cmds_check dir"
 )
 # A check that hangs (a transport that never stops, say) fails instead of stalling CI.
 TIMEOUT=${HEADLESS_CHECK_TIMEOUT:-600}

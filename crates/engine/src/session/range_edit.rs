@@ -241,7 +241,7 @@ impl Session {
     /// The clip's audio, shared, so it can be analysed without holding the session.
     /// Range edits work on real regions: looping ones among `ids` become real copies first (as
     /// Split does). Returns `ids` plus the copies.
-    fn unloop(&mut self, ids: &[Id]) -> Vec<Id> {
+    pub(super) fn unloop(&mut self, ids: &[Id]) -> Vec<Id> {
         let looped: Vec<Id> = ids.iter().copied().filter(|id| self.find_region(*id).is_some_and(|(t, i)| self.project.track(t).unwrap().regions[i].is_looped())).collect();
         let mut all = ids.to_vec();
         if !looped.is_empty() {

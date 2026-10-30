@@ -1311,6 +1311,7 @@ it like any plug-in.
 | `session/bounce.rs` | Bounce, Export All (or Selected) Tracks, Export Region, Bounce in Place (render and place), normalize. |
 | `session/range_edit.rs` | Audio Track Editor range edits (`RangeEdit`) and multi-point splits; clip info. |
 | `session/marquee.rs` | The Tracks area's marquee: split, delete (in the drag mode) and copy the parts of regions in a time range across tracks. |
+| `session/arrange_cmds.rs` | Logic's arranging commands: section edits between the locators or in the marquee (a time map applied to regions, automation, markers and arrangement sections, as `session/arrangement.rs` does), Insert Cut Section, the Trim commands, Remove Gaps, Delete and Shuffle, Paste Replace, Move to Playhead, Strip Silence, names and colours between tracks and regions. |
 | `session/options.rs` | Applying `Prefs`, recording folder, default fades, overlapping-recording placement, MIDI merge, project options, nudge, autosave and recovery. |
 | `session/midi_content.rs` | `set_midi_content` (Piano Roll edits) and Standard MIDI File import/export. |
 | `session/pdc.rs` | Plug-in latency, the compensation solver, the PDC report. |
@@ -1339,6 +1340,8 @@ it like any plug-in.
 | `session/patterns.rs` | Pattern regions: create, `set_pattern`, convert to and from MIDI regions, realizing them for `regions_dsp`. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
 | `arrangement.rs` | The Arrangement track's arithmetic: tiling sections and the time maps (`Piece`, `Plan`) for moving, copying and deleting them; automation through a time map. Pure. |
+| `arrange_cmds.rs` | The arranging commands' arithmetic: section edits as time maps, edges and sections through them, Remove Gaps and Remove Overlaps on a lane. Pure. |
+| `strip_silence.rs` | Strip Silence: the parts of a stretch of audio above a threshold, with minimum silence, pre-attack and post-release. Pure. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |
 | `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
@@ -1418,6 +1421,7 @@ it like any plug-in.
 | `takes.ts` | Take folders in the tracks area: take rows, comp drawing, swipes, the take folder menu. |
 | `tools.ts`, `marquee.ts` | Tracks-area tools (list, Tool menu keys, Scissors and Fade tool geometry) and the marquee's geometry; pure. |
 | `trackTools.ts` | The tools at work: the Tool menu (T), presses with each tool, the marquee's commands, tool cursors and overlay drawing. |
+| `arrangeCmds.ts`, `regionSelect.ts` | The arranging commands (Edit › Select, Section Between Locators, Trim, Move, Paste Replace…) by menu and key-command id, and their menus; `regionSelect.ts` holds the selection criteria (pure). `components/StripSilence.tsx` is the Strip Silence sheet. |
 | `markers.ts` | The marker lane (bars over each marker's length, selection, length drags) and marker commands. |
 | `arrangement.ts` | The Arrangement track's names, colours, drop slots and resize preview; pure. `components/ArrangementTrack.tsx` draws the lane (in `GlobalTracks`) and handles its menus and drags. |
 | `freeze.ts` | Freeze and Unfreeze from the UI. |

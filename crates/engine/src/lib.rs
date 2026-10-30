@@ -4,6 +4,7 @@ pub mod audio_file;
 pub mod audio_io;
 pub mod auto_move;
 pub mod arrangement;
+pub mod arrange_cmds;
 pub mod automation;
 pub mod clip;
 pub mod controllers;
@@ -26,6 +27,7 @@ pub mod region_params;
 pub mod session;
 pub mod smf;
 pub mod strip_settings;
+pub mod strip_silence;
 pub mod synth;
 #[cfg(target_os = "linux")]
 pub mod sysvol;

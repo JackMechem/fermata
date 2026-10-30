@@ -71,6 +71,8 @@ mod track_alternatives;
 mod arrangement;
 mod auto_lanes;
 mod patterns;
+mod arrange_cmds;
+use arrange_cmds::SectionClip;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -223,6 +225,8 @@ pub struct Session {
     controls: controllers::Controls,
     /// The sequence number of the next MIDI input message the ticks haven't reported.
     midi_seen: u64,
+    /// What Cut Section Between Locators took out last, for Insert Cut Section.
+    section_clip: Option<SectionClip>,
 }
 
 /// A project snapshot taken before an edit.
@@ -355,6 +359,7 @@ impl Session {
             peak_holds: PeakHolds::default(),
             controls: Default::default(),
             midi_seen: 0,
+            section_clip: None,
         };
         s.restart_audio();
         s.sync_globals();

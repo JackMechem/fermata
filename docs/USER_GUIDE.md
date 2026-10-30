@@ -234,7 +234,7 @@ status, the audio devices, and the number of MIDI inputs.
 |---|---|
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
-| Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Snap Edits to Zero Crossings, Select All, Delete |
+| Edit | Undo, Redo, Cut / Copy / Paste Regions, Paste at Original Position, Paste Replace, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Join Regions per Track, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Snap Edits to Zero Crossings, Strip Silence…, Section Between Locators ›, Trim ›, Move ›, Name and Color ›, Select All, Select ›, Delete (see [Arranging commands](#arranging-commands)) |
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
@@ -474,6 +474,7 @@ window has Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS).
 - With a group whose Editing setting is on, clicking a region also selects the regions at the
   same place on the other members.
 - Right-click a region › Select › All on Track, All Following on Track, or All.
+- Edit › **Select** picks regions by criteria; see [Arranging commands](#arranging-commands).
 
 - Drag across empty lane space to draw a rubber band: every region it touches is selected.
   Shift+drag adds to the selection. A click without dragging still deselects.
@@ -735,6 +736,93 @@ From the region menu:
 Right-click **empty lane space** for Paste Here, Create MIDI Region (one bar, on instrument
 tracks), Import MIDI File Here… / Import Audio File Here…, Select All on Track, Select All and
 New Tracks….
+
+### Arranging commands
+
+Logic's arranging commands are in the menu bar's Edit menu and in the Tracks area's own Edit
+menu (Strip Silence and Name and Color are in its Functions menu). Each is one undo step. All
+key commands can be changed in Settings › Key Commands.
+
+**Edit › Select** (on the tracks in view):
+
+- **All Following** (Shift+F): every region starting at or after the first selected region,
+  or the playhead when nothing is selected. **All Following of Same Track** does the same on
+  that region's track (or the selected track).
+- **Inside Locators** (Shift+L): the regions wholly between the locators (loops included).
+- **Muted Regions** (Shift+M), **Overlapped Regions** (those overlapping another region on
+  their track).
+- **Same Colored Regions** (Shift+C): regions showing a colour one of the selected regions
+  shows, their own or their track's.
+- **Equal Regions** (Shift+E): the same content: audio playing the same stretch of the same
+  file, or MIDI with the same notes and controllers. **Similar Regions** (Shift+S): audio from
+  the same file, or MIDI playing the same pitches in the same order whatever the timing.
+- **Invert Selection** (Shift+I).
+
+**Edit › Section Between Locators** works on the whole project between the locators (the cycle
+range), or, with a marquee, between its edges on its tracks only. Regions across an edge are
+cut there; automation (Stereo Out's too), markers and Arrangement track sections move with
+their time, as when the Arrangement track moves a section. The tempo and signature tracks stay
+as they are.
+
+- **Insert Silence Between Locators** (Ctrl+Alt+Z; ⌃⌘Z on macOS): everything from the left
+  locator on moves right by the locators' length.
+- **Cut Section Between Locators** (Ctrl+Alt+X; ⌃⌘X): the section goes and what follows moves
+  left to close the gap (Logic's Snip). The section is also copied to the clipboard.
+- **Repeat Section Between Locators** (Ctrl+Alt+R; ⌃⌘R): a copy of the section goes straight
+  after it, and what followed moves right. The copies are selected.
+- **Insert Cut Section at Left Locator** (Ctrl+Alt+V; ⌃⌘V): puts the section cut last back in at
+  the left locator (or the marquee's start), with its automation and markers, moving what
+  follows along (Logic's Splice).
+
+**Edit › Trim** (on the selected regions):
+
+- **Trim Region Start to Playhead** (Alt+[) and **Trim Region End to Playhead** (Alt+]). An
+  audio region can't grow past either end of its file.
+- **Trim Region End to Next Region**: shortens or lengthens each region to end where the next
+  region on its track starts.
+- **Fill Within Locators**: lengthens each region starting between the locators up to the next
+  region, or the right locator. With nothing selected, every region between the locators.
+- **Remove Overlaps**: a selected region still playing when the next selected one starts is
+  trimmed to end there.
+- **Resize to Same Length**: every region takes the length of the first one selected.
+- **Crop Regions Outside Locators** (or **Outside Marquee**): the regions are trimmed to the
+  locators (or the regions under the marquee to it), and selected regions wholly outside go.
+
+**Edit › Move:**
+
+- **Move Region to Playhead** (; — Logic's Pickup Clock): the selection moves so its first
+  region starts at the playhead, keeping its spacing, in the drag mode.
+- **Remove Gaps**: the selected regions on each track are butted together from the first.
+- **Delete and Shuffle**: deletes the regions, and the ones after each on its track move left
+  to close the gap, whatever the drag mode.
+
+**Pasting and joining:**
+
+- **Paste at Original Position**: back where the regions were copied from, on their own tracks.
+- **Paste Replace** (Ctrl+Shift+V): pastes as Paste does, first removing whatever lies under the
+  pasted range on the tracks it lands on.
+- **Join Regions per Track**: joins the selection separately on each track (Join Regions does
+  the same).
+
+**Strip Silence…** (Edit, or the Tracks area's Functions menu): splits the selected audio
+regions around the parts that sound, leaving out the silence between them. The sheet shows the
+first selected region's waveform with the parts kept lit, the cuts and the threshold drawn, and
+updates as you change:
+
+- **Threshold**, in percent of full scale (and dB): a sample counts as sound when it reaches it,
+  after the region's gain.
+- **Minimum Time**: a quiet stretch must last this long to count as silence (never less than
+  25 ms, so a low note's zero crossings don't cut it).
+- **Pre-Attack Time** and **Post-Release Time**: each part starts this much earlier and ends
+  this much later, so attacks and tails aren't clipped.
+
+The defaults are Logic's (4 %, 0.1 s, 0.02 s, 0.1 s); Defaults puts them back, and the sheet
+remembers your last settings. A region that is silent throughout is removed. Take folders are
+left alone.
+
+**Name and Color** (Functions menu, or Edit › Name and Color): **Name Regions by Track**, **Name
+Tracks by Region** (each track takes the name of its first selected region), **Color Regions by
+Track** (Alt+Shift+C: the regions drop their own colour) and **Color Tracks by Region**.
 
 ### Importing audio and MIDI
 

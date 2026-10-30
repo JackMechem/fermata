@@ -7485,3 +7485,23 @@ canvas.pr-cursor-line {
   min-width: 52px;
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Strip Silence sheet (components/StripSilence.tsx) ------------------------------------ */
+
+.strip-silence-preview {
+  display: block;
+  width: 100%;
+  border-radius: 6px;
+  background: var(--sheet-inner);
+  box-shadow: inset 0 0 0 0.5px var(--edge);
+}
+
+.strip-silence-summary {
+  margin: 6px 0 14px;
+  font-size: 11px;
+}
+
+.strip-silence-grid {
+  grid-template-columns: 130px 1fr;
+  margin-bottom: 4px;
+}

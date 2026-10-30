@@ -13,7 +13,7 @@ use crate::arrangement::{self, Piece, Plan};
 use crate::tempo::TempoMap;
 
 /// Whether the time map leaves `r` exactly where it is.
-fn untouched(r: &Region, pieces: &[Piece]) -> bool {
+pub(super) fn untouched(r: &Region, pieces: &[Piece]) -> bool {
     let (lo, hi) = (r.start, r.end());
     pieces.iter().any(|p| p.is_identity() && p.contains(lo, hi)) && !pieces.iter().any(|p| p.copy && p.overlaps(lo, hi))
 }
@@ -21,7 +21,7 @@ fn untouched(r: &Region, pieces: &[Piece]) -> bool {
 /// The regions of a track after the time map: a region inside one piece moves whole (loop and
 /// all); one across a piece's edge is cut there (a loop first becomes real copies). The first
 /// piece of each region keeps its id, so a region that only moves stays selected.
-fn remap_regions(regions: &[Region], pieces: &[Piece], alloc: &mut dyn FnMut() -> Id) -> Vec<Region> {
+pub(super) fn remap_regions(regions: &[Region], pieces: &[Piece], alloc: &mut dyn FnMut() -> Id) -> Vec<Region> {
     // Originals first, so the copies are the ones with new ids.
     let order: Vec<&Piece> = pieces.iter().filter(|p| !p.copy).chain(pieces.iter().filter(|p| p.copy)).collect();
     let mut out = Vec::new();
