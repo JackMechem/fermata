@@ -4,7 +4,7 @@
 //! from another track (in live renders and isolated ones), its meters reach the tick, and
 //! freezing bakes it in. New registry entries are covered without changes here.
 //! usage: fx_check <audio file> <scratch dir>
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use daw_engine::audio_io::AudioConfig;
@@ -113,7 +113,7 @@ fn audible_params(s: &mut Session, track: Id, slot: usize, info: &EffectInfo, le
     out.into_iter().map(|x| x.0).collect()
 }
 
-fn check_effect(s: &mut Session, info: &EffectInfo, tone: &str, scratch: &PathBuf) {
+fn check_effect(s: &mut Session, info: &EffectInfo, tone: &str, scratch: &Path) {
     println!("== {} ({})", info.name, info.id);
     let len = 48000;
     let a = s.add_track(TrackKind::Audio, InputSel::None, None, None).unwrap();

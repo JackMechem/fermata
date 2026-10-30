@@ -1077,7 +1077,7 @@ pub fn recoverable_projects(state: State<AppState>) -> Vec<daw_engine::session::
         })
         .filter_map(|d| daw_engine::session::recovery_info(&d))
         .collect();
-    out.sort_by(|a, b| b.autosaved.cmp(&a.autosaved));
+    out.sort_by_key(|r| std::cmp::Reverse(r.autosaved));
     out
 }
 

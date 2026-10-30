@@ -21,10 +21,7 @@ fn main() {
         .filter(|b| b.to_string_lossy().contains("ZamVerb"))
         .flat_map(|b| vst3_host::scan::scan_bundle(b).unwrap_or_default())
         .collect::<Vec<_>>();
-    let mut cfg = AudioConfig::default();
-    cfg.input = std::env::var("IN").ok();
-    cfg.output = std::env::var("OUT").ok();
-    cfg.host = std::env::var("HOST").ok();
+    let cfg = AudioConfig { input: std::env::var("IN").ok(), output: std::env::var("OUT").ok(), host: std::env::var("HOST").ok(), ..Default::default() };
     let mut s = Session::new(cfg, plugins.clone());
     println!("audio: {:?}", s.audio_status);
     let t = s.add_track(TrackKind::Audio, InputSel::Mono(0), None, None).unwrap();

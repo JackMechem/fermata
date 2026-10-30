@@ -167,7 +167,7 @@ fn install_x_error_handlers() {
             if h.is_null() {
                 continue;
             }
-            let f = libc::dlsym(h, b"XSetErrorHandler\0".as_ptr() as *const _);
+            let f = libc::dlsym(h, c"XSetErrorHandler".as_ptr());
             if !f.is_null() {
                 let set: unsafe extern "C" fn(Option<Handler>) -> Option<Handler> = std::mem::transmute(f);
                 set(Some(on_error));

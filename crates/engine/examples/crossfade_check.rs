@@ -149,7 +149,7 @@ fn main() {
     check(&format!("X with a curve still sums to unity (max error {sum:.1e}; B at a quarter {:.3})", gb[p(0.25)]), sum < 1e-4 && (gb[p(0.25)] - 0.25).abs() > 0.02);
     let (ga, gb) = sides(&mut s, &f, &l, FadeOutType::EqP, 0.0);
     let pow = (p(0.0)..=p(1.0)).map(|i| (ga[i] * ga[i] + gb[i] * gb[i] - 1.0).abs()).fold(0.0, f32::max);
-    check(&format!("EqP: constant power across the crossfade (max error {pow:.1e}; each side {:.4} in the middle)", gb[p(0.5)]), pow < 1e-3 && (gb[p(0.5)] - 0.7071).abs() < 1e-3);
+    check(&format!("EqP: constant power across the crossfade (max error {pow:.1e}; each side {:.4} in the middle)", gb[p(0.5)]), pow < 1e-3 && (gb[p(0.5)] - std::f32::consts::FRAC_1_SQRT_2).abs() < 1e-3);
     let (ga, gb) = sides(&mut s, &f, &l, FadeOutType::XS, 0.0);
     let sum = (p(0.0)..=p(1.0)).map(|i| (ga[i] + gb[i] - 1.0).abs()).fold(0.0, f32::max);
     check(&format!("X S: sums to unity, S-shaped ({sum:.1e}; B {:.3} at a quarter, {:.3} in the middle)", gb[p(0.25)], gb[p(0.5)]), sum < 1e-4 && (gb[p(0.25)] - 0.1464).abs() < 2e-3 && (gb[p(0.5)] - 0.5).abs() < 1e-3);

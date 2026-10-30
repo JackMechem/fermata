@@ -197,7 +197,7 @@ impl Editor {
             if resizable {
                 style |= NSWindowStyleMask::Resizable;
             }
-            let window = PlugInWindow::new(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h)), style);
+            let window = PlugInWindow::create(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w, h)), style);
             // We own the window through the Retained; the close button just orders it out.
             window.setReleasedWhenClosed(false);
             window.setTitle(&NSString::from_str(title));
@@ -315,7 +315,8 @@ define_class!(
 );
 
 impl PlugInWindow {
-    fn new(mtm: MainThreadMarker, content: NSRect, style: NSWindowStyleMask) -> Retained<NSWindow> {
+    /// A new window of this class, as the `NSWindow` the editor code works with.
+    fn create(mtm: MainThreadMarker, content: NSRect, style: NSWindowStyleMask) -> Retained<NSWindow> {
         let this = Self::alloc(mtm).set_ivars(());
         let this: Retained<Self> = unsafe {
             msg_send![super(this), initWithContentRect: content, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false]

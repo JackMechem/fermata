@@ -68,9 +68,9 @@ impl IBStreamTrait for MemoryStream {
         let (data, pos) = &mut *g;
         let base = match mode as u32 {
             // The constants are i32 in the MSVC bindings and u32 elsewhere.
-            m if m == kIBSeekSet as u32 => 0i64,
-            m if m == kIBSeekCur as u32 => *pos as i64,
-            m if m == kIBSeekEnd as u32 => data.len() as i64,
+            m if m == kIBSeekSet as _ => 0i64,
+            m if m == kIBSeekCur as _ => *pos as i64,
+            m if m == kIBSeekEnd as _ => data.len() as i64,
             _ => return kInvalidArgument,
         };
         let new = (base + offset).max(0) as usize;

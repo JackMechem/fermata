@@ -285,8 +285,8 @@ fn main() {
         &format!("the cycle passes come back as a take folder over the cycle ({folder:?}, recorder had {passes}+ passes)"),
         regions.len() == 1 && matches!(folder, Some((0, l, n)) if l == cycle && n as i64 >= passes.max(2)),
     );
-    let _ = std::fs::remove_dir_all(&scratch.join("Elsewhere.fermata"));
-    let _ = std::fs::remove_dir_all(&scratch.join("Elsewhere2.fermata"));
+    let _ = std::fs::remove_dir_all(scratch.join("Elsewhere.fermata"));
+    let _ = std::fs::remove_dir_all(scratch.join("Elsewhere2.fermata"));
     if FAILED.load(std::sync::atomic::Ordering::Relaxed) {
         std::process::exit(1);
     }

@@ -26,6 +26,22 @@ here has been checked by eye in the app yet unless it says so.
     meter-in-slider in the Light and Contrast themes; crossfade and fade-curve drawing and the
     Inspector's fade rows; the Drag pop-up; the Scroll to Playhead button; the recovery sheet
     after `kill -9` during a take.
+- **Windows/macOS: verify by hand.** `dev` cross-checks and lints clean for both, and the
+  engine tests and headless checks pass on the silent stand-in device they use there (simulated
+  on Linux), but none of this has run on a real machine:
+  - Both: audio devices listed in Settings › Audio, playback, recording and input monitoring
+    through an interface; MIDI input and MIDI Learn; plug-in scanning; the file dialogs (open,
+    save, import, bounce, export); detached Mixer, Editor and Channel EQ windows opening,
+    closing, re-attaching and coming back in place after a relaunch, on two monitors with
+    different scaling; native menu commands reaching the focused detached window; renaming a
+    template or alternative by case only (both file systems ignore case); recovery after the
+    app is killed during a take.
+  - Windows: a detached window opening doesn't hang the app; Alt+` and other Alt key commands
+    don't leave the focus in the menu bar; the NSIS installer and uninstaller, with LICENSE in
+    the install folder; recording with Settings › Privacy › Microphone off and on.
+  - macOS: the first recording asks for microphone access with the Info.plist text, in
+    `tauri dev` and in the .app; ⌘ and ⌥ key commands; the unsigned .dmg opening with
+    right-click › Open; `bash scripts/headless-checks.sh` (bash 3.2, no `timeout`).
 - **Small fixes:**
   - Check a VCA on a subtrack of a folder stack whose own volume is automated: the folder's
     automation (`apply_fold`) replaces the static stack values, which is also where the VCA's

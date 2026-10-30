@@ -24,7 +24,11 @@ impl Class for ParamValueQueue {
 }
 
 impl ParamValueQueue {
-    fn points(&self) -> &mut Vec<(i32, f64)> {
+    /// # Safety
+    /// The queue is used from one thread at a time (the audio thread, during `process`), and
+    /// the returned reference is dropped before `points` is called again.
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn points(&self) -> &mut Vec<(i32, f64)> {
         unsafe { &mut *self.points.get() }
     }
 }
@@ -95,7 +99,7 @@ impl ParameterChanges {
 
     pub fn clear(&self) {
         for q in &self.queues[..self.count.get()] {
-            q.points().clear();
+            unsafe { q.points().clear() };
         }
         self.count.set(0);
     }
@@ -109,7 +113,7 @@ impl ParameterChanges {
             return None;
         }
         self.queues[n].id.set(id);
-        self.queues[n].points().clear();
+        unsafe { self.queues[n].points().clear() };
         self.count.set(n + 1);
         Some(n)
     }
@@ -126,7 +130,7 @@ impl ParameterChanges {
     /// Iterates the last value written to each queue (used for processor -> controller output).
     pub fn for_each_last(&self, mut f: impl FnMut(ParamID, f64)) {
         for q in &self.queues[..self.count.get()] {
-            if let Some(&(_, v)) = q.points().last() {
+            if let Some(&(_, v)) = unsafe { q.points() }.last() {
                 f(q.id.get(), v);
             }
         }
@@ -178,23 +182,30 @@ impl EventList {
         ComWrapper::new(EventList { events: UnsafeCell::new(Vec::with_capacity(MAX_EVENTS)) })
     }
 
-    fn events(&self) -> &mut Vec<Event> {
+    /// # Safety
+    /// As for `ParamValueQueue::points`: one thread at a time, one reference at a time.
+    #[allow(clippy::mut_from_ref)]
+    unsafe fn events(&self) -> &mut Vec<Event> {
         unsafe { &mut *self.events.get() }
     }
 
     pub fn clear(&self) {
-        self.events().clear();
+        unsafe { self.events().clear() };
     }
 
     pub fn push(&self, e: Event) {
-        let ev = self.events();
+        let ev = unsafe { self.events() };
         if ev.len() < ev.capacity() {
             ev.push(e);
         }
     }
 
     pub fn len(&self) -> usize {
-        self.events().len()
+        unsafe { self.events().len() }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }
 

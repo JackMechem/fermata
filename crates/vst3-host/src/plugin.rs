@@ -1,6 +1,10 @@
 //! Instantiating a VST3 plugin and splitting it into an audio-thread half (`PluginProcessor`) and
 //! a UI-thread half (`PluginController`).
 
+// C enums are i32 in the MSVC bindings and u32 elsewhere, so a cast that converts on one
+// platform is a no-op on the other.
+#![cfg_attr(target_env = "msvc", allow(clippy::unnecessary_cast))]
+
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
@@ -400,12 +404,12 @@ impl PluginProcessor {
             let mut ctx: ProcessContext = std::mem::zeroed();
             use ProcessContext_::StatesAndFlags_::*;
             // C enums are i32 in the MSVC bindings and u32 elsewhere; `as _` fits both.
-            ctx.state = (kTempoValid | kTimeSigValid | kProjectTimeMusicValid | kBarPositionValid) as _;
+            let mut state = kTempoValid | kTimeSigValid | kProjectTimeMusicValid | kBarPositionValid;
             if t.playing {
-                ctx.state |= kPlaying as u32;
+                state |= kPlaying;
             }
             if t.recording {
-                ctx.state |= kRecording as u32;
+                state |= kRecording;
             }
             ctx.sampleRate = t.sample_rate;
             ctx.projectTimeSamples = t.position_samples;
@@ -415,10 +419,11 @@ impl PluginProcessor {
             ctx.timeSigNumerator = t.sig_num;
             ctx.timeSigDenominator = t.sig_den;
             if let Some((a, b)) = t.cycle {
-                ctx.state |= (kCycleValid | kCycleActive) as u32;
+                state |= kCycleValid | kCycleActive;
                 ctx.cycleStartMusic = a;
                 ctx.cycleEndMusic = b;
             }
+            ctx.state = state as _;
 
             let mut data = ProcessData {
                 processMode: ProcessModes_::kRealtime as i32,

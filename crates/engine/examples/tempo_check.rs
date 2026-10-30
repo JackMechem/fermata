@@ -210,7 +210,7 @@ fn main() {
     let fresh = &mut s;
     let made = fresh.import_midi(&file, None, 0, None).unwrap();
     let fm = fresh.tempo_map();
-    let (start, notes) = midi_notes(&fresh, made[0]);
+    let (start, notes) = midi_notes(fresh, made[0]);
     let at = start + notes[0].start;
     check(&format!("an empty project adopts the file's tempo map and signatures ({} events)", fm.events().len()), fm.signatures() == map.signatures() && (fm.bpm_at(srf) - 120.0).abs() < 0.01);
     check(&format!("bar positions survive the round trip ({at} vs {late})"), (at - late).abs() <= 2 && (fm.bar_start(6) - map.bar_start(6)).abs() <= 2.0);
@@ -221,6 +221,6 @@ fn main() {
     let other = fresh.add_track(TrackKind::Instrument, InputSel::None, None, None).unwrap();
     fresh.set_tempo_map(vec![ev(0, 100.0, false)], false);
     let made = fresh.import_midi(&file, Some(other), 0, None).unwrap();
-    let (start, notes) = midi_notes(&fresh, made[0]);
+    let (start, notes) = midi_notes(fresh, made[0]);
     check(&format!("into a project at another tempo, notes keep the file's timing ({} vs {late})", start + notes[0].start), (start + notes[0].start - late).abs() <= 2 && fresh.project.tempo == 100.0);
 }
