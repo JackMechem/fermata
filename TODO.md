@@ -13,8 +13,12 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
 
 - **Not heard yet:** all of the above ran stopped or on the null device. Listen for clicks when
   choosing a side-chain source and pressing "+" during playback, on a real interface.
-- **Opening TONE3000's editor blows the 10.7 ms soft real-time limit** every first time (SIGXCPU,
-  ignored now, so it should only cost a dropout). What makes that block slow isn't known.
+- **Opening TONE3000's editor can blow the 10.7 ms soft real-time limit** (SIGXCPU on two of three
+  first opens on a copy of a real project, ignored now, so it should only cost a dropout). What
+  makes that block slow isn't known.
+- Undo in a VST3's own editor was checked by hand on TONE3000 with a model: the knob follows Undo
+  and Redo, with no late blocks over three rounds while stopped. Not listened to during playback.
+  The CPU meter's red state hasn't been seen, since nothing ran late.
 - Adding any track during playback restarts held notes (`Cmd::MidiTarget`, then Chase); with a
   sampler that ignores note-offs, one note sounds doubled.
 - In Low Latency Mode a monitored instrument skips its compensation delay but its output auxes
