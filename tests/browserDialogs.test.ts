@@ -7,8 +7,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = new URL("../src/", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows that would be "/D:/…", which fs can't open.
+const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 
 function sources(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {

@@ -6,8 +6,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows that would be "/D:/…", which fs can't open.
+const ROOT = fileURLToPath(new URL("..", import.meta.url));
 
 /**
  * Selectors that match a risky pattern but return a stable value (a number, or an element of
@@ -51,7 +53,7 @@ function selectors(): { file: string; line: number; sel: string }[] {
         else if (")]}".includes(c)) depth--;
       }
       out.push({
-        file: relative(ROOT, path),
+        file: relative(ROOT, path).replaceAll("\\", "/"), // the allow-list writes paths with /, as on Windows they come with \
         line: src.slice(0, m.index).split("\n").length,
         sel: src.slice(m.index + m[0].length, i - 1).replace(/\s+/g, " ").trim(),
       });
