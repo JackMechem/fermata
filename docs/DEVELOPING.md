@@ -165,7 +165,7 @@ It runs the checks as on a fresh CI runner: `HOME` and the `XDG_*` folders point
 scratch folder, and the PipeWire, PulseAudio, JACK and D-Bus session variables are cleared,
 so the checks find no audio server, no settings and no plug-in cache, and never touch yours.
 That makes the plug-in parts of `fx_check`, `automation_check` and `bounce_check` print `SKIP`;
-`pdc_check` and `freeze_check` need a real plug-in, and `undo_check` and `import_check` only
+`pdc_check`, `freeze_check` and `onoff_vst_check` need real plug-ins, and `undo_check` and `import_check` only
 print what they did for you to read, so those four aren't in the script; run them (and the
 plug-in parts) by hand. Every other `*_check` in the table below is. A check counts as failed when it exits non-zero or prints a line
 starting with `FAIL`; each one's output is in `<scratch>/<check>/output.log`, and the scratch
@@ -190,6 +190,7 @@ folder is kept when anything failed.
 | `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too (`SKIP` when it isn't in the cache). |
 | `autolanes_check` | audio file, scratch dir | Automation curves, Stereo Out automation and stack automation in offline renders: a curved volume ramp follows its curve sample by sample, a straight one is unchanged by curves existing, Stereo Out's volume lane shapes the bounce, summing and folder stacks' lanes shape their subtracks, and each edit undoes. |
 | `pdc_check` | audio file, scratch dir | Plug-in delay compensation with a real latent plug-in, measured by cross-correlating offline renders. Needs **ZaMaximX2** (zam-plugins) in the plug-in cache. |
+| `onoff_vst_check` | audio file, scratch dir | Track On/Off with real VST3s (ZaMaximX2, TONE3000), live: suspended plug-ins play again, fast switching, delay compensation. |
 | `freeze_check` | audio file, scratch dir | Freeze: a frozen instrument track with a latent plug-in sounds as it did live, plug-ins are unloaded, edits are refused, undo, redo, unfreeze and reopening restore the right state. Needs **ZaMaximX2**. |
 | `takes_check` | audio file, scratch dir | Take folders, comping, cycle and Autopunch recording layout (the null device has no input, so takes are silent), and markers. |
 | `comping_check` | scratch dir | Several comps per folder (create, switch, rename, delete, with undo; each renders as it should); a MIDI cycle recording with "Create take folders" makes a take per pass, and choosing a take changes what plays; a take folder crossfaded with the next region, and a loop with Crossfade Loop Repetitions, render without a click; Crossfade Time sets the X-Fade mode's crossfades and the comp boundaries. |
