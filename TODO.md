@@ -26,9 +26,6 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
 - Freeze and Bounce in Place refuse an instrument with output auxes; Export Region renders only
   its main output.
 - An undo that turns a latent track back on during a take can shift where the take lands.
-- **VST3 editor undo has only been driven through `IComponentHandler` headlessly**
-  (`vst_undo_check`), never with a real editor open: check that the window follows Undo and
-  Redo, and how long Undo takes on TONE3000 with a model loaded, whose `setState` may reload it.
 
 ## Open items (2026-10-29)
 
@@ -88,8 +85,15 @@ here has been checked by eye in the app yet unless it says so.
 - **Larger:**
   - The settings folder is `~/.config/fermata` on macOS too; `~/Library/Application Support`
     is the native place, but moving it needs a migration.
-  - VST3 editor windows on Linux don't pass unused keys to Fermata (the plug-in's child window
-    takes KeyPress); macOS does (`src/pluginKeys.ts`).
+  - VST3 editor windows on Linux don't pass unused keys to Fermata, so Ctrl+Z and Space do nothing
+    with focus in one; macOS does (`src/pluginKeys.ts`). Tried on 2026-10-30, not implemented:
+    "forward unless X focus is in a plug-in child" would steal typing from LSP's text fields, which
+    don't take X focus (from reading sources, unmeasured). Likely mechanism: a sync `XGrabKey` on the
+    frame with `XAllowEvents` replay, on its own thread. Rule to be chosen by measuring whether the
+    I-beam cursor is readable on JUCE and LSP; the fallbacks are chords only, or a per-window toggle.
+    It needs a test under XWayland on a real display.
+  - Holding Space looks like it re-toggles the transport in the main window: `onKey` in
+    `src/App.tsx` has no repeat check (from reading the code).
   - Only one Channel EQ analyzer per session: a detached EQ and another strip's EQ take turns.
   - CI: run `scripts/headless-checks.sh` on macos-latest too (it runs on macOS now), and open a
     draft PR from `dev` so the Linux headless step runs on GitHub's runners.
