@@ -72,7 +72,7 @@ Goal: clean, fast audio editing and comping without workarounds.
 - [x] Fade curve shapes and fade types (equal power, speed-up, slow-down)
 - [x] Drag modes: No Overlap, Shuffle Left and Right (Overlap and X-Fade are done)
 - [ ] Crossfades for take folders and looped regions; Logic's Crossfade Time and Curve settings
-- [ ] Marquee tool, a Tool menu in the tracks area, and Scissors, Glue, Fade, Pencil and Eraser
+- [x] Marquee tool, a Tool menu in the tracks area, and Scissors, Glue, Fade, Pencil and Eraser
 - [ ] Region gain drag; snap edits to zero crossings
 - [ ] Region drags in bars and beats across tempo changes
 - [ ] Several comps per take folder; MIDI cycle recording into take folders

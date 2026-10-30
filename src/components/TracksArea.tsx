@@ -18,6 +18,8 @@ import { Overview, toggleOverview } from "./Overview";
 import { OVERVIEW_H } from "../overview";
 import { act } from "../api";
 import type { DragMode } from "../fades";
+import { ToolPopups } from "./TrackTools";
+import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste } from "../trackTools";
 
 const SNAP_LABELS: Record<Snap, string> = { smart: "Smart", bar: "Bar", beat: "Beat", off: "Off" };
 /** Logic's Drag pop-up; only Overlap and X-Fade so far. */
@@ -33,15 +35,17 @@ const DRAG_TIPS: Record<DragMode, string> = {
 
 export function editMenu(): MenuItem[] {
   const sel = getState().selectedRegions;
+  const marquee = getState().marquee;
   const snap = getState().snap;
   const regs = snap?.project.tracks.flatMap((t) => t.regions).filter((r) => sel.includes(r.id)) ?? [];
   return [
     { label: snap?.undo ? `Undo ${snap.undo}` : "Undo", hint: fmt("Mod+Z"), disabled: !snap?.undo, onClick: () => undoRedo("undo") },
     { label: snap?.redo ? `Redo ${snap.redo}` : "Redo", hint: fmt("Mod+Shift+Z"), disabled: !snap?.redo, onClick: () => undoRedo("redo") },
     { separator: true },
-    { label: "Cut", hint: keyHint("cut"), disabled: !sel.length, onClick: () => ops.cutRegions() },
-    { label: "Copy", hint: keyHint("copy"), disabled: !sel.length, onClick: () => ops.copyRegions() },
-    { label: "Paste", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => ops.pasteRegions() },
+    // With a marquee, Cut, Copy, Paste and Delete act on the part of the regions inside it.
+    { label: "Cut", hint: keyHint("cut"), disabled: !sel.length && !marquee, onClick: () => marqueeCut() || ops.cutRegions() },
+    { label: "Copy", hint: keyHint("copy"), disabled: !sel.length && !marquee, onClick: () => marqueeCopy() || ops.copyRegions() },
+    { label: "Paste", hint: keyHint("paste"), disabled: !getState().clipboard.length, onClick: () => marqueePaste() || ops.pasteRegions() },
     { label: "Duplicate", hint: fmt("Mod+D"), onClick: ops.duplicate },
     { label: "Repeat", disabled: !sel.length, children: [1, 2, 3, 4, 8, 16].map((n) => ({ label: n === 1 ? "Once" : `${n} Times`, onClick: () => ops.repeatRegions(n) })) },
     { separator: true },
@@ -52,7 +56,7 @@ export function editMenu(): MenuItem[] {
     { label: "Set Locators by Regions", hint: keyHint("set-locators"), disabled: !sel.length, onClick: () => ops.setLocatorsByRegions() },
     { separator: true },
     { label: "Select All", hint: fmt("Mod+A"), onClick: ops.selectAllRegions },
-    { label: "Delete", hint: keyHint("delete-regions"), disabled: !sel.length, onClick: () => ops.deleteRegions() },
+    { label: "Delete", hint: keyHint("delete-regions"), disabled: !sel.length && !marquee, onClick: () => marqueeDelete() || ops.deleteRegions() },
   ];
 }
 
@@ -154,6 +158,7 @@ export function TracksArea() {
               <path d="M7 1v12M2 4h3M2 10h3M9 4h3M9 10h3" />
             </svg>
           </button>
+          <ToolPopups />
           <span className="lb-label">Snap:</span>
           <button
             className="popup"

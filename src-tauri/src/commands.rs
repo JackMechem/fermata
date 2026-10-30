@@ -1464,3 +1464,25 @@ pub fn load_strip_setting(state: State<AppState>, tracks: Vec<Id>, name: String)
 pub fn delete_strip_setting(name: String) -> R<()> {
     daw_engine::strip_settings::delete(&daw_engine::strip_settings::user_root(), &name).map_err(|e| e.to_string())
 }
+
+// ---- Tracks-area marquee ---------------------------------------------------------------------
+
+/// Splits the regions on `tracks` at the marquee's edges, `start` and `end` (a Pointer click
+/// inside the marquee). Returns the pieces inside it.
+#[tauri::command]
+pub fn marquee_split(state: State<AppState>, tracks: Vec<Id>, start: i64, end: i64) -> R<Made> {
+    edit_made(&state, "Split at Marquee", false, |s| Ok(s.marquee_split(&tracks, start, end)))
+}
+
+/// Deletes the parts of the regions on `tracks` between `start` and `end`, in the drag mode.
+#[tauri::command]
+pub fn marquee_delete(state: State<AppState>, tracks: Vec<Id>, start: i64, end: i64) -> Snapshot {
+    edit(&state, "Delete Marquee Selection", None, false, |s| s.marquee_delete(&tracks, start, end))
+}
+
+/// The parts of the regions on `tracks` between `start` and `end`, each with its track's
+/// index, for the region clipboard. Not an edit.
+#[tauri::command]
+pub fn marquee_copy(state: State<AppState>, tracks: Vec<Id>, start: i64, end: i64) -> Vec<(usize, Region)> {
+    with(&state, |s| s.marquee_copy(&tracks, start, end))
+}

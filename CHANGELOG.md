@@ -17,6 +17,13 @@ All notable changes to Fermata are recorded here. The format follows
   to reset, Alt-click (or the key command Reset All Clip Indicators) to reset all.
 - **Gain-reduction meter** beside a strip's level meter when it has a Compressor, Limiter,
   Noise Gate or De-Esser.
+- **Tracks-area tools:** Left-click and Ctrl-click (⌘-click) Tool pop-ups in the Tracks
+  area's bar and Logic's Tool menu (T, then the tool's letter), with the Pointer, Pencil
+  (empty MIDI regions), Eraser, Scissors (Alt+click for equal pieces), Glue, Mute, Fade (fades
+  and crossfades by dragging) and Marquee tools, each with its own pointer.
+- **Marquee selection:** a time range across tracks (the Ctrl-click tool by default). Delete,
+  Cut, Copy and Paste act on the part of the regions inside it, and a Pointer click inside
+  splits the regions at its edges.
 - **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
   24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
   format is remembered with the other bounce options.

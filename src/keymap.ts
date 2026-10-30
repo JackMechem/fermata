@@ -70,6 +70,7 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "nudge-left", label: "Nudge Regions Left", group: "Editing", keys: ["Alt+ArrowLeft"] },
   { id: "nudge-right", label: "Nudge Regions Right", group: "Editing", keys: ["Alt+ArrowRight"] },
   { id: "pack-takes", label: "Pack Take Folder", group: "Editing", keys: ["Mod+Ctrl+F"] },
+  { id: "tool-menu", label: "Show Tool Menu", group: "Editing", keys: ["T"] },
 
   { id: "project-settings", label: "Project Settings…", group: "Windows", keys: ["Alt+P"] },
   { id: "settings-keys", label: "Key Commands…", group: "Windows", keys: ["Alt+K"] },

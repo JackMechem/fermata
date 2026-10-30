@@ -1153,6 +1153,7 @@ it like any plug-in.
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
 | `session/bounce.rs` | Bounce, Export All (or Selected) Tracks, Export Region, Bounce in Place (render and place), normalize. |
 | `session/range_edit.rs` | Audio Track Editor range edits (`RangeEdit`) and multi-point splits; clip info. |
+| `session/marquee.rs` | The Tracks area's marquee: split, delete (in the drag mode) and copy the parts of regions in a time range across tracks. |
 | `session/options.rs` | Applying `Prefs`, recording folder, default fades, overlapping-recording placement, MIDI merge, project options, nudge, autosave and recovery. |
 | `session/midi_content.rs` | `set_midi_content` (Piano Roll edits) and Standard MIDI File import/export. |
 | `session/pdc.rs` | Plug-in latency, the compensation solver, the PDC report. |
@@ -1240,6 +1241,8 @@ it like any plug-in.
 | `automation.ts` | Automation lanes in the tracks area: values, scales, drawing, editing, point selection. |
 | `loops.ts` | Looping regions in the tracks area. |
 | `takes.ts` | Take folders in the tracks area: take rows, comp drawing, swipes, the take folder menu. |
+| `tools.ts`, `marquee.ts` | Tracks-area tools (list, Tool menu keys, Scissors and Fade tool geometry) and the marquee's geometry; pure. |
+| `trackTools.ts` | The tools at work: the Tool menu (T), presses with each tool, the marquee's commands, tool cursors and overlay drawing. |
 | `markers.ts` | The marker lane and marker commands. |
 | `freeze.ts` | Freeze and Unfreeze from the UI. |
 | `bounce.ts` | Bounce and export option types; opening the dialogs. |
@@ -1278,6 +1281,7 @@ it like any plug-in.
 | `Ruler.tsx` | Ruler: cycle strip, bar numbers, Autopunch strip, marker lane. |
 | `TrackHeaders.tsx` | Track headers: buttons, names, volume, reordering, resizing. |
 | `Arrange.tsx` | The tracks-area canvas: regions, fades, loops, take rows, automation, drag and drop. |
+| `TrackTools.tsx` | The Left-click and Command-click Tool pop-ups and the tools' icons. |
 | `Panels.tsx` | Inspector, Mixer, Library, Browser. |
 | `ChannelStrip.tsx` | A mixer channel strip. |
 | `Sends.tsx` | The channel strip's Sends section and Output slot. |

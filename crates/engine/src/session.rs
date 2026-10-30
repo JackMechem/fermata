@@ -57,6 +57,7 @@ mod drag_modes;
 mod strip_meters;
 pub use strip_meters::PeakHolds;
 mod strip_settings;
+mod marquee;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";

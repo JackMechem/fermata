@@ -130,7 +130,7 @@ export function copySelection(): boolean {
   const index = p.tracks.indexOf(t);
   const clip = regionsIn(t, sel.start, sel.end).map((r) => ({ index, region: subRegion(r, sel.start, sel.end) }));
   if (!clip.length) return false;
-  setState({ clipboard: clip });
+  setState({ clipboard: clip, clipboardStart: null });
   return true;
 }
 

@@ -6817,3 +6817,20 @@ canvas.pr-cursor-line {
 .readout.peak {
   cursor: default;
 }
+
+/* ---- Tracks-area tools ---------------------------------------------------------------------
+   The Left-click and Command-click Tool pop-ups: an icon and a chevron each, kept close
+   together as a pair, as in Logic. */
+
+.popup.tool-popup {
+  gap: 3px;
+  padding: 0 5px 0 6px;
+}
+
+.popup.tool-popup.left {
+  margin-right: -4px;
+}
+
+.popup.tool-popup.cmd {
+  margin-right: 4px;
+}

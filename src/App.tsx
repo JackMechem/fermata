@@ -39,6 +39,7 @@ import { pianoRollMenu } from "./components/PianoRoll";
 import { exportSelectionMidi, importMidiDialog } from "./midiFiles";
 import { freezeTracks, unfreezeTracks } from "./freeze";
 import { PdcStatus } from "./components/Latency";
+import { marqueeCopy, marqueeCut, marqueeDelete, marqueePaste, openToolMenu } from "./trackTools";
 import { getSettings, updateSettings } from "./prefs";
 import { createMarker, deleteMarker, gotoMarker, markerAtPlayhead, openMarkerList } from "./markers";
 import { MarkerList } from "./components/MarkerList";
@@ -179,13 +180,13 @@ function handleMenu(id: string) {
       ops.groupTracks();
       break;
     case "cut":
-      ops.cutRegions();
+      if (!marqueeCut()) ops.cutRegions();
       break;
     case "copy":
-      ops.copyRegions();
+      if (!marqueeCopy()) ops.copyRegions();
       break;
     case "paste":
-      ops.pasteRegions();
+      if (!marqueePaste()) ops.pasteRegions();
       break;
     case "repeat":
       ops.repeatRegions(1);
@@ -345,13 +346,14 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "select-previous": () => moveSelection(-1),
   "select-next": () => moveSelection(1),
   // Clipboard keys stay with text fields (onKey skips them), so the menu bar doesn't take them.
-  copy: () => ops.copyRegions(),
-  cut: () => ops.cutRegions(),
-  paste: () => ops.pasteRegions(),
+  // With a marquee they act on the part of the regions inside it.
+  copy: () => marqueeCopy() || ops.copyRegions(),
+  cut: () => marqueeCut() || ops.cutRegions(),
+  paste: () => marqueePaste() || ops.pasteRegions(),
   "mute-regions": () => ops.toggleRegionMute(),
   "delete-regions": () => {
     // Selected automation points (or a tempo change) go first, as in Logic.
-    if (deleteSelectedPoints() || deleteSelectedTempoEvent()) return;
+    if (deleteSelectedPoints() || deleteSelectedTempoEvent() || marqueeDelete()) return;
     if (getState().selectedRegions.length) ops.deleteRegions();
   },
   "set-locators": () => ops.setLocatorsByRegions(),
@@ -372,6 +374,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   "next-marker": () => handleMenu("next-marker"),
   "marker-list": () => handleMenu("marker-list"),
   "pack-takes": () => handleMenu("pack-takes"),
+  "tool-menu": openToolMenu,
 };
 
 function nudgeRegions(dir: number) {

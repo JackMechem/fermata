@@ -137,7 +137,8 @@ From left to right:
 
 - **Local menu bar:** Edit, Functions and View menus; on the right, the **Catch** button
   (\`, on by default: the view follows the playhead), **Scroll to Playhead** (shows the
-  playhead without moving it), the **Snap** pop-up (Smart, Bar, Beat,
+  playhead without moving it), the **Left-click Tool** and **Ctrl-click Tool** pop-ups (see
+  [Tools and the marquee](#tools-and-the-marquee)), the **Snap** pop-up (Smart, Bar, Beat,
   Off; Smart follows the zoom), the track height slider and the horizontal zoom slider.
 - **Ruler**, from the top:
   - the **cycle strip** (yellow): drag to make a cycle range, drag it or its edges to move or
@@ -479,6 +480,42 @@ The pointer changes over a region's hot zones:
   controllers consistent: the right part starts with the values in effect at the cut.
 - **Join** (Ctrl+J) joins the selected regions on each track into one. MIDI notes are merged;
   audio is mixed, as it plays (newer regions winning), into a new file.
+
+### Tools and the marquee
+
+As in Logic, the Tracks area has two tools: the **Left-click Tool**, used for plain clicks, and
+the **Ctrl-click Tool** (⌘-click on macOS), used while Ctrl is held. Choose them from the two
+pop-ups in the Tracks area's bar; the defaults are the Pointer and the Marquee. The pointer
+takes the shape of the tool under it.
+
+Press **T** to open the Tool menu at the pointer, then the tool's letter to make it the
+Left-click Tool. T again (T T) or Esc picks the Pointer. The letters only pick tools while
+the menu is open, so they keep their usual key commands otherwise.
+
+| Tool | Letter | Click (or drag) on the tracks |
+|---|---|---|
+| Pointer | T | Select, move, trim, loop and fade, as described above. A click inside a marquee splits the regions at its edges and selects the parts inside. |
+| Pencil | P | Click empty space on a software instrument track to make an empty MIDI region one bar long, at the clicked position (snapped). On a region it moves and trims like the Pointer. |
+| Eraser | E | Deletes the region clicked, or the whole selection if the region is selected. |
+| Scissors | I | Splits the region at the pointer (snapped), or every selected region if it is selected; a line shows where. Alt+click cuts the region into equal pieces as long as the part before the click. The pieces are selected. |
+| Glue | G | Click a selected region to join the selection (as Join). Click or Shift+click other regions to select what to join. |
+| Mute | M | Mutes or unmutes the region clicked, or the whole selection if it is selected. |
+| Fade | A | On an audio region: drag over its start or end to set the fade-in or fade-out over the dragged length (dragging over an existing fade changes it). Drag across the place where it meets the next region to crossfade the two over the dragged length. Alt+click removes the fade (or crossfade) at the nearer end. |
+| Marquee | R | Drag to mark a time range across one or more tracks (snapped). Shift+drag extends the marquee; a click without a drag removes it. |
+
+With the Eraser, Scissors, Glue, Mute and Fade tools, a drag on empty lane space still draws a
+rubber band. Every tool's edit is one undo step, and deleting with the Eraser follows the
+Drag mode, as Delete does.
+
+**The marquee** is drawn in the theme's selection colour. While it is there:
+
+- **Delete** (Backspace) removes the part of the regions inside it, splitting them at its
+  edges; in the Shuffle drag modes the regions close the gap.
+- **Ctrl+C** copies the parts inside, **Ctrl+X** cuts them, and **Ctrl+V** pastes at the
+  marquee's start on its top track (Paste keeps the time from the marquee's start to the first
+  region). The Tracks area's Edit menu does the same.
+- A click with the Pointer inside it splits the regions at its edges and selects the parts
+  inside; a click anywhere else, or **Esc**, removes it. Drawing a marquee deselects regions.
 
 ### Loops
 
@@ -1940,6 +1977,7 @@ shown.
 | U | Set Locators by Regions |
 | Alt+Left / Alt+Right | Nudge regions left / right |
 | Ctrl+F (Control+⌘F on macOS) | Pack Take Folder |
+| T | Show Tool Menu (then a tool's letter: T Pointer, P Pencil, E Eraser, I Scissors, G Glue, M Mute, A Fade, R Marquee; Esc Pointer) |
 
 ### Windows
 
@@ -1988,6 +2026,7 @@ Control+B.
 | Ctrl+wheel | Zoom horizontally around the pointer |
 | Alt+wheel | Change track heights |
 | Shift+click a region | Add it to or remove it from the selection |
+| Ctrl+click or Ctrl+drag (⌘ on macOS) | Use the Ctrl-click Tool (the Marquee by default) |
 | Ctrl+click a track header | Add or remove the track |
 | Shift+click a track header | Select a range of tracks |
 | Alt-drag a header's bottom edge | Resize every track |

@@ -24,6 +24,7 @@ import { fadeZone, MIN_BODY_H, regionBar } from "../regionBar";
 import { playedNotes } from "../regionParams";
 import { dragOutcome, type Outcome } from "../dragModes";
 import { moveAutomationAnswer } from "../moveAutomation";
+import { activeTool, drawToolOverlay, escapeMarquee, notePointer, pressOnMarquee, toolHover, toolLeave, toolMouseDown, type ToolView } from "../trackTools";
 
 // ---- peaks ----------------------------------------------------------------------------------
 
@@ -336,6 +337,7 @@ export function Arrange() {
   useStore((s) => s.waveStyle);
   const showAutomation = useStore((s) => s.showAutomation);
   useStore((s) => s.autoLane);
+  useStore((s) => s.marquee);
 
   const pps = project ? pxPerBeat / samplesPerBeat(project) : 0;
   const lengthSamples = project
@@ -600,6 +602,7 @@ export function Arrange() {
       ctx.textBaseline = "middle";
       ctx.fillText(label, x + 10, tagY + tagH / 2 + 0.5);
     }
+    drawToolOverlay(ctx, { project, layout, pps, vp, W, H });
     const mq = marqueeRef.current;
     if (mq) {
       const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#4c9eff";
@@ -755,6 +758,12 @@ export function Arrange() {
     [],
   );
 
+  // Esc removes the marquee.
+  useEffect(() => {
+    window.addEventListener("keydown", escapeMarquee);
+    return () => window.removeEventListener("keydown", escapeMarquee);
+  }, []);
+
   // ---- interaction ------------------------------------------------------------------------
 
   const hit = (e: React.MouseEvent) => {
@@ -831,6 +840,19 @@ export function Arrange() {
     return "move";
   };
 
+  /** What the tools (trackTools.ts) need to handle the pointer. */
+  const toolView = (): ToolView => ({
+    ...live.current,
+    project: live.current.project!,
+    el: scrollRef.current!,
+    redraw: requestDraw,
+    // The Fade tool shows the fade it will set as a fade handle drag would.
+    previewFade: (p) => {
+      dragRef.current = p ? { kind: p.kind, ids: [p.id], grabbed: p.id, dx: 0, dTrack: 0, fade: p.length } : null;
+    },
+    clickLocate,
+  });
+
   /** What the automation view needs to handle the pointer. */
   const autoInput = () => ({ ...live.current, project: live.current.project!, el: scrollRef.current!, redraw: requestDraw });
 
@@ -840,6 +862,9 @@ export function Arrange() {
     if (showAutomation && live.current.project) return automationMouseDown(e, autoInput());
     const h = hit(e);
     if (!h) return;
+    // The Tracks-area tools; the Pointer carries on below.
+    const tool = activeTool(e);
+    if (pressOnMarquee(tool, h) || toolMouseDown(tool, e, h, toolView())) return;
     if (!h.track) return startMarquee(e, h);
     const { project, pps } = live.current;
     if (!project) return;
@@ -1084,10 +1109,12 @@ export function Arrange() {
   };
 
   const onHover = (e: React.MouseEvent) => {
+    notePointer({ x: e.clientX, y: e.clientY });
     if (dragRef.current) return;
     if (showAutomation && live.current.project) return automationHover(e, autoInput());
     const h = hit(e);
     const el = scrollRef.current!;
+    if (live.current.project && toolHover(activeTool(e), h, { project: live.current.project, el, redraw: requestDraw })) return;
     if (!h?.region) {
       el.style.cursor = "default";
       if (hoverRef.current !== null) {
@@ -1117,7 +1144,10 @@ export function Arrange() {
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onHover}
-        onMouseLeave={() => automationLeave({ redraw: requestDraw })}
+        onMouseLeave={() => {
+          automationLeave({ redraw: requestDraw });
+          toolLeave(requestDraw);
+        }}
         onContextMenu={onContextMenu}
       >
         <div style={{ width: contentW, height: contentH }} />

@@ -223,7 +223,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Region colours (p. 328)
 - [x] Rename regions (p. 331)
 - [x] Delete regions (p. 332)
-- [~] Pointer tool (p. 58). *Moves, trims, loops and sets fades; no Tool menu in the Tracks area (Stage 2).*
+- [x] Pointer tool (p. 58). *Moves, trims, loops and sets fades; a click inside the marquee splits at its edges.*
 
 ### Fades (p. 348–353)
 
@@ -383,25 +383,25 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Tools (p. 54–60)
 
-- [ ] Tool menu (T) in the Tracks area (p. 54)
-- [ ] Assign the left-click and ⌘-click tools; right-click behaviour (p. 55)
-- [ ] Pencil tool: create regions (p. 58)
-- [ ] Eraser tool (p. 58)
+- [x] Tool menu (T) in the Tracks area (p. 54)
+- [~] Assign the left-click and ⌘-click tools; right-click behaviour (p. 55). *Left-click and ⌘-click tools; the right button always opens the menu.*
+- [~] Pencil tool: create regions (p. 58). *Empty MIDI regions; no import on audio tracks.*
+- [x] Eraser tool (p. 58)
 - [ ] Text tool: rename regions (p. 58)
-- [ ] Scissors tool (p. 58)
-- [ ] Join (Glue) tool (p. 58)
+- [x] Scissors tool (p. 58), with Alt-click equal pieces
+- [x] Join (Glue) tool (p. 58)
 - [ ] Solo tool (p. 58)
 - [ ] Zoom tool (p. 59)
-- [ ] Fade tool (p. 59)
+- [x] Fade tool (p. 59): fades and crossfades by dragging, Alt-click removes
 - [ ] Automation Select and Automation Curve tools (p. 59)
-- [ ] Marquee tool (p. 59)
+- [x] Marquee tool (p. 59)
 - [ ] Gain tool (p. 325)
 - [ ] Slip and Rotate tools (p. 59, 1159)
 
 ### Arranging: advanced editing (p. 288–332)
 
-- [ ] Marquee selection; marquee ruler (p. 301–302)
-- [ ] Split at the marquee or locators (p. 320)
+- [~] Marquee selection; marquee ruler (p. 301–302). *Delete, Cut, Copy, Paste and the Pointer click; no marquee ruler, no playback of the marquee range.*
+- [~] Split at the marquee or locators (p. 320). *At the marquee, by a Pointer click inside it.*
 - [x] Rubber-band region selection in the Tracks area (p. 299)
 - [ ] Select by criteria: equal, similar, muted, same colour, overlapped, inside locators (p. 300)
 - [x] Drag modes (p. 295): Overlap, No Overlap, X-Fade, Shuffle R and Shuffle L.

@@ -302,6 +302,9 @@ fn main() {
             windows::broadcast_snapshot,
             commands::set_region_params,
             commands::apply_region_params,
+            commands::marquee_split,
+            commands::marquee_delete,
+            commands::marquee_copy,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

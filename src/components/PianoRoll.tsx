@@ -159,7 +159,8 @@ const TOOLS: { id: Tool; label: string; key: string }[] = [
   { id: "line", label: "Line (lanes)", key: "L" },
 ];
 
-const ToolIcon = ({ tool }: { tool: Tool }) => {
+/** A tool's icon (the Tracks area's tool pop-ups use the ones they share). */
+export const ToolIcon = ({ tool }: { tool: Tool }) => {
   const p = { width: 14, height: 14, viewBox: "0 0 14 14", fill: "none", stroke: "currentColor", strokeWidth: 1.3, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
   switch (tool) {
     case "pointer":

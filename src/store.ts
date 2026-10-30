@@ -4,6 +4,8 @@ import type { FxInfo } from "./fx";
 import type { DropTarget } from "./dnd";
 import type { DockPanels } from "./fxDock";
 import type { WaveStyle } from "./waveform";
+import { DEFAULT_TOOLS, type Tools } from "./tools";
+import type { Marquee } from "./marquee";
 
 export type Snap = "smart" | "bar" | "beat" | "off";
 /** What the bottom section shows; "fx" is the docked plug-in panels (fxDock.ts), "list" the
@@ -90,6 +92,13 @@ export interface State {
   /** Selected notes and controller events, as "region:index" keys into each MIDI region's
    *  content: the Piano Roll and the Event List share it (midiEdit.ts `selectionKeys`). */
   midiSelection: MidiSelection;
+  /** The Tracks area's Left-click and Command-click tools (trackTools.ts). */
+  tools: Tools;
+  /** The Tracks area's marquee selection (the Marquee tool). */
+  marquee: Marquee | null;
+  /** Where a marquee copy starts, so Paste keeps the time before its first region; null for
+   *  copied regions. */
+  clipboardStart: number | null;
 }
 
 export interface MidiSelection {
@@ -139,6 +148,9 @@ let state: State = {
   fxDock: { open: [], floating: [], active: null, ret: "none" },
   detached: [],
   midiSelection: { notes: [], cc: [] },
+  tools: DEFAULT_TOOLS,
+  marquee: null,
+  clipboardStart: null,
 };
 
 const listeners = new Set<() => void>();

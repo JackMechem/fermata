@@ -64,7 +64,7 @@ pub struct ClipInfo {
 
 /// The part of `r` between timeline positions `a` and `b` (clamped to the region), with id
 /// `id`. Fades are kept only on the original's own ends.
-fn sub_region(r: &Region, a: i64, b: i64, id: Id) -> Region {
+pub(super) fn sub_region(r: &Region, a: i64, b: i64, id: Id) -> Region {
     let (rs, re) = (r.start, r.start + r.length);
     let (a, b) = (a.max(rs), b.min(re));
     let cut = a - rs;

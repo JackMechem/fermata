@@ -198,7 +198,7 @@ export function copyRegions(ids = selectedRegions()) {
     const region = all[index]?.regions.find((r) => r.id === id);
     return region ? [{ index, region }] : [];
   });
-  if (clip.length) setState({ clipboard: clip });
+  if (clip.length) setState({ clipboard: clip, clipboardStart: null });
   return clip.length;
 }
 
@@ -216,7 +216,7 @@ export async function pasteRegions(at?: { track: Id; pos: number }) {
   const targetId = at?.track ?? s.snap?.selected ?? all[0].id;
   const target = Math.max(0, all.findIndex((t) => t.id === targetId));
   const top = Math.min(...clip.map((c) => c.index));
-  const earliest = Math.min(...clip.map((c) => c.region.start));
+  const earliest = s.clipboardStart ?? Math.min(...clip.map((c) => c.region.start));
   const items = clip.flatMap(({ index, region }) => {
     const t = all[target + index - top];
     return t ? [[t.id, region] as [Id, Region]] : [];
