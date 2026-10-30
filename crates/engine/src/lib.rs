@@ -1,5 +1,6 @@
 //! Fermata's audio engine: project model, real-time graph, device I/O, recording and MIDI.
 
+pub mod audio_file;
 pub mod audio_io;
 pub mod automation;
 pub mod clip;

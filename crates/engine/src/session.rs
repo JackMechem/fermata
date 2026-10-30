@@ -29,7 +29,7 @@ use crate::synth::BasicSynth;
 
 mod routing;
 mod bounce;
-pub use bounce::{BipOptions, BipSource, BitDepth, BounceResult, InPlaceRender, RenderOptions};
+pub use bounce::{AudioFormat, BipOptions, BipSource, BitDepth, BounceResult, InPlaceRender, RenderOptions};
 mod range_edit;
 pub use range_edit::{ClipInfo, RangeEdit};
 mod options;

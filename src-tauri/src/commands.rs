@@ -812,10 +812,14 @@ fn progress(app: &tauri::AppHandle) -> impl FnMut(f64) {
     }
 }
 
-/// The tracks Export All Tracks would write, for the dialog to list.
+/// The tracks Export All Tracks would write, for the dialog to list; with `ids`, those
+/// Export Selected Tracks would write for that selection.
 #[tauri::command]
-pub fn export_targets(state: State<AppState>) -> Vec<Id> {
-    with(&state, |s| s.export_targets())
+pub fn export_targets(state: State<AppState>, ids: Option<Vec<Id>>) -> Vec<Id> {
+    with(&state, |s| match ids {
+        Some(ids) => s.export_targets_of(&ids),
+        None => s.export_targets(),
+    })
 }
 
 #[tauri::command(async)]
@@ -824,10 +828,16 @@ pub fn bounce_project(app: tauri::AppHandle, state: State<AppState>, path: Strin
     with(&state, |s| s.bounce_project(&PathBuf::from(path), &options, &mut p)).map_err(|e| e.to_string())
 }
 
+/// Export All Tracks, or with `ids` Export Selected Tracks.
 #[tauri::command(async)]
-pub fn export_tracks(app: tauri::AppHandle, state: State<AppState>, dir: String, options: RenderOptions) -> R<BounceResult> {
+pub fn export_tracks(app: tauri::AppHandle, state: State<AppState>, dir: String, options: RenderOptions, ids: Option<Vec<Id>>) -> R<BounceResult> {
     let mut p = progress(&app);
-    with(&state, |s| s.export_tracks(&PathBuf::from(dir), &options, &mut p)).map_err(|e| e.to_string())
+    let dir = PathBuf::from(dir);
+    with(&state, |s| match ids {
+        Some(ids) => s.export_selected_tracks(&dir, &ids, &options, &mut p),
+        None => s.export_tracks(&dir, &options, &mut p),
+    })
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]

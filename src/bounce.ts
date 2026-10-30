@@ -4,8 +4,9 @@ import { regionEnd } from "./loops";
 import type { Id, Project } from "./api";
 import { setState } from "./store";
 import { fmt, MENU_SHORTCUTS } from "./keymap";
+import type { AudioFormat, BitDepth } from "./bounceFormat";
 
-export type BitDepth = "int16" | "int24" | "float32";
+export type { AudioFormat, BitDepth } from "./bounceFormat";
 
 /** session::RenderOptions. Positions are project samples, the end exclusive. */
 export interface RenderOptions {
@@ -16,6 +17,7 @@ export interface RenderOptions {
   /** null keeps the project rate. */
   sample_rate: number | null;
   normalize: boolean;
+  format: AudioFormat;
 }
 
 export type BipSource = "leave" | "mute" | "delete";
@@ -34,14 +36,14 @@ export interface BounceResult {
   seconds: number;
 }
 
-/** Bounce Project or Section, Export All Tracks, or Export Region. */
-export type BounceKind = "project" | "tracks" | "region";
+/** Bounce Project or Section, Export All Tracks, Export Selected Tracks, or Export Region. */
+export type BounceKind = "project" | "tracks" | "selected" | "region";
 
-export let bounceRequest: { kind: BounceKind; region: Id | null } = { kind: "project", region: null };
+export let bounceRequest: { kind: BounceKind; region: Id | null; tracks: Id[] } = { kind: "project", region: null, tracks: [] };
 export let inPlaceRequest: { tracks: Id[]; regions: Id[] } = { tracks: [], regions: [] };
 
-export function openBounce(kind: BounceKind, region: Id | null = null) {
-  bounceRequest = { kind, region };
+export function openBounce(kind: BounceKind, region: Id | null = null, tracks: Id[] = []) {
+  bounceRequest = { kind, region, tracks };
   setState({ dialog: "bounce" });
 }
 

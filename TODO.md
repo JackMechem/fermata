@@ -101,7 +101,8 @@ Goal: finish a mix and deliver it without leaving Fermata.
 - [ ] VCA faders
 - [ ] A pre-fader side-chain option for built-in effects
 - [ ] Clip indicators and a gain-reduction meter on the strip
-- [ ] FLAC, AIFF, MP3 and AAC bounce; export the selected tracks
+- [x] FLAC and AIFF bounce; export the selected tracks
+- [ ] MP3 and AAC bounce (needs an encoder whose licence suits)
 - [ ] Delay compensation changes while playing without clicks
 - [ ] More built-in effects: modulation (chorus, flanger, phaser, tremolo), distortion, a Gain
       utility, a linear-phase EQ

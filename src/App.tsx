@@ -104,6 +104,12 @@ function handleMenu(id: string) {
     case "export-tracks":
       openBounce("tracks");
       break;
+    case "export-selected-tracks": {
+      const ids = ops.selectedTracks();
+      if (ids.length) openBounce("selected", null, ids);
+      else setState({ toast: { text: "Select the tracks to export first", at: Date.now(), ms: 2500 } });
+      break;
+    }
     case "bounce-in-place":
       ops.bounceInPlace();
       break;

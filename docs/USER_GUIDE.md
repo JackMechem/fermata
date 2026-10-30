@@ -226,7 +226,7 @@ status, the audio devices, and the number of MIDI inputs.
 | Menu | Items |
 |---|---|
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Quit Fermata |
-| File | New…, Open Recent…, Open…, Save, Save As…, Project Settings…, Import Audio File…, Bounce Project or Section…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
+| File | New…, Open Recent…, Open…, Save, Save As…, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Select All, Delete |
 | Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
@@ -1372,18 +1372,24 @@ timeline.
 |---|---|
 | Range | Whole Project (bar 1 to the end of the last region), Cycle Range (the default when Cycle is on), or Bars from–to. |
 | Audio Tail | 0 to 30 s (2 s by default), for reverbs and releases. Silence at the end is trimmed. |
-| File Format | WAVE. |
-| Resolution | 16-bit (with TPDF dither), 24-bit (default), 32-bit float. |
+| File Format | WAVE (default), AIFF, or FLAC (lossless, about half the size). |
+| Resolution | 16-bit (with TPDF dither), 24-bit (default), 32-bit float. FLAC has no 32-bit float: with FLAC chosen it writes 24-bit. 32-bit float AIFF is written as AIFF-C, which most applications read. |
 | Sample Rate | The project's (default), 44.1, 48, 88.2 or 96 kHz (converted with the high-quality resampler). |
 | Normalize | Puts the peak at -0.1 dBFS (off by default). |
 
-The file name defaults to the project's, next to the project folder. The options are
-remembered.
+The file name defaults to the project's, next to the project folder, with the format's extension
+(`.wav`, `.aif` or `.flac`). The options, format included, are remembered. MP3 and AAC are not
+offered yet.
+
+Every format holds exactly the same samples: a 16-bit FLAC decodes to the same numbers as a
+16-bit WAV of the same bounce, dither included. AIFF and FLAC files import back into Fermata
+like any other audio file.
 
 ### Export All Tracks as Audio Files
 
 **File › Export All Tracks as Audio Files…** (Ctrl+Shift+E) writes one file per track into a
-folder, named `<number> <track name>.wav` after the track's place in the list.
+folder, named `<number> <track name>.wav` (or `.aif`, `.flac`) after the track's place in the
+list. It has the same options as Bounce, format included.
 
 - Each audio and instrument track plays alone through its own channel strip, fader and pan
   included and Stereo Out left out, so the files add up to the mix.
@@ -1392,6 +1398,14 @@ folder, named `<number> <track name>.wav` after the track's place in the list.
   Folder stacks have no strip and get no file.
 - Tracks without (unmuted) regions are skipped.
 - Every file covers the same range plus the full tail, so they line up when imported elsewhere.
+
+### Export Selected Tracks as Audio Files
+
+**File › Export Selected Tracks as Audio Files…** (Ctrl+E) does the same for the selected tracks
+only: one file each, rendered and named exactly as Export All Tracks would, so a few stems can be
+redone without writing them all again. A selected folder stack stands for its subtracks; a
+selected summing stack writes its mix (select its subtracks too for their own files). Selected
+tracks without regions are skipped, and the dialog lists the files it will write.
 
 ### Bounce in Place
 
@@ -1724,6 +1738,7 @@ shown.
 | Ctrl+Shift+S | File › Save As… |
 | Ctrl+Shift+I | File › Import Audio File… |
 | Ctrl+B | File › Bounce Project or Section… |
+| Ctrl+E | File › Export Selected Tracks as Audio Files… |
 | Ctrl+Shift+E | File › Export All Tracks as Audio Files… |
 | Ctrl+Z | Edit › Undo |
 | Ctrl+Shift+Z | Edit › Redo |

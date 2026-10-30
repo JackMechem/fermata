@@ -168,6 +168,7 @@ folder is kept when anything failed.
 | `sends_check` | audio file, scratch dir | Sends pre and post fader, aux buses, output routing, solo through routing, loop refusal. |
 | `send_auto_check` | audio file, scratch dir | A send-level automation lane changes what reaches the aux. |
 | `bounce_check` | audio file, scratch dir | Bounce, Export All Tracks, Export Region and Bounce in Place: ranges, tails, formats, normalize, placement. |
+| `export_check` | audio file, scratch dir | AIFF and FLAC bounces decode to the same samples as the WAV bounce (and within quantization of a float one); FLAC refuses float; Export Selected Tracks writes just the selection, folder stacks standing for their subtracks. |
 | `crossfade_check` | audio file, scratch dir | Fade curves, Speed Up and Slow Down, and X, EqP and X S crossfades, measured in offline renders of synthetic files (X sums to unity, EqP to constant power); butt fades and gaps; the X-Fade drag mode with undo and redo; and that playback, Bounce, Export, Bounce in Place, Freeze, Join and save/reopen all sound the same. |
 | `range_edit_check` | audio file, scratch dir | Audio Track Editor range edits and Split at Transients: what plays after each edit, and that one undo reverts it. |
 | `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too (`SKIP` when it isn't in the cache). |

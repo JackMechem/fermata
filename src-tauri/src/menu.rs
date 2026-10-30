@@ -40,6 +40,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("import-audio", "Import Audio File…", Some("Shift+CmdOrCtrl+I"))?)
         .separator()
         .item(&item("bounce", "Bounce Project or Section…", Some("CmdOrCtrl+B"))?)
+        .item(&item("export-selected-tracks", "Export Selected Tracks as Audio Files…", Some("CmdOrCtrl+E"))?)
         .item(&item("export-tracks", "Export All Tracks as Audio Files…", Some("Shift+CmdOrCtrl+E"))?)
         .item(&item("import-midi", "Import MIDI File…", None)?)
         .item(&item("export-midi", "Export Selection as MIDI File…", None)?)

@@ -1,5 +1,5 @@
-// File › Bounce Project or Section, File › Export › All Tracks as Audio Files, Export Region as
-// Audio File, and Track › Bounce in Place, after Logic's dialogs. The renders run offline in the
+// File › Bounce Project or Section, File › Export › All Tracks (or Selected Tracks) as Audio
+// Files, Export Region as Audio File, and Track › Bounce in Place, after Logic's dialogs. The renders run offline in the
 // engine; these sheets stay up with a progress bar until they finish.
 import { regionEnd } from "../loops";
 import { useEffect, useState } from "react";
@@ -17,6 +17,7 @@ import {
   type BounceResult,
   type RenderOptions,
 } from "../bounce";
+import { depthFor, depthsFor, extensionOf, fileFilter, FORMATS, withExtension, type AudioFormat } from "../bounceFormat";
 import { getState, setState, useStore } from "../store";
 import { formatTime } from "../time";
 import { tempoMap } from "../tempo";
@@ -81,28 +82,27 @@ type RangeKind = "project" | "cycle" | "custom";
 
 interface BouncePrefs {
   tail_secs: number;
+  /** The last resolution chosen; FLAC writes 24-bit when it is 32-bit float (see depthFor). */
   bit_depth: BitDepth;
   sample_rate: number | null;
   normalize: boolean;
+  format: AudioFormat;
 }
 
 const BOUNCE_PREFS = "fermata.bounce";
 const RATES = [44100, 48000, 88200, 96000];
-const DEPTHS: [BitDepth, string][] = [
-  ["int16", "16-bit (dithered)"],
-  ["int24", "24-bit"],
-  ["float32", "32-bit float"],
-];
 
 const kHz = (r: number) => `${(r / 1000).toFixed(1).replace(/\.0$/, "")} kHz`;
 
-/** Bounce Project or Section, Export All Tracks, and Export Region share one sheet. */
+/** Bounce Project or Section, Export All Tracks, Export Selected Tracks and Export Region share
+ *  one sheet. */
 export function BounceDialog() {
-  const { kind, region: regionId } = bounceRequest;
+  const { kind, region: regionId, tracks: selection } = bounceRequest;
+  const stems = kind === "tracks" || kind === "selected";
   const project = useStore((s) => s.snap?.project) as Project;
   const path = useStore((s) => s.snap?.path ?? "");
   const [prefs, setPrefs] = useState<BouncePrefs>(() =>
-    loadPref<BouncePrefs>(BOUNCE_PREFS, { tail_secs: 2, bit_depth: "int24", sample_rate: null, normalize: false }),
+    loadPref<BouncePrefs>(BOUNCE_PREFS, { tail_secs: 2, bit_depth: "int24", sample_rate: null, normalize: false, format: "wav" }),
   );
   const cycle = project.cycle;
   const hasCycle = cycle.end > cycle.start;
@@ -116,8 +116,8 @@ export function BounceDialog() {
   const close = () => !busy && setState({ dialog: null });
 
   useEffect(() => {
-    if (kind === "tracks") call<Id[]>("export_targets").then((t) => t && setTargets(t));
-  }, [kind]);
+    if (stems) call<Id[]>("export_targets", { ids: kind === "selected" ? selection : null }).then((t) => t && setTargets(t));
+  }, [kind, stems, selection]);
 
   const span: [number, number] = region
     ? [region.start, regionEnd(region)]
@@ -134,12 +134,16 @@ export function BounceDialog() {
   };
   const barOf = (pos: number) => Math.round(map.barPosition(pos) * 100) / 100 + 1;
 
+  const depth = depthFor(prefs.format, prefs.bit_depth);
+
   const go = async () => {
-    const options: RenderOptions = { start: span[0], end: span[1], ...prefs };
-    if (kind === "tracks") {
-      const dir = await open({ directory: true, title: "Export All Tracks to Folder", defaultPath: besideProject(path, "").dir });
+    const options: RenderOptions = { start: span[0], end: span[1], ...prefs, bit_depth: depth };
+    if (stems) {
+      const what = kind === "selected" ? "Selected Tracks" : "All Tracks";
+      const dir = await open({ directory: true, title: `Export ${what} to Folder`, defaultPath: besideProject(path, "").dir });
       if (typeof dir !== "string") return;
-      const res = await run(() => call<BounceResult>("export_tracks", { dir, options }));
+      const ids = kind === "selected" ? selection : null;
+      const res = await run(() => call<BounceResult>("export_tracks", { dir, options, ids }));
       if (!res) return;
       setState({ dialog: null });
       toast(`Exported ${res.paths.length} track${res.paths.length === 1 ? "" : "s"} to ${dir}`);
@@ -148,11 +152,11 @@ export function BounceDialog() {
     const name = (region?.name || project.name || "Bounce").replace(/[\\/:*?"<>|]/g, "_");
     const dest = await save({
       title: region ? "Export Region as Audio File" : "Bounce",
-      defaultPath: besideProject(path, `${name}.wav`).file,
-      filters: [{ name: "WAV audio", extensions: ["wav"] }],
+      defaultPath: besideProject(path, `${name}.${extensionOf(prefs.format)}`).file,
+      filters: [fileFilter(prefs.format)],
     });
     if (!dest) return;
-    const file = /\.wav$/i.test(dest) ? dest : `${dest}.wav`;
+    const file = withExtension(dest, prefs.format);
     const res = region
       ? await run(() => call<BounceResult>("export_region", { id: region.id, path: file, options }))
       : await run(() => call<BounceResult>("bounce_project", { path: file, options }));
@@ -162,7 +166,14 @@ export function BounceDialog() {
     toast(`${region ? "Exported" : "Bounced"} ${fileName(file)} (${formatTime(project, res.seconds * project.sample_rate)}${peak}) to ${file}`);
   };
 
-  const title = kind === "tracks" ? "Export All Tracks as Audio Files" : kind === "region" ? "Export Region as Audio File" : "Bounce Project or Section";
+  const title =
+    kind === "tracks"
+      ? "Export All Tracks as Audio Files"
+      : kind === "selected"
+        ? "Export Selected Tracks as Audio Files"
+        : kind === "region"
+          ? "Export Region as Audio File"
+          : "Bounce Project or Section";
   const names = targets.map((id) => project.tracks.find((t) => t.id === id)?.name).filter(Boolean);
   const ranges: [RangeKind, string][] = [["project", "Whole Project"]];
   if (hasCycle) ranges.push(["cycle", "Cycle Range"]);
@@ -205,9 +216,9 @@ export function BounceDialog() {
             <span className="dim">seconds for reverbs and releases</span>
           </div>
           <label>File Format:</label>
-          <Select value="wav" options={[["wav", "WAVE"]]} onChange={() => {}} />
+          <Select value={prefs.format} options={FORMATS} onChange={(v) => set({ format: v })} />
           <label>Resolution:</label>
-          <Select value={prefs.bit_depth} options={DEPTHS} onChange={(v) => set({ bit_depth: v })} />
+          <Select value={depth} options={depthsFor(prefs.format)} onChange={(v) => set({ bit_depth: v })} />
           <label>Sample Rate:</label>
           <Select
             value={prefs.sample_rate ?? 0}
@@ -219,14 +230,18 @@ export function BounceDialog() {
             <input type="checkbox" checked={prefs.normalize} onChange={(e) => set({ normalize: e.target.checked })} />
             Peak at −0.1 dBFS
           </label>
-          {kind === "tracks" && (
+          {stems && (
             <>
               <span />
               <span className="form-note">
                 {names.length
                   ? `${names.length} file${names.length === 1 ? "" : "s"}, each track through its own channel strip: ${names.join(", ")}.`
-                  : "No tracks have regions to export."}{" "}
-                Summing stacks are exported as a whole as well; folder stacks have no file of their own.
+                  : kind === "selected"
+                    ? "None of the selected tracks have regions to export."
+                    : "No tracks have regions to export."}{" "}
+                {kind === "selected"
+                  ? "A selected folder stack exports its subtracks; a summing stack exports its mix."
+                  : "Summing stacks are exported as a whole as well; folder stacks have no file of their own."}
               </span>
             </>
           )}
@@ -239,7 +254,7 @@ export function BounceDialog() {
           <button className="push" disabled={busy} onClick={close}>
             Cancel
           </button>
-          <button className="push default" disabled={busy || empty || (kind === "tracks" && !names.length)} onClick={go}>
+          <button className="push default" disabled={busy || empty || (stems && !names.length)} onClick={go}>
             {busy ? `${kind === "project" ? "Bouncing" : "Exporting"}… ${Math.round((progress ?? 0) * 100)}%` : kind === "project" ? "Bounce…" : "Export…"}
           </button>
         </div>

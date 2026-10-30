@@ -491,8 +491,10 @@ lock held, faster than real time:
   captured before Stereo Out instead of the full mix. `tracks` lists who plays and whether
   each is heard, overriding live mute and solo. Used by Export All Tracks, Export Region,
   Bounce in Place and Freeze (`Session::isolate_track`).
-- The bounce, export and freeze code is in `session/bounce.rs` and `session/freeze.rs`;
-  `write_wav` there writes 16-bit (TPDF dither), 24-bit or 32-bit float WAV.
+- The bounce, export and freeze code is in `session/bounce.rs` and `session/freeze.rs`.
+  `audio_file::write` writes the files: WAV, AIFF (AIFF-C for float) or FLAC, at 16-bit (TPDF
+  dither), 24-bit or 32-bit float. One `Quantizer` serves every format, so they all hold the
+  same samples.
 
 ## 7. Undo
 
@@ -1088,7 +1090,7 @@ it like any plug-in.
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |
 | `session.rs` | `Session`: engine plumbing, `track_params`, `regions_dsp`, building tracks, undo (`checkpoint`, `undo`, `redo`, `restore`), transport and recording, track and region edits, import, plug-in slots, `idle`, `tick`, new/save/open. |
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
-| `session/bounce.rs` | Bounce, Export All Tracks, Export Region, Bounce in Place (render and place), WAV writing with dither, normalize. |
+| `session/bounce.rs` | Bounce, Export All (or Selected) Tracks, Export Region, Bounce in Place (render and place), normalize. |
 | `session/range_edit.rs` | Audio Track Editor range edits (`RangeEdit`) and multi-point splits; clip info. |
 | `session/options.rs` | Applying `Prefs`, recording folder, default fades, overlapping-recording placement, MIDI merge, project options, nudge, autosave and recovery. |
 | `session/midi_content.rs` | `set_midi_content` (Piano Roll edits) and Standard MIDI File import/export. |
@@ -1114,6 +1116,7 @@ it like any plug-in.
 | `prefs.rs` | `Prefs` (Settings) and the metronome and bit-depth types saved in projects. |
 | `clip.rs` | Audio held in memory and the waveform overview. |
 | `decode.rs` | Decoding audio files in any supported format, resampling, WAV writing. |
+| `audio_file.rs` (+ `audio_file/`) | Writing bounces: `AudioFormat` (WAV, AIFF, FLAC via `flacenc`), `BitDepth`, the shared dithering `Quantizer`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
 | `synth.rs` | Fermata Synth, the built-in polyphonic instrument. |
 | `transients.rs` | Onset detection for transient markers and Split at Transients. |

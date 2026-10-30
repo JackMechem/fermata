@@ -343,7 +343,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Bounce Project or Section offline, faster than real time (⌘B) (p. 909)
 - [x] Bounce range: whole project, cycle or a span of bars (p. 914)
 - [x] Audio tail, with trailing silence trimmed
-- [~] Bounce file formats (p. 914–918). *WAV at 16, 24 or 32-bit float; no AIFF, CAF, MP3, M4A or FLAC.*
+- [~] Bounce file formats (p. 914–918). *WAV and AIFF at 16, 24 or 32-bit float, FLAC at 16 or 24-bit; no CAF, MP3 or M4A.*
 - [~] Dither (p. 914). *TPDF only; no POW-r.*
 - [x] Bounce sample-rate conversion to 44.1–96 kHz
 - [x] Normalize on bounce (p. 914)
@@ -352,7 +352,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Bounce tracks in place, with Audio FX, volume/pan, tail and source options (p. 175–176)
 - [x] Bounce regions in place (p. 178)
 - [~] Bounce all tracks in place (p. 177). *Works on the selected tracks; no dedicated command.*
-- [ ] Export the selected track as an audio file (⌘E) (p. 183)
+- [x] Export the selected track as an audio file (⌘E) (p. 183). *File › Export Selected Tracks as Audio Files…, one file per selected track.*
 - [ ] Real-time bounce (p. 914)
 
 ### Settings (p. 1033–1076)
@@ -659,7 +659,7 @@ Audio File Editor (p. 499–523)
 
 ### Bounce and export: professional (p. 183–187, 909–918)
 
-- [ ] AIFF, CAF and FLAC bounce (p. 914)
+- [~] AIFF, CAF and FLAC bounce (p. 914). *AIFF and FLAC; no CAF.*
 - [ ] MP3 and M4A/AAC bounce (p. 916–918)
 - [ ] POW-r dither (p. 914)
 - [ ] Bounce several outputs at once (p. 914)

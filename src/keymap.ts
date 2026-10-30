@@ -83,6 +83,7 @@ export const MENU_SHORTCUTS: { label: string; menu: string; key: string }[] = [
   { label: "Save As…", menu: "File", key: "Mod+Shift+S" },
   { label: "Import Audio File…", menu: "File", key: "Mod+Shift+I" },
   { label: "Bounce Project or Section…", menu: "File", key: "Mod+B" },
+  { label: "Export Selected Tracks as Audio Files…", menu: "File", key: "Mod+E" },
   { label: "Export All Tracks as Audio Files…", menu: "File", key: "Mod+Shift+E" },
   // BOUNCE_IN_PLACE_KEY in menu.rs: Logic's ⌃B on macOS; elsewhere Ctrl+B is Bounce Project.
   { label: "Bounce in Place…", menu: "Track", key: IS_MAC ? "Ctrl+B" : "Ctrl+Alt+B" },

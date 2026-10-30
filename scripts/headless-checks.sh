@@ -22,6 +22,7 @@ CHECKS=(
   "sends_check tone dir"
   "send_auto_check tone dir"
   "bounce_check tone dir"
+  "export_check tone dir"
   "range_edit_check tone dir"
   "automation_check tone dir"
   "insert_order_check tone dir"

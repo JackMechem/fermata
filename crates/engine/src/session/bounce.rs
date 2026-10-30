@@ -1,12 +1,13 @@
 //! Bounces and exports, as in Logic's File › Bounce and File › Export menus and Track › Bounce
 //! in Place. Everything is an offline render of the real graph (`Engine::render`), written to
-//! WAV or placed back into the project.
+//! WAV, AIFF or FLAC (see `audio_file`) or placed back into the project.
 //!
 //! The render step only touches the engine and the disk, so it can run on a worker thread.
 //! Bounce in Place's second step (`place_bounces`) edits tracks and plug-ins and belongs on the
 //! main thread like any other edit.
 
 use super::*;
+pub use crate::audio_file::{AudioFormat, BitDepth};
 
 /// Where Normalize puts the loudest sample, as Logic does.
 const NORMALIZE_PEAK_DB: f32 = -0.1;
@@ -14,16 +15,6 @@ const NORMALIZE_PEAK_DB: f32 = -0.1;
 const SILENCE: f32 = 3.2e-5;
 /// The audio tail Bounce in Place keeps at most.
 const IN_PLACE_TAIL_SECS: f64 = 2.0;
-
-/// Sample format of a bounced file.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BitDepth {
-    /// 16-bit integer, with TPDF dither.
-    Int16,
-    Int24,
-    Float32,
-}
 
 /// What to render and how to write it (Bounce, Export All Tracks, Export Region).
 #[derive(Debug, Clone, Deserialize)]
@@ -40,11 +31,13 @@ pub struct RenderOptions {
     pub sample_rate: Option<u32>,
     /// Scale each file so its peak sits at -0.1 dBFS.
     pub normalize: bool,
+    /// WAV, AIFF or FLAC. FLAC takes 16 or 24-bit only.
+    pub format: AudioFormat,
 }
 
 impl Default for RenderOptions {
     fn default() -> Self {
-        RenderOptions { start: 0, end: 0, tail_secs: 2.0, bit_depth: BitDepth::Int24, sample_rate: None, normalize: false }
+        RenderOptions { start: 0, end: 0, tail_secs: 2.0, bit_depth: BitDepth::Int24, sample_rate: None, normalize: false, format: AudioFormat::Wav }
     }
 }
 
@@ -171,7 +164,7 @@ impl Session {
         let mut audio = self.render(o.start, o.end, tail, None, progress)?;
         trim_tail(&mut audio, (o.end - o.start) as usize);
         let (audio, rate) = self.finish(audio, o)?;
-        write_wav(path, rate, &audio, o.bit_depth)?;
+        crate::audio_file::write(path, o.format, rate, &audio, o.bit_depth)?;
         Ok(BounceResult { paths: vec![path.to_string_lossy().to_string()], peak_db: to_db(peak(&audio)), seconds: frames(&audio) as f64 / rate as f64 })
     }
 
@@ -187,14 +180,39 @@ impl Session {
             .collect()
     }
 
+    /// The tracks Export Selected Tracks writes for the selection `ids`: those
+    /// [`export_targets`](Self::export_targets) among them, with a selected folder stack
+    /// standing for its subtracks (it has no channel strip of its own).
+    pub fn export_targets_of(&self, ids: &[Id]) -> Vec<Id> {
+        let p = &self.project;
+        let is_folder = |id: Id| p.track(id).is_some_and(|t| t.kind == TrackKind::Folder);
+        let chosen = |id: Id| ids.contains(&id) || p.ancestors(id).iter().any(|a| ids.contains(a) && is_folder(*a));
+        self.export_targets().into_iter().filter(|&id| chosen(id)).collect()
+    }
+
     /// File › Export › All Tracks as Audio Files: each target track rendered alone through its
     /// channel strip (fader and pan included, Stereo Out not), named "<number> <track>.wav"
-    /// after its place in the track list. All files cover the same range, tail included, so
-    /// they line up when imported elsewhere.
+    /// (or .aif, .flac) after its place in the track list. All files cover the same range, tail
+    /// included, so they line up when imported elsewhere.
     pub fn export_tracks(&mut self, dir: &Path, o: &RenderOptions, progress: &mut dyn FnMut(f64)) -> Result<BounceResult> {
         let targets = self.export_targets();
+        self.export_track_files(dir, targets, o, progress)
+    }
+
+    /// File › Export › Selected Tracks as Audio Files: Export All Tracks for just the selected
+    /// tracks (see [`export_targets_of`](Self::export_targets_of)).
+    pub fn export_selected_tracks(&mut self, dir: &Path, ids: &[Id], o: &RenderOptions, progress: &mut dyn FnMut(f64)) -> Result<BounceResult> {
+        let targets = self.export_targets_of(ids);
+        self.export_track_files(dir, targets, o, progress)
+    }
+
+    fn export_track_files(&mut self, dir: &Path, targets: Vec<Id>, o: &RenderOptions, progress: &mut dyn FnMut(f64)) -> Result<BounceResult> {
         if targets.is_empty() {
             return Err(anyhow!("No tracks have regions to export"));
+        }
+        // Checked up front, so a refused format doesn't leave a few files written.
+        if !o.format.supports(o.bit_depth) {
+            return Err(anyhow!("FLAC files can't hold 32-bit float audio: choose 16 or 24-bit"));
         }
         std::fs::create_dir_all(dir).with_context(|| format!("creating {}", dir.display()))?;
         let tail = self.tail_frames(o.tail_secs);
@@ -206,8 +224,8 @@ impl Session {
             let iso = self.isolate_track(id, true, true);
             let audio = self.render(o.start, o.end, tail, Some(iso), &mut |f| progress((k as f64 + f) / n))?;
             let (audio, rate) = self.finish(audio, o)?;
-            let path = dir.join(format!("{:02} {}.wav", index + 1, file_safe(&name)));
-            write_wav(&path, rate, &audio, o.bit_depth)?;
+            let path = dir.join(format!("{:02} {}.{}", index + 1, file_safe(&name), o.format.extension()));
+            crate::audio_file::write(&path, o.format, rate, &audio, o.bit_depth)?;
             result.peak_db = result.peak_db.max(to_db(peak(&audio)));
             result.seconds = result.seconds.max(frames(&audio) as f64 / rate as f64);
             result.paths.push(path.to_string_lossy().to_string());
@@ -232,7 +250,7 @@ impl Session {
         let mut audio = rendered?;
         trim_tail(&mut audio, (to - from) as usize);
         let (audio, rate) = self.finish(audio, o)?;
-        write_wav(path, rate, &audio, o.bit_depth)?;
+        crate::audio_file::write(path, o.format, rate, &audio, o.bit_depth)?;
         Ok(BounceResult { paths: vec![path.to_string_lossy().to_string()], peak_db: to_db(peak(&audio)), seconds: frames(&audio) as f64 / rate as f64 })
     }
 
@@ -405,45 +423,6 @@ fn file_safe(name: &str) -> String {
     }
 }
 
-/// Writes interleaved WAV in the given format. 16-bit gets TPDF dither (±1 LSB triangular
-/// noise) so quiet passages fade into noise rather than distortion; the integer formats clip
-/// at full scale.
-pub fn write_wav(path: &Path, rate: u32, audio: &[Vec<f32>], depth: BitDepth) -> Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let (bits, format) = match depth {
-        BitDepth::Int16 => (16, hound::SampleFormat::Int),
-        BitDepth::Int24 => (24, hound::SampleFormat::Int),
-        BitDepth::Float32 => (32, hound::SampleFormat::Float),
-    };
-    let spec = hound::WavSpec { channels: audio.len().max(1) as u16, sample_rate: rate, bits_per_sample: bits, sample_format: format };
-    let mut w = hound::WavWriter::create(path, spec).with_context(|| format!("creating {}", path.display()))?;
-    // xorshift32: plenty for dither noise, and keeps renders repeatable.
-    let mut seed: u32 = 0x9e37_79b9;
-    let mut uniform = move || {
-        seed ^= seed << 13;
-        seed ^= seed >> 17;
-        seed ^= seed << 5;
-        seed as f32 / u32::MAX as f32
-    };
-    for i in 0..frames(audio) {
-        for c in audio {
-            let s = c[i];
-            match depth {
-                BitDepth::Int16 => {
-                    let v = s * 32767.0 + (uniform() - uniform());
-                    w.write_sample(v.round().clamp(-32768.0, 32767.0) as i16)?;
-                }
-                BitDepth::Int24 => w.write_sample((s as f64 * 8_388_607.0).round().clamp(-8_388_608.0, 8_388_607.0) as i32)?,
-                BitDepth::Float32 => w.write_sample(s)?,
-            }
-        }
-    }
-    w.finalize()?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,21 +443,6 @@ mod tests {
         let mut a = vec![vec![0.1f32, -0.25, 0.2]];
         normalize(&mut a, -0.1);
         assert!((to_db(peak(&a)) + 0.1).abs() < 1e-4);
-    }
-
-    #[test]
-    fn sixteen_bit_dither_is_small_and_unbiased() {
-        let dir = std::env::temp_dir().join(format!("fermata-bounce-{}", std::process::id()));
-        let p = dir.join("d.wav");
-        let quiet = vec![vec![0.25f32; 48000]];
-        write_wav(&p, 48000, &quiet, BitDepth::Int16).unwrap();
-        let mut r = hound::WavReader::open(&p).unwrap();
-        assert_eq!(r.spec().bits_per_sample, 16);
-        let s: Vec<i16> = r.samples::<i16>().map(|x| x.unwrap()).collect();
-        let mean = s.iter().map(|&v| v as f64).sum::<f64>() / s.len() as f64;
-        assert!((mean - 0.25 * 32767.0).abs() < 0.1, "mean {mean}");
-        assert!(s.iter().all(|&v| (v as f32 - 0.25 * 32767.0).abs() <= 1.5));
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

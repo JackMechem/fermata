@@ -8,6 +8,11 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
+  24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
+  format is remembered with the other bounce options.
+- **File › Export Selected Tracks as Audio Files…** (Ctrl+E): Export All Tracks for just the
+  selected tracks.
 - **Fades and crossfades:** a curve for each fade, Speed Up and Slow Down fades, and X, EqP
   and X S crossfades between adjacent or overlapping regions (Inspector, the region menu's
   Crossfade item, or the handle on the canvas). The X-Fade drag mode crossfades overlaps

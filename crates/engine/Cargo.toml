@@ -18,6 +18,9 @@ anyhow = "1"
 base64 = "0.22"
 symphonia = { version = "0.5", default-features = false, features = ["aac", "alac", "flac", "mp3", "pcm", "vorbis", "adpcm", "isomp4", "ogg", "wav", "aiff", "caf"] }
 rubato = "0.15"
+# Pure-Rust FLAC encoder for bounces. Default features off: they add serde support and logging
+# we don't need; `par` encodes blocks on several threads.
+flacenc = { version = "0.5", default-features = false, features = ["par"] }
 
 # Native PipeWire, PulseAudio and JACK drivers alongside ALSA, and real-time scheduling for
 # the audio thread (via rtkit over D-Bus).

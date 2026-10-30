@@ -106,7 +106,7 @@ fn main() {
     check("both channels carry the tone", rms(&mix[0]) > 0.01 && (rms(&mix[0]) - rms(&mix[1])).abs() < 1e-3);
 
     // A section, at a different rate, in 16-bit.
-    let sec = RenderOptions { start: 24000, end: 72000, tail_secs: 0.0, bit_depth: BitDepth::Int16, sample_rate: Some(44100), normalize: false };
+    let sec = RenderOptions { start: 24000, end: 72000, tail_secs: 0.0, bit_depth: BitDepth::Int16, sample_rate: Some(44100), normalize: false, ..Default::default() };
     let p16 = out.join("section16.wav");
     s.bounce_project(&p16, &sec, &mut |_| {}).unwrap();
     let (spec, part) = read(&p16);
