@@ -383,7 +383,12 @@ impl Session {
     /// Opens the project in `dir` from project.json, or when that is missing or damaged, from
     /// the autosave or the backup, saying which in the next tick's warning.
     pub(super) fn open_checked(&mut self, dir: &Path) -> Result<()> {
-        self.open_first(dir, &[PROJECT_FILE, AUTOSAVE_FILE, BACKUP_FILE])
+        let folder = if dir.is_file() { dir.parent().unwrap_or(dir) } else { dir };
+        // With backups on there's no .bak, but the newest of the backups (backups.rs).
+        let latest = super::backups::latest_backup(folder);
+        let mut files = vec![PROJECT_FILE, AUTOSAVE_FILE, BACKUP_FILE];
+        files.extend(latest.as_deref());
+        self.open_first(dir, &files)
     }
 
     /// Opens the first of `files` in `dir` that can be read. Falling back past the first one
@@ -403,6 +408,7 @@ impl Session {
                         let what = match file {
                             AUTOSAVE_FILE => "its most recent autosave",
                             BACKUP_FILE => "the backup kept by the save before last (recent changes may be missing)",
+                            f if f.starts_with(super::backups::BACKUPS_DIR) => "its most recent backup (recent changes may be missing)",
                             _ => file,
                         };
                         let msg = format!("“{name}”: {}, so Fermata opened {what} instead. Save the project to repair it.", problems.join("; "));
@@ -616,6 +622,8 @@ mod tests {
     fn saves_are_atomic_with_a_backup_and_damage_falls_back() {
         let (mut s, scratch) = session("damaged");
         let dir = s.dir.clone();
+        // The single .bak is what a save keeps with backups off (backups.rs tests the rest).
+        s.prefs.general.backups = 0;
         s.add_track(TrackKind::Audio, InputSel::Mono(0), None, None).unwrap();
         s.set_tempo(100.0);
         s.save(None).unwrap();

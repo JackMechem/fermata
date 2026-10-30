@@ -15,6 +15,7 @@ import { tempoMap } from "./tempo";
 import { TRACK_COLORS } from "./view";
 import { isFolder, packTakeFolder, takeFolderMenu } from "./takes";
 import { followingRegion } from "./fades";
+import { canHaveAlternatives, trackAltMenu } from "./trackAlternatives";
 import { isDefault, paramsOf } from "./regionParams";
 
 const project = () => getState().snap?.project;
@@ -475,6 +476,7 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
     { separator: true },
     { label: "Rename Track", disabled: many, onClick: rename },
     { label: "Track Color", children: colorMenu(many ? undefined : t.color, (c) => c && sel.forEach((x) => api.updateTrack(x.id, { color: c }))) },
+    ...(canHaveAlternatives(t) && !many ? [{ label: "Track Alternatives", children: trackAltMenu(t) }] : []),
     { separator: true },
     {
       label: "Create Track Stack",

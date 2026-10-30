@@ -233,9 +233,9 @@ status, the audio devices, and the number of MIDI inputs.
 | Menu | Items |
 |---|---|
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
-| File | New…, Open Recent…, Open…, Save, Save As…, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
+| File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Select All, Delete |
-| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks |
+| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
 | View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
@@ -731,6 +731,14 @@ From the Track menu, the track header's right-click menu, or keys:
   automation.
 - **Rename Track**, **Track Color**, Mute, Solo, Record Enable, Select All Regions on Track,
   Export Track as MIDI File…, Reset Track Height.
+- **Track Alternatives** (Track › Track Alternatives, or the right-click menu): other sets of
+  regions for an audio or instrument track, as in Logic. **New Alternative** starts an empty
+  one, **Duplicate Alternative** a copy of the current regions; they are named A, B, C….
+  Once a track has more than one, its header shows a pop-up with the current one's name:
+  click it to switch (the regions swap, and the track plays the new set), or to **Rename…**
+  or **Delete** one (deleting the current one switches to another; the last one stays). Each
+  is an undo step; inactive alternatives are saved with the project. A frozen track's
+  alternatives can't change.
 - **Delete Track** (Ctrl+Backspace) and **Delete Unused Tracks** (tracks without regions;
   stacks that still hold tracks and auxes that something feeds are kept). Deleting a stack
   deletes its subtracks.
@@ -1854,7 +1862,8 @@ track's Channel EQ and plug-ins, before the fader. It uses the same format optio
 ## 15. Projects
 
 A project is a folder ending in `.fermata`, holding `project.json` and an `Audio Files/` folder
-(and `Freeze Files/` once a track is frozen).
+(and `Freeze Files/` once a track is frozen, `Alternatives/` once it has project alternatives,
+and `Backups/` once it has been saved twice).
 
 ### The Project Chooser
 
@@ -1870,6 +1879,11 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 
   Set the name, location (default `~/Music/Fermata`, or Settings › General › Project Folder),
   tempo (20 to 400 BPM), time signature and key. Double-click a template to create it at once.
+- **My Templates:** the templates you saved with **File › Save as Template…**, below the
+  built-in ones. A project made from one has its tracks, routing, plug-ins with their
+  settings, tempo, time signature, key and project settings, without regions. Right-click one
+  to **Rename…** or **Delete** it. Templates are kept in the `templates` folder of the
+  settings folder (`~/.config/fermata/templates` on Linux and macOS).
 - **Recent:** the last 20 projects you saved or opened, with track count, tempo and how long
   ago each was saved. Missing projects are marked and can be removed from the list (×).
 - **Open…:** choose any `.fermata` folder.
@@ -1886,6 +1900,37 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 - A project whose sample rate differs from the audio device switches the device to the
   project's rate when opened.
 - You can open a project from the command line: `fermata path/to/Song.fermata`.
+- **File › Revert to Saved** goes back to the last saved version, after asking (the changes
+  since, and their autosave, are dropped).
+- **File › Save as Template…** saves the project's tracks, routing, plug-ins and settings,
+  without regions or audio, as a template in the Project Chooser's My Templates. Saving under
+  an existing template's name asks before replacing it.
+
+### Project alternatives
+
+Like Logic, a project can hold several **alternatives**: versions of the arrangement (tracks,
+regions, mix, settings) in the same project folder, sharing its audio files. Try a different
+edit or mix without a copy of the whole project.
+
+- **File › Project Alternatives** lists them, with the current one ticked; choose another to
+  switch to it. Switching saves the current one first (with unsaved changes, it asks first).
+- **New Alternative…** saves the current one, then carries on as a copy of it under the name you
+  give (the project's name is the first alternative's name).
+- **Edit Alternatives…** lists them to **Switch** (or double-click), **Rename…** or
+  **Delete…**. Deleting the current one switches to another without saving it. A project keeps
+  at least one alternative, and deleting one also deletes its backups. These can't be undone.
+- Opening the project opens the alternative you were last working on. Autosave, recovery and
+  backups apply to the current alternative. A project never saved is saved first.
+- **Save As…** saves just the current alternative into the new folder.
+
+### Backups and Revert to
+
+Each save keeps the version it replaces as a backup, separately for each alternative, up to
+Settings › General › Backups (10 by default; 0 keeps only the last one, as
+`project.json.bak`). **File › Revert to** lists them by when they were saved ("Today 14:32",
+"Yesterday 09:10", then the date), newest first. Choosing one asks, then loads it; the
+project as it was (unsaved changes included) becomes a backup itself, so reverting to it
+undoes the revert.
 
 ### Autosave and recovery
 
@@ -1913,9 +1958,9 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 - A recovered project counts as edited; save it to keep the changes.
 - **Damaged files:** saves are written to a temporary file and then renamed into place, so a
   crash during a save leaves the previous version intact, and each save keeps the previous
-  `project.json` as `project.json.bak`. If `project.json` is missing, cut short or damaged when
-  you open a project, Fermata opens the autosave instead, or failing that the backup, and says
-  so; save to repair it. A damaged autosave isn't offered for recovery.
+  version as a backup (above). If `project.json` is missing, cut short or damaged when you
+  open a project, Fermata opens the autosave instead, or failing that the newest backup, and
+  says so; save to repair it. A damaged autosave isn't offered for recovery.
 
 ### Project Settings
 
@@ -1950,6 +1995,7 @@ Metronome tab (saved with the project).
 | Project Folder | Any folder (Choose…, Default) | `~/Music/Fermata` |
 | Autosave | Off; every 1, 2, 5, 10 or 15 minutes | Every 2 minutes |
 | After Recording | Autosave as soon as a recording, Bounce in Place, Freeze or import finishes | On |
+| Backups | Versions of each project alternative that saves keep, 0 to 100 (0 keeps one, as `project.json.bak`) | 10 |
 | Undo Steps | 10 to 1000 | 100 |
 | Unsaved Changes | Ask before quitting or closing a project with unsaved changes | On |
 | Open Effect Panels | Floating; Docked in the bottom section; Separate windows (VST3 editors always open in their own window) | Floating |

@@ -1,8 +1,9 @@
 //! The native menu bar. Items emit a `menu` event carrying their id to the frontend (to the
 //! focused detached panel window, if any; see windows.rs).
 
-use tauri::menu::{AboutMetadata, MenuBuilder, MenuItem, PredefinedMenuItem, SubmenuBuilder};
-use tauri::{App, Runtime};
+use serde::Deserialize;
+use tauri::menu::{AboutMetadata, CheckMenuItem, MenuBuilder, MenuItem, PredefinedMenuItem, Submenu, SubmenuBuilder};
+use tauri::{App, AppHandle, Manager, Runtime};
 
 /// Logic's ⌃B. Elsewhere Ctrl+B is already Bounce Project (⌘B), so Bounce in Place adds Alt.
 const BOUNCE_IN_PLACE_KEY: &str = if cfg!(target_os = "macos") { "Ctrl+B" } else { "Ctrl+Alt+B" };
@@ -33,6 +34,10 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .separator()
         .item(&PredefinedMenuItem::quit(app, Some("Quit Fermata"))?)
         .build()?;
+    // Filled in by set_project_menus once a project is open.
+    let alternatives = SubmenuBuilder::new(app, "Project Alternatives").build()?;
+    let revert = SubmenuBuilder::new(app, "Revert to").build()?;
+    fill_project_menus(app.handle(), &alternatives, &revert, &[], "", &[])?;
     let file = SubmenuBuilder::new(app, "File")
         .item(&item("new", "New…", Some("CmdOrCtrl+N"))?)
         .item(&item("chooser-recent", "Open Recent…", Some("Shift+CmdOrCtrl+O"))?)
@@ -40,6 +45,11 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .separator()
         .item(&item("save", "Save", Some("CmdOrCtrl+S"))?)
         .item(&item("save-as", "Save As…", Some("Shift+CmdOrCtrl+S"))?)
+        .item(&item("save-template", "Save as Template…", None)?)
+        .item(&item("revert-saved", "Revert to Saved", None)?)
+        .item(&revert)
+        .separator()
+        .item(&alternatives)
         .separator()
         .item(&item("project-settings", "Project Settings…", None)?)
         .separator()
@@ -73,6 +83,12 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .separator()
         .item(&item("delete", "Delete", None)?)
         .build()?;
+    let track_alternatives = SubmenuBuilder::new(app, "Track Alternatives")
+        .item(&item("track-alt-new", "New Alternative", None)?)
+        .item(&item("track-alt-duplicate", "Duplicate Alternative", None)?)
+        .item(&item("track-alt-rename", "Rename Alternative…", None)?)
+        .item(&item("track-alt-delete", "Delete Alternative", None)?)
+        .build()?;
     let track = SubmenuBuilder::new(app, "Track")
         .item(&item("new-tracks", "New Tracks…", Some("Alt+CmdOrCtrl+N"))?)
         .item(&item("new-aux", "New Aux", None)?)
@@ -92,6 +108,8 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .separator()
         .item(&item("delete-track", "Delete Track", Some("CmdOrCtrl+Backspace"))?)
         .item(&item("delete-unused", "Delete Unused Tracks", None)?)
+        .separator()
+        .item(&track_alternatives)
         .build()?;
     let record = SubmenuBuilder::new(app, "Record")
         .item(&item("play", "Play / Stop", None)?)
@@ -152,6 +170,54 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
 
     let menu = MenuBuilder::new(app).items(&[&app_menu, &file, &edit, &track, &record, &navigate, &view]).build()?;
     app.set_menu(menu)?;
+    app.manage(ProjectMenus { alternatives, revert });
     app.on_menu_event(|app, ev| crate::windows::route_menu(app, ev.id().0.clone()));
     Ok(())
+}
+
+/// The File menu's lists that change with the project: Project Alternatives and Revert to.
+struct ProjectMenus<R: Runtime> {
+    alternatives: Submenu<R>,
+    revert: Submenu<R>,
+}
+
+/// A backup in File › Revert to: its file (the item's id is `revert:<file>`) and its label in
+/// local time, which the frontend formats.
+#[derive(Deserialize)]
+pub struct BackupItem {
+    file: String,
+    label: String,
+}
+
+fn fill_project_menus<R: Runtime>(app: &AppHandle<R>, alternatives: &Submenu<R>, revert: &Submenu<R>, names: &[String], active: &str, backups: &[BackupItem]) -> tauri::Result<()> {
+    for it in alternatives.items()? {
+        alternatives.remove(&it)?;
+    }
+    for name in names {
+        alternatives.append(&CheckMenuItem::with_id(app, format!("alternative:{name}"), name, true, name == active, None::<&str>)?)?;
+    }
+    if !names.is_empty() {
+        alternatives.append(&PredefinedMenuItem::separator(app)?)?;
+    }
+    alternatives.append(&MenuItem::with_id(app, "alt-new", "New Alternative…", true, None::<&str>)?)?;
+    alternatives.append(&MenuItem::with_id(app, "alt-edit", "Edit Alternatives…", true, None::<&str>)?)?;
+    for it in revert.items()? {
+        revert.remove(&it)?;
+    }
+    if backups.is_empty() {
+        revert.append(&MenuItem::with_id(app, "revert-none", "No Backups", false, None::<&str>)?)?;
+    }
+    for b in backups {
+        revert.append(&MenuItem::with_id(app, format!("revert:{}", b.file), &b.label, true, None::<&str>)?)?;
+    }
+    Ok(())
+}
+
+/// Rebuilds File › Project Alternatives (`alternatives`, `active` ticked) and File › Revert to
+/// (`backups`, newest first). The frontend calls it when the project, its alternative or its
+/// saved state changes (src/projectFiles.ts).
+#[tauri::command]
+pub fn set_project_menus<R: Runtime>(app: AppHandle<R>, alternatives: Vec<String>, active: String, backups: Vec<BackupItem>) -> Result<(), String> {
+    let Some(menus) = app.try_state::<ProjectMenus<R>>() else { return Ok(()) };
+    fill_project_menus(&app, &menus.alternatives, &menus.revert, &alternatives, &active, &backups).map_err(|e| e.to_string())
 }

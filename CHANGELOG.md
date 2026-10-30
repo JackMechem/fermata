@@ -50,6 +50,17 @@ All notable changes to Fermata are recorded here. The format follows
   Merge now merges recorded controllers too, not only notes.
 - **Chase: Notes:** starting playback, jumping or cycling back in the middle of a long note
   starts it, as in Logic. Settings › MIDI › Chase switches note and controller chase.
+- **Project alternatives** (File › Project Alternatives): versions of a project in one
+  folder, sharing its audio files: New Alternative…, switching (the current one is saved
+  first), and Edit Alternatives… to rename or delete them.
+- **Backups and File › Revert to:** each save keeps the version it replaces, per alternative
+  (Settings › General › Backups, 10 by default), listed by date and time; reverting keeps the
+  current state as a backup too. **File › Revert to Saved.**
+- **User project templates:** File › Save as Template… saves the tracks, routing, plug-ins and
+  settings without regions; they appear under My Templates in the Project Chooser, where a
+  right-click renames or deletes them.
+- **Track alternatives** (Track › Track Alternatives and a pop-up in the track header): New,
+  Duplicate, Rename and Delete sets of regions for a track, and switch between them, with undo.
 
 - **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
   24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the

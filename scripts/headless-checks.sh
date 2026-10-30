@@ -41,6 +41,7 @@ CHECKS=(
   "vca_check tone dir"
   "chase_check dir"
   "midi_replace_check dir"
+  "projects_check tone dir"
 )
 # A check that hangs (a transport that never stops, say) fails instead of stalling CI.
 TIMEOUT=${HEADLESS_CHECK_TIMEOUT:-600}

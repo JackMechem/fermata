@@ -380,12 +380,25 @@ samples at the project rate.
   keeps the clip in memory, so undo can freeze again; `ensure_freeze_files` writes a missing
   file back before saving.
 
+### Track alternatives
+
+`Track::alternatives: Vec<TrackAlternative { name, regions }>` holds a track's inactive region
+sets and `Track::alternative` the active one's name (empty means "A"); `Track::regions` is
+always the active set, so nothing else in the engine or the UI needs to know about
+alternatives (`session/track_alternatives.rs`). Switching swaps the sets and resends the
+regions; every operation is an ordinary undoable edit, and `restore` resends regions that
+differ. Frozen tracks refuse these edits up front, since `frozen_guard` only puts regions back.
+`Project::for_ui` sends only the inactive alternatives' names. Region ids in inactive sets stay
+allocated, and their clips stay in `Project::clips`.
+
 ### Other project fields
 
 `name`, `sample_rate`, `tempo` (5..990 BPM), `sig_num`/`sig_den`, `key` (a string such as
 "C major"), `master` (Stereo Out: volume, inserts, EQ), `cycle`, `metronome`, `count_in`,
 `clips` (id to path, relative to the project folder unless outside it), `groups`, `click`
-(metronome settings), `bit_depth` (per-project recording format override) and `notes`.
+(metronome settings), `bit_depth` (per-project recording format override), `notes` and
+`alternative` (the project alternative's name, see [Persistence](#8-persistence); `restore`
+keeps the current one, since renaming isn't an undo step).
 
 ## 6. The engine graph, block by block
 
@@ -579,10 +592,13 @@ Rule for new features: **anything new you send to the engine must also be restor
 
 ```
 Song.fermata/
-  project.json             the Project, pretty-printed, with plug-in states (base64)
+  project.json             the Project (the active alternative), pretty-printed, with plug-in states (base64)
   project.autosave.json    only while there are unsaved changes (see below)
+  project.json.bak         the previous save, only with Settings › General › Backups at 0
   Audio Files/             recordings, conversions, joins, reverses, bounce-in-place results
   Freeze Files/            freeze renders ("<track> Freeze.wav")
+  Alternatives/<name>/project.json   the inactive project alternatives
+  Backups/<alternative>/<time>.json  earlier versions of each alternative (File › Revert to)
 ```
 
 - `ClipRef::path` is relative to the folder, except for files referenced in place (an imported
@@ -597,6 +613,46 @@ Song.fermata/
   `<folder>/<project name>/`.
 - Opening a project whose sample rate differs from the device switches the device to the
   project's rate, as Logic does.
+
+### Project alternatives
+
+`session/alternatives.rs`. The **active** alternative is always the top-level `project.json`,
+its name in `Project::alternative` (set to the project's name at the first save), so
+autosave, recovery, backups and older builds all treat it as the project and need no changes.
+Inactive alternatives are `Alternatives/<name>/project.json`; they reference clips by the same
+relative paths, so they share `Audio Files/`.
+
+- **New Alternative** saves, copies `project.json` into `Alternatives/<current>/`, and renames
+  the open project (on disk too) to the new name.
+- **Switch** reads the target first (a damaged one changes nothing), saves the active one,
+  copies `project.json` into its folder, writes the target as `project.json`, removes the
+  target's folder and reopens. Each write is atomic; a crash between steps leaves at worst a
+  duplicate (`alternatives()` lists a name once), never a lost alternative.
+- **Rename** of the active one rewrites the name in `project.json` and the autosave at once,
+  unsaved changes or not; of an inactive one, renames its folder. Backups move with the name.
+- **Delete** removes the folder and the backups; deleting the active one writes another into
+  `project.json` without saving. A project keeps at least one.
+- Names are folder names: `check_name` refuses empty names, a leading dot, `/ \ : * ? " < > |`
+  and control characters. The UI mirrors it (`alternativesModel.ts`).
+- Save As writes only the active alternative into the new folder.
+
+### Backups
+
+`session/backups.rs`. `Session::write_project` is what `save` writes through: with
+`Prefs.general.backups` > 0, the `project.json` being replaced (if readable and different) goes
+to `Backups/<its alternative>/<time>.json`, where `<time>` is that file's modification time in
+UTC (`2026-10-29T143205.123Z`, sortable, valid on every file system; a clash adds a
+millisecond), then all but the newest N are deleted, and any `project.json.bak` goes (it is
+superseded). With 0, the single `.bak` is kept as before (`recovery::write_project_file`).
+Opening falls back from `project.json` to the autosave, the `.bak`, then the newest backup of
+the active alternative (`latest_backup`: backups of folders in `Alternatives/` are skipped).
+`revert_to_backup` saves, then writes the chosen version through `write_project`, so the state
+before the revert becomes a backup; `revert_to_saved` discards the autosave and reopens.
+
+The native **File › Project Alternatives** and **File › Revert to** submenus are rebuilt by the
+`set_project_menus` command (`menu.rs`) from the list the frontend reads with `project_files`
+and labels in local time (`src/projectFiles.ts`, run whenever the path, saved and dirty flags or
+the alternative change). Their ids are `alternative:<name>` and `revert:<file>`.
 
 ### Autosave and recovery
 
@@ -626,6 +682,7 @@ The config folder is `$XDG_CONFIG_HOME/fermata`, else `%APPDATA%\fermata`, else
 | `presets/<effect>/<name>.json` | `presets.rs` | User presets of the built-in effects and the Channel EQ (see [Presets](#presets)). |
 | `channel-strips/<name>.json` | `strip_settings.rs` | Saved channel strip settings (see [Channel strip settings](#channel-strip-settings)). |
 | `controller-assignments.json` | `session/controllers.rs` | MIDI Learn's controller assignments: controller (port without ALSA's client:port numbers, channel, CC number or pitch bend), target (track id and parameter, plug-in instance id with its plug-in id, Channel EQ setting, Stereo Out or transport), mode and range. Global, like Logic's; written atomically. |
+| `templates/<name>.json` | `session/templates.rs` | User project templates (File › Save as Template…): a `Project` without regions, clips, freeze state or alternatives, with plug-in states. `new_from_template` loads one as a new untitled project at the device's rate, keeping its ids. |
 
 Interface-only state lives in the webview's `localStorage`:
 
@@ -961,8 +1018,10 @@ drawings. The common pattern:
 - In-window menus (right-click menus, local menus, slot menus) are rendered by
   `components/Menu.tsx` (`MenuHost`); `src/ops.ts` builds the track, region and lane menus.
 - Dialogs are chosen by `state.dialog` (`new-tracks`, `settings`, `chooser`, `bounce`,
-  `bounce-in-place`, `project-settings`, `recovery`), plus separately flagged sheets (group
-  settings, Marker List, Channel EQ, Musical Typing, Controller Assignments).
+  `bounce-in-place`, `project-settings`, `recovery`, `alternatives`), plus separately flagged
+  sheets (group settings, Marker List, Channel EQ, Musical Typing, Controller Assignments).
+- `askName` (`components/NameSheet.tsx`) asks for a name in a small sheet above everything
+  else, the Project Chooser included, and resolves with it or null.
 - Native file dialogs and confirmations use `@tauri-apps/plugin-dialog` (`src/files.ts`).
 
 ### Detached windows
@@ -1205,6 +1264,10 @@ it like any plug-in.
 | `session/region_moves.rs` | Moving several regions as one edit. |
 | `session/tempo.rs` | Tempo and Signature track edits, Move MIDI Regions with Tempo. |
 | `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
+| `session/alternatives.rs` | Project alternatives: new, switch, rename, delete; name checks. |
+| `session/backups.rs` | Backups on save, pruning, Revert to, Revert to Saved, the fallback on open. |
+| `session/templates.rs` | User project templates: save, list, rename, delete, new project from one. |
+| `session/track_alternatives.rs` | Track alternatives: new, duplicate, switch, rename, delete. |
 | `takes.rs` | Pure take-folder logic: comp editing, playback pieces and crossfades, `RecPlan`. |
 | `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |

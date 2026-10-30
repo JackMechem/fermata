@@ -1577,3 +1577,101 @@ pub fn set_vca_parent(state: State<AppState>, id: Id, parent: Option<Id>) -> R<S
 pub fn set_sidechain_pre(state: State<AppState>, track: Id, slot: i64, pre: bool) -> R<Snapshot> {
     try_edit(&state, "Side Chain", None, false, |s| s.set_sidechain_pre(track, slot_index(slot), pre))
 }
+
+/// What File › Project Alternatives and File › Revert to list.
+#[derive(Serialize)]
+pub struct ProjectFiles {
+    alternatives: Vec<String>,
+    active: String,
+    /// The active alternative's backups, newest first.
+    backups: Vec<daw_engine::session::BackupInfo>,
+}
+
+#[tauri::command]
+pub fn project_files(state: State<AppState>) -> ProjectFiles {
+    with(&state, |s| ProjectFiles { alternatives: s.alternatives(), active: s.alternative_name(), backups: s.backups() })
+}
+
+/// File › Project Alternatives › New Alternative: saves, then goes on as a copy named `name`.
+#[tauri::command]
+pub fn new_alternative(state: State<AppState>, name: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.new_alternative(&name))
+}
+
+/// Switches to another project alternative, saving the active one first.
+#[tauri::command]
+pub fn switch_alternative(state: State<AppState>, name: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.switch_alternative(&name))
+}
+
+#[tauri::command]
+pub fn rename_alternative(state: State<AppState>, name: String, new_name: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.rename_alternative(&name, &new_name))
+}
+
+#[tauri::command]
+pub fn delete_alternative(state: State<AppState>, name: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.delete_alternative(&name))
+}
+
+/// File › Revert to Saved.
+#[tauri::command]
+pub fn revert_to_saved(state: State<AppState>) -> R<Snapshot> {
+    try_snap(&state, |s| s.revert_to_saved())
+}
+
+/// File › Revert to › a backup (`file` as `project_files` lists it).
+#[tauri::command]
+pub fn revert_to_backup(state: State<AppState>, file: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.revert_to_backup(&file))
+}
+
+/// File › Save as Template: into the config folder's templates.
+#[tauri::command]
+pub fn save_template(state: State<AppState>, name: String, replace: bool) -> R<()> {
+    with(&state, |s| s.save_template(&daw_engine::session::templates_dir(), &name, replace)).map(|_| ()).map_err(|e| e.to_string())
+}
+
+/// The user's templates, for the Project Chooser's My Templates.
+#[tauri::command(async)]
+pub fn user_templates() -> Vec<daw_engine::session::UserTemplate> {
+    daw_engine::session::list_templates(&daw_engine::session::templates_dir())
+}
+
+#[tauri::command]
+pub fn delete_template(name: String) -> R<()> {
+    daw_engine::session::delete_template(&daw_engine::session::templates_dir(), &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn rename_template(name: String, new_name: String) -> R<()> {
+    daw_engine::session::rename_template(&daw_engine::session::templates_dir(), &name, &new_name).map_err(|e| e.to_string())
+}
+
+/// Starts a new, untitled project from one of the user's templates.
+#[tauri::command]
+pub fn new_from_template(state: State<AppState>, name: String) -> R<Snapshot> {
+    try_snap(&state, |s| s.new_from_template(&daw_engine::session::templates_dir(), &name))
+}
+
+/// Track › Track Alternatives › New (empty) or Duplicate (`duplicate`).
+#[tauri::command]
+pub fn new_track_alternative(state: State<AppState>, track: Id, duplicate: bool) -> R<Snapshot> {
+    let label = if duplicate { "Duplicate Track Alternative" } else { "New Track Alternative" };
+    try_edit(&state, label, None, false, |s| s.new_track_alternative(track, duplicate).map(|_| ()))
+}
+
+#[tauri::command]
+pub fn switch_track_alternative(state: State<AppState>, track: Id, name: String) -> R<Snapshot> {
+    try_edit(&state, "Switch Track Alternative", None, false, |s| s.switch_track_alternative(track, &name))
+}
+
+#[tauri::command]
+pub fn rename_track_alternative(state: State<AppState>, track: Id, name: String, new_name: String) -> R<Snapshot> {
+    try_edit(&state, "Rename Track Alternative", None, false, |s| s.rename_track_alternative(track, &name, &new_name))
+}
+
+#[tauri::command]
+pub fn delete_track_alternative(state: State<AppState>, track: Id, name: String) -> R<Snapshot> {
+    try_edit(&state, "Delete Track Alternative", None, false, |s| s.delete_track_alternative(track, &name))
+}

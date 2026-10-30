@@ -168,11 +168,14 @@ pub struct GeneralPrefs {
     /// Autosave as soon as a recording, Bounce in Place, Freeze or import finishes, instead of
     /// waiting for the interval.
     pub autosave_after_recording: bool,
+    /// How many earlier versions of each project alternative a save keeps in the project's
+    /// Backups folder (File › Revert to); 0 = off.
+    pub backups: usize,
 }
 
 impl Default for GeneralPrefs {
     fn default() -> Self {
-        GeneralPrefs { project_folder: None, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true }
+        GeneralPrefs { project_folder: None, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true, backups: 10 }
     }
 }
 

@@ -41,7 +41,7 @@ export interface State {
   snapMode: Snap;
   catchPlayhead: boolean;
   selectedRegions: Id[];
-  dialog: null | "new-tracks" | "settings" | "chooser" | "bounce" | "bounce-in-place" | "project-settings" | "recovery";
+  dialog: null | "new-tracks" | "settings" | "chooser" | "bounce" | "bounce-in-place" | "project-settings" | "recovery" | "alternatives";
   chooserTab: "new" | "recent";
   /** Where dragged audio files would land, while a drag is over the tracks. */
   dropTarget: DropTarget | null;

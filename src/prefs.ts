@@ -18,7 +18,7 @@ export type MoveAutomation = "never" | "always" | "ask";
 
 /** Session behaviour (crates/engine/src/prefs.rs). */
 export interface Prefs {
-  general: { project_folder: string | null; autosave_minutes: number; undo_limit: number; autosave_after_recording: boolean };
+  general: { project_folder: string | null; autosave_minutes: number; undo_limit: number; autosave_after_recording: boolean; backups: number };
   recording: {
     bit_depth: BitDepth;
     count_in_bars: number;
@@ -91,7 +91,7 @@ export const DEFAULT_CLICK: ClickSettings = {
 /** Used until the real settings arrive (and if they can't be read). */
 const DEFAULTS: AppSettings = {
   prefs: {
-    general: { project_folder: null, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true },
+    general: { project_folder: null, autosave_minutes: 2, undo_limit: 100, autosave_after_recording: true, backups: 10 },
     recording: {
       bit_depth: "float32",
       count_in_bars: 1,

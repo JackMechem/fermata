@@ -51,6 +51,10 @@ import { moveAutomationAnswer } from "./moveAutomation";
 import { resetClipIndicators } from "./stripSettings";
 import { learnLastTouched, openControllerAssignments } from "./learn";
 import { ControllerAssignmentsSheet, LearnBanner } from "./components/ControllerAssignments";
+import { newAlternative, revertToBackup, revertToSaved, saveAsTemplate, switchAlternative, useProjectMenus } from "./projectFiles";
+import { deleteTrackAlternative, newTrackAlternative, renameTrackAlternative, trackForAlternatives } from "./trackAlternatives";
+import { NameSheetHost } from "./components/NameSheet";
+import { AlternativesSheet } from "./components/AlternativesSheet";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -106,6 +110,34 @@ function handleMenu(id: string) {
     case "save-as":
       saveProject(true);
       break;
+    case "save-template":
+      saveAsTemplate();
+      break;
+    case "revert-saved":
+      revertToSaved();
+      break;
+    case "alt-new":
+      newAlternative();
+      break;
+    case "alt-edit":
+      setState({ dialog: "alternatives" });
+      break;
+    case "track-alt-new":
+    case "track-alt-duplicate": {
+      const t = trackForAlternatives();
+      if (t) newTrackAlternative(t, id === "track-alt-duplicate");
+      break;
+    }
+    case "track-alt-rename": {
+      const t = trackForAlternatives();
+      if (t) renameTrackAlternative(t);
+      break;
+    }
+    case "track-alt-delete": {
+      const t = trackForAlternatives();
+      if (t) deleteTrackAlternative(t);
+      break;
+    }
     case "import-audio":
       importAudioDialog();
       break;
@@ -310,6 +342,8 @@ function handleMenu(id: string) {
     default:
       if (id.startsWith("theme:")) applyTheme(id.slice(6));
       else if (id.startsWith("detach:")) toggleDetached(id.slice(7));
+      else if (id.startsWith("alternative:")) switchAlternative(id.slice(12));
+      else if (id.startsWith("revert:")) revertToBackup(id.slice(7));
       break;
     case "zoom-in":
       setState({ pxPerBeat: Math.min(400, s.pxPerBeat * 1.4) });
@@ -480,6 +514,7 @@ export default function App() {
   };
   useHeightPersistence();
   useAppearancePersistence();
+  useProjectMenus();
   const showTyping = useStore((s) => s.showTyping);
   const showStepInput = useStore((s) => s.showStepInput);
   const groupSheet = useStore((s) => s.groupSheet);
@@ -583,6 +618,7 @@ export default function App() {
       {s.dialog === "bounce-in-place" && <BounceInPlaceDialog />}
       {s.dialog === "project-settings" && <ProjectSettingsSheet />}
       {s.dialog === "recovery" && <RecoverySheet />}
+      {s.dialog === "alternatives" && <AlternativesSheet />}
       {groupSheet !== null && <GroupSheet />}
       {showMarkerList && <MarkerList />}
       {showControllerAssignments && <ControllerAssignmentsSheet />}
@@ -591,6 +627,7 @@ export default function App() {
       {showTyping && <MusicalTyping />}
       {showStepInput && <StepInput />}
       <MenuHost />
+      <NameSheetHost />
       <Toast />
     </div>
   );

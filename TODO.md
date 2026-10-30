@@ -115,7 +115,7 @@ Goal: the larger Logic features that set a full DAW apart.
 
 - [ ] Flex Time
 - [ ] Flex Pitch
-- [ ] Track alternatives; project alternatives and backups; user project templates
+- [x] Track alternatives; project alternatives and backups; user project templates
 - [ ] Arrangement track; markers with their own lengths
 - [ ] Score Editor and Step Sequencer
 

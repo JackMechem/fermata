@@ -232,6 +232,15 @@ function GeneralPane({ close }: { close: () => void }) {
             Autosave as soon as a recording, Bounce in Place, Freeze or import finishes
           </Check>
         </Row>
+        <Row
+          label="Backups:"
+          note="Each save keeps the version it replaces in the project's Backups folder, per project alternative, so File › Revert to can go back to it. 0 keeps just the last one, as project.json.bak."
+        >
+          <div className="row-inline">
+            <NumberField value={g.backups ?? 10} min={0} max={100} step={1} resolution={1} onChange={(v) => setPrefs("general", { backups: Math.round(v) })} width={64} />
+            <span className="dim">versions to keep</span>
+          </div>
+        </Row>
         <Row label="Undo Steps:" note="How many edits Undo can step back through. More steps use more memory on large projects.">
           <NumberField value={g.undo_limit} min={10} max={1000} step={10} resolution={1} onChange={(v) => setPrefs("general", { undo_limit: Math.round(v) })} />
         </Row>

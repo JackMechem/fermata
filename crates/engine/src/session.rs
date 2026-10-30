@@ -62,6 +62,12 @@ mod controllers;
 pub use controllers::{controller_label, AssignmentRow};
 mod vca;
 pub use vca::VcaPatch;
+mod alternatives;
+mod backups;
+pub use backups::BackupInfo;
+mod templates;
+pub use templates::{delete_template, list_templates, rename_template, templates_dir, UserTemplate};
+mod track_alternatives;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -851,6 +857,8 @@ impl Session {
         let current = std::mem::replace(&mut self.project, target);
         // The drag mode is a setting, not part of the edit history.
         self.project.drag_mode = current.drag_mode;
+        // Neither is the project alternative's name, which is renamed on disk too.
+        self.project.alternative = current.alternative.clone();
         let uid = |s: &Option<PluginSlot>| s.as_ref().map(|s| s.uid);
 
         // Tracks that no longer exist.
@@ -1315,6 +1323,8 @@ impl Session {
             auto_mode: AutoMode::Read,
             frozen: None,
             vca: None,
+            alternatives: Vec::new(),
+            alternative: String::new(),
         };
         if kind == TrackKind::Instrument {
             let pid = instrument.unwrap_or_else(|| BUILTIN_SYNTH.to_string());
@@ -1379,7 +1389,7 @@ impl Session {
             .project
             .tracks
             .iter()
-            .filter(|t| t.kind != TrackKind::Aux && t.regions.is_empty() && !(t.kind.is_stack() && self.project.tracks.iter().any(|c| c.parent == Some(t.id))))
+            .filter(|t| t.kind != TrackKind::Aux && t.regions.is_empty() && t.alternatives.iter().all(|a| a.regions.is_empty()) && !(t.kind.is_stack() && self.project.tracks.iter().any(|c| c.parent == Some(t.id))))
             .map(|t| t.id)
             .collect();
         // An aux is used while a track that stays sends or routes to it. Auxes can feed each
@@ -2712,8 +2722,12 @@ impl Session {
             }
         }
         self.project.name = target.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());
+        // The first alternative is named after the project, and keeps that name (alternatives.rs).
+        if self.project.alternative.is_empty() {
+            self.project.alternative = self.project.name.clone();
+        }
         let doc = self.capture_plugin_states();
-        recovery::write_project_file(&target, serde_json::to_string_pretty(&doc)?.as_bytes())?;
+        self.write_project(&target, serde_json::to_string_pretty(&doc)?.as_bytes())?;
         self.saved_doc(&doc);
         // The saved file supersedes any autosave, here and where the project used to be.
         let _ = std::fs::remove_file(target.join(AUTOSAVE_FILE));

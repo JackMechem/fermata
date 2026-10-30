@@ -171,6 +171,11 @@ export interface Track {
   frozen?: FreezeInfo | null;
   /** The VCA whose level offsets this track's fader. */
   vca?: Id | null;
+  /** Track Alternatives: the inactive ones (their regions aren't sent to the UI). Absent when
+   *  the track has just one. */
+  alternatives?: { name: string }[];
+  /** The active track alternative's name; absent means "A". */
+  alternative?: string;
 }
 
 export interface FreezeInfo {
@@ -269,6 +274,9 @@ export interface Project {
   drag_mode?: DragMode;
   /** The VCA faders, in the Mixer's order. */
   vcas?: Vca[];
+  /** This project alternative's name (File › Project Alternatives); empty until the project is
+   *  first saved, when it takes the project's name. */
+  alternative: string;
 }
 
 /** A VCA fader: no audio, but its level offsets its strips' faders and its mute mutes them. */
@@ -504,6 +512,24 @@ export interface InputLevel {
   gain_db: number;
   muted: boolean;
   attenuating: boolean;
+}
+
+/** File › Project Alternatives and File › Revert to (`project_files`). */
+export interface ProjectFiles {
+  alternatives: string[];
+  active: string;
+  /** The active alternative's backups, newest first. */
+  backups: { file: string; time: number }[];
+}
+
+/** A template the user saved (File › Save as Template…). */
+export interface UserTemplate {
+  name: string;
+  tracks: number;
+  kinds: TrackKind[];
+  tempo: number;
+  /** Seconds since the epoch. */
+  modified: number;
 }
 
 export interface RecentProject {

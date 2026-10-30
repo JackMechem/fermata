@@ -2,7 +2,11 @@
 // recent project. Modelled on Logic Pro's chooser.
 import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { act, call, type InputSel, type RecentProject, type TrackKind } from "../api";
+import { invoke } from "@tauri-apps/api/core";
+import { act, call, type InputSel, type RecentProject, type TrackKind, type UserTemplate } from "../api";
+import { openMenu } from "./Menu";
+import { askName } from "./NameSheet";
+import { nameProblem } from "../alternativesModel";
 import { confirmDiscard } from "../files";
 import { getState, setState, useStore } from "../store";
 import { NumberField, Select, sheetKey } from "./Form";
@@ -47,9 +51,14 @@ const TEMPLATES: Template[] = [
   },
 ];
 
-function TemplateArt({ id }: { id: string }) {
+function TemplateArt({ id, kinds }: { id: string; kinds?: TrackKind[] }) {
   // Miniature track lanes: blue audio, green instrument, as in the tracks area.
-  const lanes: string[] = { empty: [], audio: ["a"], instrument: ["i"], songwriter: ["a", "a", "i"] }[id] ?? [];
+  const lanes: string[] = kinds
+    ? kinds
+        .filter((k) => k === "audio" || k === "instrument")
+        .slice(0, 4)
+        .map((k) => k[0])
+    : ({ empty: [], audio: ["a"], instrument: ["i"], songwriter: ["a", "a", "i"] }[id] ?? []);
   return (
     <div className="tpl-art">
       {lanes.length === 0 ? (
@@ -112,7 +121,14 @@ export function ProjectChooser() {
   const [busy, setBusy] = useState(false);
   const [atLaunch, setAtLaunch] = useState(chooserAtLaunch());
   const [launchWas] = useState(() => getSettings().ui.startup);
+  const [mine, setMine] = useState<UserTemplate[]>([]);
   const close = () => setState({ dialog: null });
+  const loadMine = () => call<UserTemplate[]>("user_templates").then((t) => setMine(t ?? []));
+  useEffect(() => {
+    loadMine();
+  }, []);
+  // A template of the user's: its id is "user:<name>".
+  const userTemplate = template.startsWith("user:") ? template.slice(5) : null;
 
   useEffect(() => {
     call<string>("default_project_dir").then((d) => d && setLocation((l) => l || d));
@@ -134,10 +150,11 @@ export function ProjectChooser() {
   const target = `${location.replace(/\/+$/, "")}/${name.trim() || "Untitled"}.fermata`;
 
   const create = async (templateId: string = template) => {
-    const tpl = TEMPLATES.find((t) => t.id === templateId)!;
     if (!name.trim()) return toast("Give the project a name");
     if (await call<boolean>("path_exists", { path: target })) return toast(`A project named “${name.trim()}” already exists there`);
     if (!(await confirmDiscard("Create a new project"))) return;
+    if (templateId.startsWith("user:")) return createFromUser(templateId.slice(5));
+    const tpl = TEMPLATES.find((t) => t.id === templateId)!;
     setBusy(true);
     await act("new_project");
     const [num, den] = sig.split("/").map(Number);
@@ -165,6 +182,53 @@ export function ProjectChooser() {
     setState({ selectedRegions: [] });
     setBusy(false);
     if (saved) close();
+  };
+
+  // A user template brings its own tempo, signature and key.
+  const createFromUser = async (tplName: string) => {
+    setBusy(true);
+    const made = await act("new_from_template", { name: tplName });
+    const saved = made && (await act("save_project", { path: target }));
+    const first = saved?.project.tracks[0];
+    if (first) await act("select_track", { id: first.id });
+    setState({ selectedRegions: [] });
+    setBusy(false);
+    if (saved) close();
+  };
+
+  const templateMenu = (e: React.MouseEvent, t: UserTemplate) => {
+    e.preventDefault();
+    setTemplate(`user:${t.name}`);
+    openMenu(e.clientX, e.clientY, [
+      {
+        label: "Rename…",
+        onClick: async () => {
+          const check = (n: string) =>
+            nameProblem(n) ?? (mine.some((m) => m.name !== t.name && m.name.toLowerCase() === n.trim().toLowerCase()) ? `There's already a template named “${n.trim()}”.` : null);
+          const newName = await askName({ title: "Rename Template", value: t.name, ok: "Rename", check });
+          if (!newName || newName === t.name) return;
+          try {
+            await invoke("rename_template", { name: t.name, newName });
+            setTemplate(`user:${newName}`);
+          } catch (err) {
+            toast(String(err));
+          }
+          loadMine();
+        },
+      },
+      {
+        label: "Delete",
+        onClick: async () => {
+          try {
+            await invoke("delete_template", { name: t.name });
+            setTemplate("empty");
+          } catch (err) {
+            toast(String(err));
+          }
+          loadMine();
+        },
+      },
+    ]);
   };
 
   const openPath = async (path: string) => {
@@ -253,6 +317,26 @@ export function ProjectChooser() {
                     <span className="tpl-desc">{t.description}</span>
                   </button>
                 ))}
+                {mine.length > 0 && <div className="tpl-section">My Templates</div>}
+                {mine.map((t) => (
+                  <button
+                    key={`user:${t.name}`}
+                    className={"tpl" + (template === `user:${t.name}` ? " on" : "")}
+                    title="Right-click to rename or delete"
+                    onClick={() => setTemplate(`user:${t.name}`)}
+                    onDoubleClick={() => {
+                      setTemplate(`user:${t.name}`);
+                      create(`user:${t.name}`);
+                    }}
+                    onContextMenu={(e) => templateMenu(e, t)}
+                  >
+                    <TemplateArt id="user" kinds={t.kinds} />
+                    <span className="tpl-name">{t.name}</span>
+                    <span className="tpl-desc">
+                      {t.tracks} track{t.tracks === 1 ? "" : "s"} · {Math.round(t.tempo)} BPM
+                    </span>
+                  </button>
+                ))}
               </div>
               <div className="chooser-details">
                 <label>Name</label>
@@ -274,6 +358,9 @@ export function ProjectChooser() {
                   </button>
                 </div>
                 <label>Tempo</label>
+                {userTemplate !== null ? (
+                  <span className="dim">From the template “{userTemplate}”, with its time signature and key.</span>
+                ) : (
                 <div className="row-inline">
                   <NumberField value={tempo} min={5} max={990} resolution={0.01} onChange={(v) => setTempo(Math.round(v * 100) / 100)} width={96} />
                   <span className="dim">BPM</span>
@@ -288,6 +375,7 @@ export function ProjectChooser() {
                     width={110}
                   />
                 </div>
+                )}
               </div>
             </>
           ) : (

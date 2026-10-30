@@ -317,6 +317,23 @@ fn main() {
             commands::cancel_learn,
             commands::update_controller_assignment,
             commands::delete_controller_assignment,
+            commands::project_files,
+            commands::new_alternative,
+            commands::switch_alternative,
+            commands::rename_alternative,
+            commands::delete_alternative,
+            commands::revert_to_saved,
+            commands::revert_to_backup,
+            commands::save_template,
+            commands::user_templates,
+            commands::delete_template,
+            commands::rename_template,
+            commands::new_from_template,
+            commands::new_track_alternative,
+            commands::switch_track_alternative,
+            commands::rename_track_alternative,
+            commands::delete_track_alternative,
+            menu::set_project_menus,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

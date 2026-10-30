@@ -98,7 +98,7 @@ hosting, automation and undo. This stage is mostly done.
 
 ### Work with projects (p. 78–115)
 
-- [~] Project Chooser (p. 79). *New, Recent and Open, with four built-in templates; no user templates, demo projects or tutorials.*
+- [~] Project Chooser (p. 79). *New, Recent and Open, with four built-in templates and the user's own (My Templates); no demo projects or tutorials.*
 - [x] New project with name, location, tempo, time signature and key (p. 79)
 - [x] Create an empty project (p. 81)
 - [x] Open a project; Open Recent with project details and missing-file flags (p. 81–82)
@@ -110,7 +110,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Master volume slider (p. 91, 105)
 - [ ] Open several projects at once and switch between them (p. 82)
 - [ ] Save a copy including all assets (p. 84)
-- [ ] Revert to the last saved version (p. 85)
+- [x] Revert to the last saved version (p. 85)
 - [ ] Delete a project from the chooser (p. 85)
 - [ ] Project start and end points (p. 104)
 - [ ] Close Project without quitting (p. 113)
@@ -494,7 +494,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [x] Summing stacks: subtracks play through the stack's own channel strip (p. 161–163)
 - [x] Create, nest and flatten stacks; add and remove subtracks; show or hide subtracks (p. 164–166)
 - [ ] Convert a folder stack to a summing stack (p. 166)
-- [ ] Track alternatives: add, duplicate, switch, rename, delete inactive, hear an inactive one (p. 141–143)
+- [~] Track alternatives: add, duplicate, switch, rename, delete inactive, hear an inactive one (p. 141–143). *All but hearing an inactive one (and editing its regions in place).*
 - [ ] Turn a track off, making its plug-ins inactive (p. 144)
 - [ ] Protect tracks (p. 144)
 - [x] Freeze tracks (p. 145)
@@ -650,13 +650,13 @@ Audio File Editor (p. 499–523)
 
 ### Project management (p. 105–113)
 
-- [ ] Project alternatives (p. 106–107)
-- [ ] Backups of each alternative (p. 107)
+- [x] Project alternatives (p. 106–107)
+- [x] Backups of each alternative (p. 107)
 - [ ] Clean up project files (p. 107)
 - [ ] Consolidate project assets (p. 108)
 - [ ] Rename, copy and move projects (p. 109)
 - [ ] Import tracks, channel strips and settings from another project (p. 110–113)
-- [ ] User project templates
+- [x] User project templates
 
 ### Bounce and export: professional (p. 183–187, 909–918)
 

@@ -13,6 +13,8 @@ import { takeRowsHeight } from "../takes";
 import { fmt, keyHint } from "../keymap";
 import { headerTier } from "../trackHeader";
 import { LevelSlider } from "./LevelSlider";
+import { TrackAltButton } from "./TrackAlternatives";
+import { showsTrackAlts } from "../alternativesModel";
 
 const INDENT = 12;
 
@@ -230,6 +232,7 @@ function Header({
               frozen track still shows it; the rest are in the "⋯" menu. */}
           {(full ? switches : switches.filter((sw) => sw.on)).map(btn)}
           {group && <GroupBadge group={group} onClick={() => setState({ groupSheet: group.id })} />}
+          {showsTrackAlts(track) && <TrackAltButton track={track} />}
           {hideMode && (
             <button
               className={"tbtn hide" + (track.hidden ? " on" : "")}

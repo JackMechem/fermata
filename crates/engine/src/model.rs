@@ -476,6 +476,22 @@ pub struct Track {
     /// The VCA whose level offsets this track's fader (see `vca.rs`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vca: Option<Id>,
+    /// Logic's Track Alternatives: the track's other sets of regions, kept while `regions` plays
+    /// the active one (see `session/track_alternatives.rs`). Empty: the track has just one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<TrackAlternative>,
+    /// The name of the active track alternative ("A" when empty).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub alternative: String,
+}
+
+/// An inactive track alternative: a named set of regions that replaces the track's regions
+/// when it is switched to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TrackAlternative {
+    pub name: String,
+    #[serde(default)]
+    pub regions: Vec<Region>,
 }
 
 /// A frozen track's freeze file.
@@ -668,6 +684,10 @@ pub struct Project {
     /// The VCA faders, in the Mixer's order.
     #[serde(default)]
     pub vcas: Vec<Vca>,
+    /// The name of this project alternative (File › Project Alternatives). Empty in projects
+    /// from before alternatives, where it is the project's name. See `session/alternatives.rs`.
+    #[serde(default)]
+    pub alternative: String,
 }
 
 /// A VCA fader (Logic's VCA strip). It passes no audio: its level offsets the faders of the
@@ -721,6 +741,7 @@ impl Project {
             signatures: Vec::new(),
             drag_mode: DragMode::Overlap,
             vcas: Vec::new(),
+            alternative: String::new(),
         }
     }
 
@@ -995,6 +1016,8 @@ impl Project {
         for t in &mut p.tracks {
             strip(&mut t.instrument);
             t.inserts.iter_mut().for_each(strip);
+            // The UI shows only the names of inactive track alternatives.
+            t.alternatives.iter_mut().for_each(|a| a.regions.clear());
         }
         p.master.inserts.iter_mut().for_each(strip);
         p
@@ -1116,6 +1139,8 @@ mod routing_tests {
             auto_mode: AutoMode::Read,
             frozen: None,
             vca: None,
+            alternatives: Vec::new(),
+            alternative: String::new(),
         });
         id
     }
