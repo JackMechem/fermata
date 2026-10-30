@@ -293,7 +293,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Filter strips by type (Audio, Inst, Aux) (p. 542)
 - [x] Volume fader with Logic's taper (p. 552)
 - [x] Level meters with a 2 s peak hold (p. 551–553)
-- [~] Peak level display and clipping (p. 551). *No clip indicators to reset.*
+- [x] Peak level display and clipping (p. 551)
 - [x] Input format mono or stereo (p. 554)
 - [x] Pan, with a −3 dB compensated pan law (p. 555)
 - [x] Mute and solo (p. 557–558)
@@ -580,7 +580,7 @@ Audio File Editor (p. 499–523)
 - [ ] Enable or disable all groups (⇧G) (p. 602)
 - [ ] Solo safe (p. 558)
 - [ ] Pre-fader metering (p. 554)
-- [ ] Clip indicators with reset (p. 551–552)
+- [x] Clip indicators with reset (p. 551–552)
 - [ ] Switch between two volume levels (p. 552)
 - [ ] Stereo Pan mode, with width (p. 556)
 - [ ] Independent send pan (p. 587–588)
@@ -592,7 +592,7 @@ Audio File Editor (p. 499–523)
 - [ ] Enter and exit folder stacks in the Mixer (p. 614–615)
 - [ ] Track notes in the Mixer (p. 617)
 - [ ] I/O Labels window (p. 618)
-- [ ] Gain-reduction meter on the strip
+- [~] Gain-reduction meter on the strip. *For the built-in dynamics effects; VST3s don't report it.*
 - [ ] Show or hide all plug-in windows (V)
 
 ### Plug-in windows and settings (p. 567–582)
@@ -604,8 +604,8 @@ Audio File Editor (p. 499–523)
 - [ ] Link or unlink plug-in windows (p. 569)
 - [ ] Plug-in undo and redo (p. 568)
 - [ ] Controls view: a generic parameter view (p. 1039)
-- [ ] Channel strip settings: save, load, step through, paste only plug-ins or sends (p. 581–582)
-- [ ] Copy and paste a whole channel strip (key commands)
+- [~] Channel strip settings: save, load, step through, paste only plug-ins or sends (p. 581–582). *Save, load, copy, paste and reset (instrument, Audio FX, Channel EQ); no stepping, no partial paste, saved settings aren't sorted into folders.*
+- [~] Copy and paste a whole channel strip (key commands). *From the Setting menu; no key commands.*
 - [ ] Remove all plug-ins, empty slots, bypassed plug-ins or sends (p. 582)
 - [ ] Plug-in Manager categories and custom names (p. 579–580)
 
@@ -1094,7 +1094,7 @@ partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
    everyday editing workflow.
 4. **Plug-in presets and channel strip settings**, with compare and copy/paste. Without them,
    any sound worth keeping has to be rebuilt by hand. *Presets for the built-in effects and the
-   Channel EQ, and copy and paste of any plug-in, are done; channel strip settings, Compare and
+   Channel EQ, copy and paste of any plug-in, and channel strip settings are done; Compare and
    VST3 presets are not.*
 5. **Side-chain inputs and multi-output instruments.** Ducking, gating and multi-out drum
    instruments are standard in modern mixing. *Side-chains work for the built-in Compressor,

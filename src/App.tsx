@@ -46,6 +46,7 @@ import { packTakeFolder } from "./takes";
 import { installDetach, receiveSnapshot, toggleDetached } from "./detach";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { moveAutomationAnswer } from "./moveAutomation";
+import { resetClipIndicators } from "./stripSettings";
 
 function selectedTrack() {
   const s = getState().snap;
@@ -357,6 +358,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
   loop: () => ops.toggleLoop(),
   "show-hidden": () => ops.toggleShowHidden(),
   "hide-tracks": () => ops.hideTracks(),
+  "reset-clips": () => resetClipIndicators(null),
   automation: () => handleMenu("automation"),
   "global-tracks": () => handleMenu("global-tracks"),
   "nudge-left": () => nudgeRegions(-1),

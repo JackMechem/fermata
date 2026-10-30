@@ -162,6 +162,11 @@ impl Engine {
         self.flush_all_notes();
         // Live playback starts clean too, not with the render's ringing tail.
         self.reset_effects();
+        // What the render played isn't for the meters, nor for the clip indicators they feed.
+        for t in &self.tracks {
+            t.meter.take();
+        }
+        self.status.master.take();
         self.isolate = None;
         self.offline = false;
         self.pos = saved.pos;

@@ -69,7 +69,15 @@ pub struct FxShared {
     params: Vec<AtomicU32>,
     latency: AtomicU32,
     tail: AtomicU32,
+    /// Which meter is the effect's gain reduction (positive dB), for dynamics effects, and its
+    /// largest value since the session last took it, for the channel strip's gain-reduction
+    /// meter. Kept whether or not the panel is open.
+    gr_meter: Option<usize>,
+    gr: AtomicU32,
 }
+
+/// The meter names under which dynamics effects report their gain reduction.
+const GR_METERS: [&str; 2] = ["Gain Reduction", "Reduction"];
 
 impl FxShared {
     fn new(info: &EffectInfo) -> FxShared {
@@ -81,7 +89,15 @@ impl FxShared {
             params: info.params.iter().map(|p| AtomicU32::new(p.default.to_bits())).collect(),
             latency: AtomicU32::new(0),
             tail: AtomicU32::new(0),
+            gr_meter: info.meters.iter().position(|m| GR_METERS.contains(m)).filter(|&k| k < MAX_METERS),
+            gr: AtomicU32::new(0),
         }
+    }
+
+    /// The largest gain reduction (positive dB) since the last call, or None when the effect
+    /// doesn't reduce gain (isn't a dynamics effect).
+    pub fn take_gain_reduction(&self) -> Option<f32> {
+        self.gr_meter.map(|_| f32::from_bits(self.gr.swap(0, Ordering::Relaxed)))
     }
 
     pub fn set_watched(&self, on: bool) {
@@ -173,8 +189,15 @@ impl BuiltinDsp {
     pub fn process(&mut self, l: &mut [f32], r: &mut [f32], key: Key, ctx: &FxContext) {
         self.fresh = false;
         self.fx.process(l, r, key, ctx);
-        if self.shared.watched.load(Ordering::Relaxed) {
+        let watched = self.shared.watched.load(Ordering::Relaxed);
+        if watched || self.shared.gr_meter.is_some() {
             self.fx.meters(&mut self.meter_buf);
+        }
+        if let Some(k) = self.shared.gr_meter {
+            // Non-negative floats order like their bits (see `Meter::feed`); max drops a NaN.
+            self.shared.gr.fetch_max(self.meter_buf[k].max(0.0).to_bits(), Ordering::Relaxed);
+        }
+        if watched {
             for (m, v) in self.shared.meters.iter().zip(&self.meter_buf) {
                 m.store(v.to_bits(), Ordering::Relaxed);
             }
@@ -214,5 +237,28 @@ mod tests {
         assert_eq!((to_plain(&toggle, 0.4), to_plain(&toggle, 0.7)), (0.0, 1.0));
         assert_eq!(clamp(&choice, 7.3), 2.0);
         assert_eq!(clamp(&lin, f32::NAN), -60.0);
+    }
+
+    #[test]
+    fn dynamics_report_gain_reduction_without_their_panel() {
+        let ctx = FxContext { sample_rate: 48000.0, tempo: 120.0, playing: true, position: 0.0 };
+        let comp = crate::fx::find("builtin:compressor").unwrap();
+        let mut b = BuiltinDsp::new(&comp, 48000.0, &[(crate::fx::compressor::param::THRESHOLD, -40.0)], None);
+        let shared = b.shared();
+        assert_eq!(shared.take_gain_reduction(), Some(0.0));
+        for _ in 0..20 {
+            let (mut l, mut r) = (vec![0.5f32; 512], vec![0.5f32; 512]);
+            b.process(&mut l, &mut r, None, &ctx);
+        }
+        let gr = shared.take_gain_reduction().unwrap();
+        assert!(gr > 6.0, "gain reduction {gr}");
+        assert_eq!(shared.take_gain_reduction(), Some(0.0), "taking it starts again");
+        // An effect that doesn't reduce gain has no such meter.
+        let reverb = crate::fx::find("builtin:reverb").unwrap();
+        assert_eq!(BuiltinDsp::new(&reverb, 48000.0, &[], None).shared().take_gain_reduction(), None);
+        for id in ["builtin:limiter", "builtin:noise-gate", "builtin:deesser"] {
+            let info = crate::fx::find(id).unwrap();
+            assert!(BuiltinDsp::new(&info, 48000.0, &[], None).shared().take_gain_reduction().is_some(), "{id}");
+        }
     }
 }

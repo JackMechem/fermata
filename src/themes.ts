@@ -148,6 +148,7 @@ const studioCanvas: CanvasTheme = {
   editorBg: "#222224",
   gridBar: "rgba(255,255,255,0.12)",
   gridBeat: "rgba(255,255,255,0.04)",
+  meterGr: "#e9a23b",
 };
 
 // ---- Flat: solid fills and hairlines, tuned for contrast ------------------------------------
@@ -510,6 +511,7 @@ const lightCanvas: CanvasTheme = {
   editorBg: "#eceef1",
   gridBar: "rgba(0,0,0,0.14)",
   gridBeat: "rgba(0,0,0,0.05)",
+  meterGr: "#cf7f17",
 };
 
 // ---- High Contrast ------------------------------------------------------------------------------
@@ -631,6 +633,7 @@ const contrastCanvas: CanvasTheme = {
   editorBg: "#000000",
   gridBar: "rgba(255,255,255,0.25)",
   gridBeat: "rgba(255,255,255,0.08)",
+  meterGr: "#ffb000",
 };
 
 export const THEMES: Theme[] = [

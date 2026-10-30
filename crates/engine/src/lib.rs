@@ -22,6 +22,7 @@ pub mod recorder;
 pub mod region_params;
 pub mod session;
 pub mod smf;
+pub mod strip_settings;
 pub mod synth;
 #[cfg(target_os = "linux")]
 pub mod sysvol;

@@ -63,7 +63,7 @@ flowchart LR
 | **`audio-io`** | `audio_io::start` | Builds and owns the cpal streams, then waits until the device is closed. | |
 | **Audio callback** | cpal (output stream) | Calls `Engine::process` once per device buffer, inside `catch_unwind`; the input stream's callback only fills the input ring. Runs with real-time priority (rtkit on Linux). | Allocate, lock, block, do I/O. See [Real-time rules](#3-real-time-rules). |
 | **`recorder`** | `recorder.rs` | Every 10 ms, drains the ring buffer of each armed track into its WAV file and an in-memory copy, and keeps a peak preview for the UI. | Touch the engine or the project. |
-| **`ui-tick`** | `src-tauri/src/main.rs` | Every 33 ms: locks the session, builds a `Tick` (playhead, meters, input levels, recording previews, CPU, latency, analyzer spectrum, warnings, meters of open built-in effect panels) and emits it as the `tick` event. | Edit anything. |
+| **`ui-tick`** | `src-tauri/src/main.rs` | Every 33 ms: locks the session, builds a `Tick` (playhead, meters, input levels, recording previews, CPU, latency, analyzer spectrum, warnings, meters of open built-in effect panels, the clip indicators' held peaks, each strip's gain reduction) and emits it as the `tick` event. | Edit anything. |
 | **MIDI refresh** | `main.rs` | Every 3 s: `Session::refresh_midi`, so devices plugged in later get connected. | |
 | **MIDI input callbacks** | midir, in `midi_io.rs` (one per port) | Drop system messages, apply the velocity curve, push into the `live_midi` ring the engine reads, and log the message for Settings › MIDI. | |
 | **Async command workers** | Tauri's async runtime (`#[tauri::command(async)]`) | Offline renders (bounce, export, Bounce in Place, Freeze), plug-in rescans, waveform and transient requests, device lists, recent projects, the input level check, folder listings. Renders hold the session lock and the engine lock for their whole length; the parts that edit tracks or plug-ins are handed back to the main thread with `run_on_main_thread`. | Touch plug-in controllers. |
@@ -145,7 +145,10 @@ Other conventions inside the engine:
   the start of a render.
 - A muted send keeps its slot with gain 0, so it fades out instead of clicking.
 - `Meter::feed` uses `fetch_max` on the float bits (non-negative floats order like their bit
-  patterns), and `take` swaps in zero, so the UI reads the peak since its last tick.
+  patterns), and `take` swaps in zero, so the UI reads the peak since its last tick. The
+  session folds those peaks into the clip indicators' holds (`session/strip_meters.rs`), so
+  none is missed between ticks; `Engine::render` empties the meters afterwards, so a bounce
+  doesn't light them.
 
 ## 4. How an edit flows
 
@@ -604,6 +607,7 @@ The config folder is `$XDG_CONFIG_HOME/fermata`, else `%APPDATA%\fermata`, else
 | `plugins.json` | `plugin_db.rs` | The plug-in scan cache. |
 | `plugin-scan.json` | `plugin_db.rs` | The last scan's report (bundles, plug-ins, failures with reasons), for Settings › Plug-ins. |
 | `presets/<effect>/<name>.json` | `presets.rs` | User presets of the built-in effects and the Channel EQ (see [Presets](#presets)). |
+| `channel-strips/<name>.json` | `strip_settings.rs` | Saved channel strip settings (see [Channel strip settings](#channel-strip-settings)). |
 
 Interface-only state lives in the webview's `localStorage`:
 
@@ -862,7 +866,8 @@ allows, which the headless examples rely on.
 
 - The `tick` event (~30 Hz) is kept **outside React state**: `pushTick` stores it, rebuilds a
   meter map (track id, -1 for Stereo Out, -100-n for input n) and calls `onTick` listeners.
-  Recording previews go into `liveTakes`.
+  The clip indicators' holds (`peakHold`) and gain reductions (`gainReduction`) use the same
+  keys. Recording previews go into `liveTakes`.
 - `src/frame.ts` runs one `requestAnimationFrame` loop for everything that animates (playhead,
   meters, LCD). `framePos` extrapolates the playhead from the last tick by the time since it
   arrived (capped at 100 ms) and wraps at the cycle end, so motion is smooth at display rate.
@@ -1046,7 +1051,9 @@ it like any plug-in.
   gliding, so a render's first block already has the automated value.
 - `FxShared` (behind an `Arc`, shared with the session) holds atomics: meters and the values the
   effect runs with, copied after each block only while the panel is `watched`, and the latency
-  and tail, republished on every parameter change.
+  and tail, republished on every parameter change. A dynamics effect (one with a meter named
+  "Gain Reduction" or "Reduction") also keeps its largest gain reduction since the last tick,
+  panel or not, for the strip's gain-reduction meter (`take_gain_reduction`).
 - `Cmd::FxParam` sets a value; `Cmd::Sidechain` sets the key source, and `resolve_keys` keeps
   each effect's `key_idx` (the source's index in the track list) current.
 
@@ -1101,6 +1108,24 @@ it like any plug-in.
 - The UI side is `src/slotDrag.ts`: a drag from a slot's name, Alt to copy, Esc to cancel, and
   the `move_plugin` command on drop.
 
+### Channel strip settings
+
+- A `StripSetting` (`strip_settings.rs`) is a strip's instrument, Audio FX slots and Channel
+  EQ. `copy_strip` captures one, VST3 states included, like `copy_plugin`; the clipboard lives
+  in the UI (`src/stripSettings.ts`).
+- `paste_strip` (`session/strip_settings.rs`) replaces every Audio FX slot and the EQ of each
+  target, and the instrument of an instrument track when the setting has one, with new
+  instances (new uids; side-chains filtered as in `paste_plugin`). A VST3 that fails to
+  instantiate stays in its slot with its state, as a missing plug-in. `reset_strip` applies an
+  empty setting (instrument included) and resets volume and pan. Both are one undo step with
+  plug-in states captured, so `restore()` reinstantiates what changed.
+- Saved settings go through `strip_settings::{list, read, write, delete}` in a root folder
+  (`user_root()` for the app, a scratch folder in tests); saving drops side-chain sources and
+  trailing empty slots (`portable`).
+- Commands: `copy_strip`, `paste_strip`, `reset_strip`, `list_strip_settings`,
+  `save_strip_setting`, `load_strip_setting`, `delete_strip_setting`, and, for the clip
+  indicators, `reset_clip_indicators`.
+
 ## 14. Module map
 
 ### `crates/engine/src`
@@ -1122,6 +1147,7 @@ it like any plug-in.
 | `fx/lfo.rs`, `oversample.rs` | LFO and smoothing for the modulation effects; half-band FIR oversampling. |
 | `fx/biquad.rs`, `dyn_common.rs` | Shared filter and dynamics building blocks. |
 | `presets.rs` | Factory presets of the Channel EQ, user preset files. |
+| `strip_settings.rs` | `StripSetting` and the saved channel strip setting files. |
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |
 | `session.rs` | `Session`: engine plumbing, `track_params`, `regions_dsp`, building tracks, undo (`checkpoint`, `undo`, `redo`, `restore`), transport and recording, track and region edits, import, plug-in slots, `idle`, `tick`, new/save/open. |
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
@@ -1137,6 +1163,8 @@ it like any plug-in.
 | `session/builtin.rs` | Built-in effects in slots: instantiation, parameters, side-chains, meters for open panels. |
 | `session/presets.rs` | Copy and paste of plug-ins and Channel EQ; loading and saving presets. |
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
+| `session/strip_settings.rs` | Copy, paste, reset, save and load channel strip settings. |
+| `session/strip_meters.rs` | The clip indicators' peak holds (`PeakHolds`) and each strip's gain reduction for the tick. |
 | `session/region_moves.rs` | Moving several regions as one edit. |
 | `session/tempo.rs` | Tempo and Signature track edits, Move MIDI Regions with Tempo. |
 | `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
@@ -1225,6 +1253,8 @@ it like any plug-in.
 | `fx.ts` | Built-in effect descriptions (`FxInfo`, `FxParamSpec`) and `FX_PANELS`. |
 | `fxFormat.ts` | Built-in effect value formatting and control mapping; pure, tested. |
 | `fxHost.ts` | Built-in effect registry and panel windows, the plug-in and Channel EQ clipboard, the slot right-click menu. |
+| `stripSettings.ts` | The channel strip Setting menu: the strip clipboard, Reset, saving and loading; resetting clip indicators. |
+| `stripMeters.ts` | The clip indicator's readout and the gain-reduction meter's scale and fall; pure, tested. |
 | `slotDrag.ts` | Dragging plug-ins between Audio FX slots. |
 | `waveform.ts` | Waveform fetching, caching and the four drawing styles. |
 | `eqMath.ts` | Channel EQ frequency response for drawing (mirrors `eq.rs`). |
@@ -1253,7 +1283,7 @@ it like any plug-in.
 | `Sends.tsx` | The channel strip's Sends section and Output slot. |
 | `Eq.tsx` | Channel EQ thumbnail and editor window. |
 | `Latency.tsx` | Plug-in latency options, readouts and the PDC status. |
-| `Controls.tsx` | Fader, knob, slider and meter controls. |
+| `Controls.tsx` | Fader, knob, slider and meter controls, the gain-reduction meter. |
 | `Form.tsx` | Themed form controls. |
 | `Menu.tsx` | In-window menus. |
 | `Splitter.tsx` | Pane dividers and saved pane sizes. |
@@ -1281,7 +1311,7 @@ it like any plug-in.
 
 | Path | Contents |
 |---|---|
-| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`. |
+| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
 | `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |

@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { Id } from "../api";
-import { meterLevels, tickSeq, useStore } from "../store";
+import { gainReduction, meterLevels, peakHold, tickSeq, useStore } from "../store";
 import { onFrame } from "../frame";
 import { pixelRatio } from "../uiScale";
 import { theme } from "../theme";
 import { dbToFader, faderToDb, gainToDb } from "../time";
+import { grFraction, isClip, nextGr } from "../stripMeters";
 
 /** Shared vertical/horizontal drag helper. Shift gives fine control, like Logic. */
 export function useDrag(onDelta: (d: number, fine: boolean) => void, onEnd?: () => void) {
@@ -142,24 +143,21 @@ function level(db: number) {
 
 /**
  * Peak meter drawn on a canvas straight from engine ticks. Falls back at ~12 dB/s like
- * Logic's default meter return, with a 2 s peak hold.
+ * Logic's default meter return, with a 2 s peak hold. Its top (its end, horizontally) lights
+ * red while the strip's clip indicator is on.
  */
 export function Meter({
   source,
   height,
   width = 10,
   horizontal = false,
-  onPeak,
-  resetKey = 0,
   scale = level,
   className = "meter",
 }: {
   source: MeterSource;
-  resetKey?: number;
   height: number;
   width?: number;
   horizontal?: boolean;
-  onPeak?: (db: number) => void;
   /** Maps a level in dB to a fraction of the meter's length (a linear dB scale by default).
    *  Pass a stable function: a new one restarts the meter. */
   scale?: (db: number) => number;
@@ -182,7 +180,7 @@ export function Meter({
     const disp = [METER_FLOOR, METER_FLOOR];
     const hold = [METER_FLOOR, METER_FLOOR];
     const holdAt = [0, 0];
-    let maxPeak = -Infinity;
+    let clip = false;
     let last = performance.now();
     const len = horizontal ? W : H;
     const grad = horizontal ? ctx.createLinearGradient(0, 0, W, 0) : ctx.createLinearGradient(0, H, 0, 0);
@@ -207,8 +205,10 @@ export function Meter({
     }
     const key = s.kind === "master" ? -1 : s.kind === "input" ? -100 - s.ch : s.id;
     let seen = -1;
-    // What was last painted, per lane: [level px, hold px]. Repaint only when it changes.
-    const painted: number[] = [-1, -1, -1, -1];
+    // What was last painted, per lane: [level px, hold px], then the clip light. Repaint only
+    // when it changes.
+    const painted: number[] = [-1, -1, -1, -1, -1];
+    const CLIP_PX = 3;
     const lanes = 2;
     const gap = 1;
     const lw = ((horizontal ? H : W) - gap) / lanes;
@@ -228,6 +228,11 @@ export function Meter({
           else ctx.fillRect(i * (lw + gap), H - hp, lw, 1);
         }
       }
+      if (clip) {
+        ctx.fillStyle = theme.red;
+        if (horizontal) ctx.fillRect(W - CLIP_PX, 0, CLIP_PX, H);
+        else ctx.fillRect(0, 0, W, CLIP_PX);
+      }
     };
     paint([0, 0], [0, 0]);
     return onFrame((now) => {
@@ -240,11 +245,7 @@ export function Meter({
       if (sq !== seen) {
         seen = sq;
         vals = meterLevels(key);
-        const peak = Math.max(gainToDb(vals[0]), gainToDb(vals[1]));
-        if (onPeak && peak > maxPeak) {
-          maxPeak = peak;
-          onPeak(peak);
-        }
+        clip = isClip(peakHold(key));
       }
       const levels: number[] = [];
       const holds: number[] = [];
@@ -264,9 +265,53 @@ export function Meter({
         painted[i * 2] = l;
         painted[i * 2 + 1] = hp;
       }
+      if (+clip !== painted[4]) changed = true;
+      painted[4] = +clip;
       if (changed) paint(levels, holds);
     });
-  }, [src, height, width, horizontal, onPeak, resetKey, themeId, uiScale, scale]);
+  }, [src, height, width, horizontal, themeId, uiScale, scale]);
   const style = horizontal ? { width: height, height: width } : { width, height };
   return <canvas ref={ref} className={className} style={style} />;
+}
+
+/**
+ * The channel strip's gain-reduction meter, shown next to the level meter when the strip has a
+ * built-in dynamics effect: it grows down from the top as the effect reduces the gain (see
+ * `gain_reduction` in the tick and src/stripMeters.ts).
+ */
+export function GrMeter({ source, height, width = 4 }: { source: MeterSource; height: number; width?: number }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  const src = JSON.stringify(source);
+  const themeId = useStore((s) => s.themeId);
+  const uiScale = useStore((s) => s.uiScale);
+  useEffect(() => {
+    const s: MeterSource = JSON.parse(src);
+    const key = s.kind === "master" ? -1 : s.kind === "input" ? -100 - s.ch : s.id;
+    const cv = ref.current!;
+    const dpr = pixelRatio();
+    cv.width = width * dpr;
+    cv.height = height * dpr;
+    const ctx = cv.getContext("2d")!;
+    ctx.scale(dpr, dpr);
+    let shown = 0;
+    let seen = -1;
+    let painted = -1;
+    let last = performance.now();
+    return onFrame((now) => {
+      const dt = Math.min(0.1, (now - last) / 1000);
+      last = now;
+      const sq = tickSeq();
+      const fresh = sq !== seen;
+      seen = sq;
+      shown = nextGr(shown, fresh ? gainReduction(key) : undefined, dt);
+      const px = Math.round(grFraction(shown) * height);
+      if (px === painted) return;
+      painted = px;
+      ctx.fillStyle = theme.meterBg;
+      ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = theme.meterGr;
+      ctx.fillRect(0, 0, width, px);
+    });
+  }, [src, height, width, themeId, uiScale]);
+  return <canvas ref={ref} className="meter gr-meter" style={{ width, height }} title="Gain reduction" />;
 }

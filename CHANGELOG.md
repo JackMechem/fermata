@@ -8,6 +8,15 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
+  name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state
+  included) and Channel EQ, resets the strip, and saves settings to load in any project.
+  Paste, Reset and loading apply to all selected strips as one undo step.
+- **Clip indicators:** each strip's peak readout holds its highest peak until reset, turns red
+  over 0 dBFS and lights the top of the meter (and the end of the track header's meter); click
+  to reset, Alt-click (or the key command Reset All Clip Indicators) to reset all.
+- **Gain-reduction meter** beside a strip's level meter when it has a Compressor, Limiter,
+  Noise Gate or De-Esser.
 - **AIFF and FLAC bounces:** Bounce, Export All Tracks and Export Region can write AIFF (16,
   24-bit or 32-bit float as AIFF-C) and lossless FLAC (16 or 24-bit) as well as WAV; the
   format is remembered with the other bounce options.

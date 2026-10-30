@@ -6800,3 +6800,20 @@ canvas.pr-cursor-line {
   min-width: 480px;
   max-width: 720px;
 }
+
+/* ---- channel strip: Setting button, clip indicator, gain-reduction meter ------------------- */
+
+/* The Setting pop-up at the top of a strip (Copy, Paste, Reset, Save and load). */
+.slot.strip-setting:hover {
+  background: var(--slot-static-hi);
+}
+
+/* The level meter and, with a dynamics effect on the strip, its gain-reduction meter. */
+.strip-meters {
+  display: flex;
+  gap: 2px;
+}
+
+.readout.peak {
+  cursor: default;
+}

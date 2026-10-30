@@ -94,13 +94,13 @@ Goal: precise MIDI editing and hands-on control from hardware.
 
 Goal: finish a mix and deliver it without leaving Fermata.
 
-- [ ] Channel strip settings; copy and paste a whole strip
+- [x] Channel strip settings; copy and paste a whole strip
 - [ ] Several automation lanes per track, automation curves, automation for folder stacks and
       Stereo Out
 - [ ] Undo for parameter changes made in a VST3's own editor
 - [ ] VCA faders
 - [ ] A pre-fader side-chain option for built-in effects
-- [ ] Clip indicators and a gain-reduction meter on the strip
+- [x] Clip indicators and a gain-reduction meter on the strip
 - [x] FLAC and AIFF bounce; export the selected tracks
 - [ ] MP3 and AAC bounce (needs an encoder whose licence suits)
 - [ ] Delay compensation changes while playing without clicks

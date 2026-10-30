@@ -375,6 +375,10 @@ export interface Tick {
   spectrum: [Id, number[]] | null;
   /** Meters and running values of the built-in effects whose panels are open. */
   fx?: { uid: Id; meters: number[]; values: [number, number][] }[];
+  /** Clip indicators: each strip's highest peak (linear) since reset; MASTER_ID for Stereo Out. */
+  peak_holds?: [Id, number][];
+  /** Gain reduction (dB) of the strips with a built-in dynamics effect. */
+  gain_reduction?: [Id, number][];
 }
 
 export interface DeviceInfo {

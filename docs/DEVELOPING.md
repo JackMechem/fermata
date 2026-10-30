@@ -116,7 +116,10 @@ undo limits and recording placement (`session/options.rs`); crash-recovery journ
 recovering interrupted takes, atomic saves with a backup and falling back from a damaged
 project.json (`session/recovery.rs`); repairing the WAV headers a crash leaves, for every format
 the recorder writes (`wav_repair.rs`); preferences parsing; the recorder's bit depths; the tempo map; `contain()`; preset files and names (`presets.rs`);
-parameter normalization (`dsp/builtin.rs`); and each built-in effect's DSP (`fx/*.rs`: the
+parameter normalization and dynamics effects' gain reduction (`dsp/builtin.rs`); channel
+strip settings (copy and paste through JSON, onto audio and instrument tracks, missing plug-ins,
+Reset, setting files: `strip_settings.rs`, `session/strip_settings.rs`); the clip indicators'
+peak holds (`session/strip_meters.rs`); and each built-in effect's DSP (`fx/*.rs`: the
 Limiter's ceiling and latency, the Reverb's stability, the Tuner's accuracy, the Loudness
 Meter's BS.1770 weighting and true peak, and more).
 
@@ -169,6 +172,7 @@ folder is kept when anything failed.
 | `sends_check` | audio file, scratch dir | Sends pre and post fader, aux buses, output routing, solo through routing, loop refusal. |
 | `send_auto_check` | audio file, scratch dir | A send-level automation lane changes what reaches the aux. |
 | `bounce_check` | audio file, scratch dir | Bounce, Export All Tracks, Export Region and Bounce in Place: ranges, tails, formats, normalize, placement. |
+| `strip_check` | audio file, scratch dir | Channel strip settings: a saved setting loads onto two tracks (new instances, same values, the EQ) as one undo step; the gain-reduction meter of compressed strips reaches the tick; a clipping track's clip indicator holds a peak over 0 dBFS through quiet playback until it (or every one) is reset, and a bounce leaves them alone. Saved settings go to the scratch folder. |
 | `export_check` | audio file, scratch dir | AIFF and FLAC bounces decode to the same samples as the WAV bounce (and within quantization of a float one); FLAC refuses float; Export Selected Tracks writes just the selection, folder stacks standing for their subtracks. |
 | `crossfade_check` | audio file, scratch dir | Fade curves, Speed Up and Slow Down, and X, EqP and X S crossfades, measured in offline renders of synthetic files (X sums to unity, EqP to constant power); butt fades and gaps; the X-Fade drag mode with undo and redo; and that playback, Bounce, Export, Bounce in Place, Freeze, Join and save/reopen all sound the same. |
 | `range_edit_check` | audio file, scratch dir | Audio Track Editor range edits and Split at Transients: what plays after each edit, and that one undo reverts it. |
@@ -214,7 +218,8 @@ quantize with strength, swing and ends, and the rest), `eventList.test.ts` (the 
 positions across tempo and signature changes, typed values and edits), `audioEdit.test.ts`
 (`src/audioRange.ts`), `fxFormat.test.ts` (built-in effect readouts and control mapping),
 `keyFormat.test.ts`
-(shortcuts on each platform) and `tempo.test.ts` (`src/tempo.ts`). Node 23.6 or newer runs
+(shortcuts on each platform), `tempo.test.ts` (`src/tempo.ts`) and `stripMeters.test.ts` (the
+clip indicator readout and the gain-reduction meter). Node 23.6 or newer runs
 TypeScript directly; on Node 22 add `--experimental-strip-types`.
 
 ### What to run before sending a change

@@ -44,6 +44,8 @@ export interface CanvasTheme {
   editorBg: string;
   gridBar: string;
   gridBeat: string;
+  /** The channel strip's gain-reduction meter. */
+  meterGr: string;
 }
 
 export const theme: CanvasTheme = {
@@ -81,6 +83,7 @@ export const theme: CanvasTheme = {
   editorBg: "#222224",
   gridBar: "rgba(255,255,255,0.12)",
   gridBeat: "rgba(255,255,255,0.04)",
+  meterGr: "#e9a23b",
 };
 
 function rgb(c: string): [number, number, number] {

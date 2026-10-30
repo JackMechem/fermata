@@ -196,7 +196,9 @@ Track headers:
   tooltip shows the level. In a group with volume linked, the other members follow. The meter
   inside the groove is post-fader and uses the slider's own scale, so a full-scale signal
   reaches the thumb, and only a hotter one passes it; peaks are held for 2 s, in red above
-  0 dBFS. A folder stack's slider has no meter (it moves every subtrack).
+  0 dBFS. Its right end lights red while the track's clip indicator is on (see
+  [The channel strip](#the-channel-strip)). A folder stack's slider has no meter (it moves
+  every subtrack).
 
 ### Inspector
 
@@ -1080,6 +1082,7 @@ From top to bottom:
 
 | Part | What it does |
 |---|---|
+| **Setting** | The channel strip settings menu (see [Channel strip settings](#channel-strip-settings)). |
 | **Input** | Audio tracks: the mono/stereo button and the input ("No Input", "Input 1"..., "Input 1–2"...). Instrument tracks: the **instrument slot** (No Plug-in, Fermata Synth, or a VST3 instrument by category or vendor). Auxes show their bus ("Bus 1"); summing stacks show "Subtracks". |
 | **EQ thumbnail** | The Channel EQ curve; click to open the editor. |
 | **Audio FX** | Insert slots: the filled ones plus one empty slot (up to 8). The label shows the strip's plug-in latency. |
@@ -1087,10 +1090,14 @@ From top to bottom:
 | **Output** | Stereo Out, the summing stack, or an aux. |
 | **Automation mode** | Off, Read, Touch, Latch, Write (see [Automation](#13-automation)). |
 | **Pan** | Drag vertically (Shift for fine); double-click to centre. |
-| **Readouts** | Volume in dB and the peak level (red above 0 dB; click to reset). |
-| **Fader and meter** | Drag the fader (Shift for fine), double-click for 0 dB. -96 to +6 dB. The meter holds peaks for 2 s. |
+| **Readouts** | Volume in dB and the clip indicator: the highest peak since you last reset it, in dBFS, red once a peak went over 0 dBFS. Click it to reset it, Alt-click to reset every strip's (or use the key command **Reset All Clip Indicators**, unassigned at first). |
+| **Fader and meter** | Drag the fader (Shift for fine), double-click for 0 dB. -96 to +6 dB. The meter holds peaks for 2 s, and its top lights red while the clip indicator is on. With a Compressor, Limiter, Noise Gate or De-Esser on the strip, a thin **gain-reduction meter** beside it grows down from the top as the first one that isn't bypassed reduces the gain (up to 30 dB). |
 | **M S R I** | Mute, Solo, Record Enable, Input Monitoring. |
-| **Name** | With the track colour. |
+| **Name** | With the track colour. Right-click it for the channel strip settings menu. |
+
+The clip indicators keep their peak until you reset them, as in Logic: playing again doesn't
+reset them, and they are the same in the Mixer, the Inspector and a Mixer in its own window.
+Opening another project starts them afresh; bounces and exports don't touch them.
 
 A folder stack's strip shows only its fader and buttons ("A folder has no audio of its own").
 Stereo Out has Channel EQ, Audio FX, its fader and meter.
@@ -1122,6 +1129,29 @@ It processes before the Audio FX inserts and costs nothing while flat.
   (with several tracks selected, also **Paste Channel EQ to Selected Tracks**). Pasting replaces
   the strip's EQ settings, Stereo Out included, as one undo step. The copy survives opening
   another project.
+
+### Channel strip settings
+
+Click **Setting** at the top of a strip (or right-click the strip's name) for Logic's channel
+strip settings menu. A channel strip setting is the strip's instrument, its Audio FX plug-ins
+with all their settings (a VST3's whole state, a built-in effect's values, bypass) and its
+Channel EQ. Sends, routing, volume and pan aren't part of it.
+
+| Item | What it does |
+|---|---|
+| **Copy Channel Strip Settings** | Copies the strip's setting. The copy survives opening another project. |
+| **Paste Channel Strip Settings** | Replaces the strip's Audio FX and Channel EQ with the copied ones, as new instances. On an instrument track it also replaces the instrument, when the copy has one; an audio track or aux ignores the instrument. The menu shows where the copy came from. |
+| **Reset Channel Strip** | Removes the instrument and every Audio FX plug-in, sets the Channel EQ flat, the fader to 0 dB and pan to the centre. |
+| **Save Channel Strip Setting As…** | Saves the setting under a name, for any project. Side-chain sources aren't saved, since they name tracks of this project. |
+| **Delete Channel Strip Setting** | Deletes a saved setting. |
+| *saved settings* | Load one onto the strip, as Paste does. |
+
+When the strip is one of several selected tracks, Paste, Reset and loading apply to all of
+them, as one undo step. A folder stack has no channel strip settings. A VST3 that isn't
+installed on this computer comes along as a missing plug-in (its slot keeps its settings, as
+in a project from another computer). Saved settings are files, one `<name>.json` each, in the
+`channel-strips` folder of the settings folder (`~/.config/fermata/channel-strips` on Linux
+and macOS, `%APPDATA%\fermata\channel-strips` on Windows).
 
 ### Plug-ins
 

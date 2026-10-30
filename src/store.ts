@@ -176,6 +176,8 @@ let lastTick: Tick | null = null;
 let lastArrival = 0;
 let seq = 0;
 let meterMap = new Map<Id, [number, number]>();
+let holdMap = new Map<Id, number>();
+let grMap = new Map<Id, number>();
 const tickListeners = new Set<(t: Tick) => void>();
 
 export function pushTick(t: Tick) {
@@ -188,6 +190,10 @@ export function pushTick(t: Tick) {
   m.set(-1, t.master);
   t.inputs.forEach((v, i) => m.set(-100 - i, [v, v]));
   meterMap = m;
+  // The engine names Stereo Out MASTER_ID (0); meter keys use -1.
+  const key = (id: Id) => (id === 0 ? -1 : id);
+  holdMap = new Map((t.peak_holds ?? []).map(([id, v]) => [key(id), v]));
+  grMap = new Map((t.gain_reduction ?? []).map(([id, v]) => [key(id), v]));
   tickListeners.forEach((l) => l(t));
 }
 
@@ -214,6 +220,17 @@ export function tickSeq(): number {
 /** Latest peak levels for a meter key: track id, -1 for Stereo Out, -100-n for input n. */
 export function meterLevels(key: Id): [number, number] {
   return meterMap.get(key) ?? [0, 0];
+}
+
+/** A strip's clip indicator: its highest peak (linear) since it was reset, by meter key. */
+export function peakHold(key: Id): number {
+  return holdMap.get(key) ?? 0;
+}
+
+/** A strip's gain reduction (dB) since the last tick, or undefined when it has no built-in
+ *  dynamics effect, by meter key. */
+export function gainReduction(key: Id): number | undefined {
+  return grMap.get(key);
 }
 
 /** Live recording previews, keyed by track. */

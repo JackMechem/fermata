@@ -1410,3 +1410,57 @@ pub fn set_region_params(state: State<AppState>, ids: Vec<Id>, patch: RegionPara
 pub fn apply_region_params(state: State<AppState>, ids: Vec<Id>) -> Snapshot {
     edit(&state, "Apply Region Parameters", None, false, |s| s.apply_region_params(&ids))
 }
+
+// ---- channel strip settings and clip indicators --------------------------------------------
+
+/// Resets the clip indicators of these strips (0 for Stereo Out), or of every strip when
+/// `tracks` is omitted. Not an undo step.
+#[tauri::command]
+pub fn reset_clip_indicators(state: State<AppState>, tracks: Option<Vec<Id>>) {
+    with(&state, |s| s.reset_peak_holds(tracks.as_deref()))
+}
+
+/// A strip's channel strip setting (instrument, Audio FX with their state, Channel EQ), for
+/// the clipboard.
+#[tauri::command]
+pub fn copy_strip(state: State<AppState>, track: Id) -> R<daw_engine::strip_settings::StripSetting> {
+    with(&state, |s| s.copy_strip(track).map_err(|e| e.to_string()))
+}
+
+/// Applies a channel strip setting to each of `tracks`, as one undo step.
+#[tauri::command]
+pub fn paste_strip(state: State<AppState>, tracks: Vec<Id>, setting: daw_engine::strip_settings::StripSetting) -> R<Snapshot> {
+    try_edit(&state, "Paste Channel Strip", None, true, |s| s.paste_strip(&tracks, &setting))
+}
+
+/// Reset Channel Strip on each of `tracks`, as one undo step.
+#[tauri::command]
+pub fn reset_strip(state: State<AppState>, tracks: Vec<Id>) -> R<Snapshot> {
+    try_edit(&state, "Reset Channel Strip", None, true, |s| s.reset_strip(&tracks))
+}
+
+/// The saved channel strip settings, by name.
+#[tauri::command]
+pub fn list_strip_settings() -> Vec<String> {
+    daw_engine::strip_settings::list(&daw_engine::strip_settings::user_root())
+}
+
+/// Saves a strip's setting under `name`. Refuses to replace an existing one unless
+/// `overwrite`. Returns the name it was saved under.
+#[tauri::command]
+pub fn save_strip_setting(state: State<AppState>, track: Id, name: String, overwrite: Option<bool>) -> R<String> {
+    let root = daw_engine::strip_settings::user_root();
+    with(&state, |s| s.save_strip_setting(&root, track, &name, overwrite.unwrap_or(false)).map_err(|e| e.to_string()))
+}
+
+/// Loads a saved channel strip setting onto each of `tracks`, as one undo step.
+#[tauri::command]
+pub fn load_strip_setting(state: State<AppState>, tracks: Vec<Id>, name: String) -> R<Snapshot> {
+    let root = daw_engine::strip_settings::user_root();
+    try_edit(&state, "Load Channel Strip Setting", None, true, |s| s.load_strip_setting(&root, &tracks, &name))
+}
+
+#[tauri::command]
+pub fn delete_strip_setting(name: String) -> R<()> {
+    daw_engine::strip_settings::delete(&daw_engine::strip_settings::user_root(), &name).map_err(|e| e.to_string())
+}

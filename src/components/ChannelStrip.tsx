@@ -1,10 +1,10 @@
-import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { act, api, canRecord, INSTRUMENT_SLOT, isStack, MASTER_ID, type InputSel, type PluginSlot, type Track } from "../api";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { act, api, canRecord, INSTRUMENT_SLOT, isStack, MASTER_ID, type Id, type InputSel, type PluginSlot, type Track } from "../api";
 import { Icon } from "../icons";
 import { pluginMenu } from "../pluginMenu";
-import { useStore } from "../store";
+import { onTick, peakHold, useStore } from "../store";
 import { formatDb, inputLabel } from "../time";
-import { Fader, Knob, Meter } from "./Controls";
+import { Fader, GrMeter, Knob, Meter } from "./Controls";
 import { EqThumb } from "./Eq";
 import { automatable, useAutomation, VOLUME } from "../automation";
 import { AutoModeButton } from "./AutomationHeader";
@@ -12,9 +12,12 @@ import { openMenu, openMenuAt, type MenuItem } from "./Menu";
 import { OutputSlot, SendsSection } from "./Sends";
 import { StripLatencyBadge, useSlotLatency } from "./Latency";
 import { refuseFrozen } from "../freeze";
-import { isBuiltinFx, loadPlugin, slotMenu, toggleFxPanel } from "../fxHost";
+import { fxInfo, isBuiltinFx, loadPlugin, slotMenu, toggleFxPanel } from "../fxHost";
 import { startSlotDrag } from "../slotDrag";
 import { fxKey, usePanelShown } from "../fxDockState";
+import { clipResetTargets, isClip, peakText, reducesGain } from "../stripMeters";
+import { resetClipIndicators, stripSettingMenu } from "../stripSettings";
+import { fmt } from "../keymap";
 
 const PAN = { type: "pan" } as const;
 
@@ -129,6 +132,18 @@ function inputMenu(track: Track, channels: number): MenuItem[] {
   return items;
 }
 
+/** A strip's clip indicator: its highest peak since reset, held by the engine (meter key). */
+function usePeakHold(key: Id): number {
+  const [peak, setPeak] = useState(() => peakHold(key));
+  useEffect(() => {
+    const off = onTick(() => setPeak(peakHold(key)));
+    return () => {
+      off();
+    };
+  }, [key]);
+  return peak;
+}
+
 /** Logic-style channel strip. `track` is null for the Stereo Out strip. */
 export function ChannelStrip({ track, selected }: { track: Track | null; selected?: boolean }) {
   // The fader takes whatever height is left, like Logic's strips.
@@ -143,11 +158,10 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   }, []);
   const master = useStore((s) => s.snap?.project.master);
   const inputs = useStore((s) => s.snap?.audio.input_channels ?? 2);
-  const [peak, setPeak] = useState(-Infinity);
-  const [peakReset, setPeakReset] = useState(0);
-  const onPeak = useCallback((db: number) => setPeak(db), []);
   const isMaster = track === null;
   const id = track?.id ?? MASTER_ID;
+  const peak = usePeakHold(isMaster ? -1 : id);
+  useStore((s) => s.fxList);
   const inserts = isMaster ? master?.inserts ?? [] : track.inserts;
   const volume = isMaster ? master?.volume_db ?? 0 : track.volume_db;
   const lastFilled = inserts.reduce((acc, s, i) => (s ? i : acc), -1);
@@ -170,9 +184,34 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   // While playing, the fader and pan knob follow the automation.
   const [autoVolume, volumeTouch] = useAutomation(track, VOLUME, volume);
   const [autoPan, panTouch] = useAutomation(track, PAN, track?.pan ?? 0);
+  // Like Logic, a strip with a dynamics effect shows its gain reduction beside the meter.
+  const dynamics = !folder && !track?.frozen && inserts.some((p) => !!p && reducesGain(fxInfo(p.plugin_id)?.meters ?? []));
+  const settingMenu = async (x: number, y: number, minWidth?: number) => {
+    if (folder) return;
+    openMenu(x, y, await stripSettingMenu(id, name), minWidth);
+  };
 
   return (
     <div className={"strip" + (selected ? " selected" : "")} onMouseDown={() => track && !selected && api.selectTrack(track.id)}>
+      <div className="strip-section">
+        {folder ? (
+          <div className="slot static" />
+        ) : (
+          <div
+            className="slot static output strip-setting"
+            title="Channel strip settings: copy, paste, reset, save and load"
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              if (e.button !== 0) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              settingMenu(r.left, r.bottom + 2, r.width);
+            }}
+          >
+            Setting
+          </div>
+        )}
+      </div>
+
       <div className="strip-section">
         <div className="strip-label">Input</div>
         {isMaster ? (
@@ -247,14 +286,28 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
 
       <div className="strip-readouts">
         <span className="readout">{formatDb(autoVolume)}</span>
-        <span className={"readout peak" + (peak > 0 ? " clip" : "")} onMouseDown={(e) => { e.stopPropagation(); setPeak(-Infinity); setPeakReset((n) => n + 1); }}>
-          {peak === -Infinity || peak < -96 ? "-∞" : formatDb(peak)}
+        <span
+          className={"readout peak" + (isClip(peak) ? " clip" : "")}
+          title={`Peak level since reset · click to reset, ${fmt("Alt")}-click to reset all`}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            resetClipIndicators(clipResetTargets(id, e.altKey));
+          }}
+        >
+          {peakText(peak)}
         </span>
       </div>
 
       <div className="strip-fader" ref={faderBox}>
         <Fader db={autoVolume} onChange={setVolume} height={faderHeight} {...(isMaster ? {} : volumeTouch)} />
-        {folder ? <div style={{ width: 11 }} /> : <Meter source={isMaster ? { kind: "master" } : { kind: "track", id }} height={faderHeight} width={11} onPeak={onPeak} resetKey={peakReset} />}
+        {folder ? (
+          <div style={{ width: 11 }} />
+        ) : (
+          <div className="strip-meters">
+            <Meter source={isMaster ? { kind: "master" } : { kind: "track", id }} height={faderHeight} width={11} />
+            {dynamics && <GrMeter source={isMaster ? { kind: "master" } : { kind: "track", id }} height={faderHeight} />}
+          </div>
+        )}
       </div>
 
       {!isMaster ? (
@@ -290,7 +343,16 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
         </div>
       )}
 
-      <div className="strip-name" style={{ borderTopColor: isMaster ? "#8d9099" : track.color }} title={name}>
+      <div
+        className="strip-name"
+        style={{ borderTopColor: isMaster ? "#8d9099" : track.color }}
+        title={name}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          settingMenu(e.clientX, e.clientY);
+        }}
+      >
         {name}
       </div>
     </div>

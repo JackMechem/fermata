@@ -54,6 +54,9 @@ mod crossfades;
 mod region_params;
 pub use region_params::{PlayedNotes, RegionParamsPatch};
 mod drag_modes;
+mod strip_meters;
+pub use strip_meters::PeakHolds;
+mod strip_settings;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -99,6 +102,11 @@ pub struct Tick {
     pub warning: Option<String>,
     /// Meters and live values of the built-in effects whose panels are open.
     pub fx: Vec<FxTick>,
+    /// The clip indicators: each strip's highest peak (linear) since it was reset, MASTER_ID
+    /// for Stereo Out (see `session/strip_meters.rs`).
+    pub peak_holds: Vec<(Id, f32)>,
+    /// Gain reduction (positive dB) of the strips with a built-in dynamics effect.
+    pub gain_reduction: Vec<(Id, f32)>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize)]
@@ -186,6 +194,8 @@ pub struct Session {
     /// Plug-in states as of the last autosave or save, by instance id, for an emergency
     /// autosave that mustn't call into plug-ins.
     captured_states: HashMap<Id, String>,
+    /// The clip indicators' held peaks (see `session/strip_meters.rs`).
+    peak_holds: PeakHolds,
 }
 
 /// A project snapshot taken before an edit.
@@ -315,6 +325,7 @@ impl Session {
             rec_journal: None,
             unsaved_journals: Vec::new(),
             captured_states: HashMap::new(),
+            peak_holds: PeakHolds::default(),
         };
         s.restart_audio();
         s.sync_globals();
@@ -714,6 +725,8 @@ impl Session {
         self.engine_rate = sr;
         drop(old);
         drop(old_controllers);
+        // Another project (or the same one reloaded): its strips start without clips.
+        self.peak_holds.reset(None);
         self.sync_globals();
     }
 
@@ -2511,18 +2524,20 @@ impl Session {
             (Some(id), true) => Some((id, crate::eq::spectrum(&self.analyzer_buf, self.sample_rate()))),
             _ => None,
         };
-        let meters = self.meters.iter().map(|(&id, m)| {
+        let meters: Vec<(Id, f32, f32)> = self.meters.iter().map(|(&id, m)| {
             let (l, r) = m.take();
             (id, l, r)
-        });
+        }).collect();
+        let master = self.status.master.take();
+        let peak_holds = self.hold_peaks(&meters, master);
         let n_in = self.audio_status.input_channels as usize;
         Tick {
             pos: self.position(),
             playing: self.is_playing(),
             recording: self.status.recording.load(Ordering::Relaxed),
             cpu: f32::from_bits(self.status.cpu_load.load(Ordering::Relaxed)),
-            meters: meters.collect(),
-            master: self.status.master.take(),
+            meters,
+            master,
             inputs: self.status.inputs[..n_in.min(MAX_INPUTS)].iter().map(|m| m.take().0).collect(),
             previews: self.recorder.previews(),
             midi_activity: self.status.midi_activity.load(Ordering::Relaxed),
@@ -2531,6 +2546,8 @@ impl Session {
             spectrum,
             warning: self.warning.take().or_else(|| self.recorder.take_errors()).or_else(|| self.engine_error_warning()).or_else(|| self.bad_audio_warning()),
             fx: self.fx_ticks(),
+            peak_holds,
+            gain_reduction: self.gain_reductions(),
         }
     }
 
