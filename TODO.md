@@ -25,6 +25,9 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
   `update_pdc`.
 - Freeze and Bounce in Place refuse an instrument with output auxes; Export Region renders only
   its main output.
+- `multiout_check` fails about 1 run in 7: LSP's sampler sometimes hasn't made sound within 10 s
+  of loading or reopening ("the sampler loads its samples", "and the aux plays"). It happens without
+  the held-notes fix too. Unknown whether it's the check's timing or a real load problem.
 - An undo that turns a latent track back on during a take can shift where the take lands.
 
 ## Open items (2026-10-29)
