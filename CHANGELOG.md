@@ -6,6 +6,8 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.2] - 2026-10-30
+
 ### Added
 
 - **Autosave after recording** (Settings › General › After Recording, on by default): the
@@ -265,6 +267,26 @@ All notable changes to Fermata are recorded here. The format follows
   automated parameter at the lane's last value, so the project sounded different once reopened;
   it now goes back to its own value.
 
+### Known issues
+
+- VST3 editor windows open on Linux (X11, through XWayland on Wayland) and macOS; on Windows
+  plug-ins load, play and can be automated, but show no editor.
+- Windows and macOS builds are early and have had little hands-on testing. Only the system's
+  default audio driver is available there (WASAPI, Core Audio; no ASIO).
+- The builds are unsigned: macOS needs right-click › Open (or `xattr -cr`), Windows
+  SmartScreen needs More info › Run anyway.
+- A region's length stays in samples when it is moved across a tempo change; only its start
+  follows the bars and beats.
+- VST3 side-chain buses are not connected, and VCA levels can't be automated or assigned to a
+  controller.
+- Pattern regions restart their pattern where they're cut, so an Arrangement move or section
+  edit across one changes what plays. Arrangement edits don't move the regions of a track's
+  inactive alternatives.
+- The `takes_check` headless check "autopunch trims the take" fails about one run in five,
+  from the null audio device's timing.
+
+The full list is in the User Guide, [Known limitations](https://github.com/JackMechem/fermata/blob/main/docs/USER_GUIDE.md#20-known-limitations).
+
 ## [0.1.0-alpha.1] - 2026-10-29
 
 The first prerelease. Everything below is new.
@@ -347,5 +369,6 @@ The first prerelease. Everything below is new.
 - The `takes_check` headless check "autopunch trims the take" fails about one run in five,
   from the null audio device's timing.
 
-[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.1...HEAD
+[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.2...HEAD
+[0.1.0-alpha.2]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/JackMechem/fermata/releases/tag/v0.1.0-alpha.1
