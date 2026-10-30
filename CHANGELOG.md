@@ -25,6 +25,12 @@ All notable changes to Fermata are recorded here. The format follows
   and hears that track; with none it stays off and the plug-in uses its internal key. It works
   through Off tracks, Freeze, bounces, undo, duplicating and channel strip settings, and is
   saved with the project.
+- **Multi-output instruments**, Logic's way: the strip of a VST3 instrument with extra outputs
+  (a drum sampler's direct outputs, say) has a **+** that adds an aux for the next output, named
+  after the track and the output, with its own fader, pan, plug-ins and sends. The aux stays in
+  step with the main output through delay compensation, and bounces and exports include it. An
+  output only runs while an aux uses it. Freeze and Bounce in Place refuse an instrument with such
+  auxes for now.
 
 ### Fixed
 

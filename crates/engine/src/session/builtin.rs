@@ -351,11 +351,13 @@ impl Session {
     }
 
     /// The tracks outside `members` an offline render of them also has to play, so their
-    /// side-chains hear the right key: every key source, and whatever feeds those.
+    /// side-chains hear the right key: every key source, and whatever feeds those. The same
+    /// goes for the instrument of an aux on its extra output.
     pub(super) fn key_sources(&self, members: &[Id]) -> Vec<Id> {
         let p = &self.project;
         let keys_of = |id: Id| p.track(id).map(|t| t.inserts.iter().flatten().filter_map(|s| s.sidechain).collect::<Vec<_>>()).unwrap_or_default();
         let mut todo: Vec<Id> = members.iter().flat_map(|&m| keys_of(m)).collect();
+        todo.extend(members.iter().filter_map(|&m| p.track(m)?.instrument_output.map(|o| o.track)));
         let mut out: Vec<Id> = Vec::new();
         let mut seen: HashSet<Id> = members.iter().copied().collect();
         while let Some(id) = todo.pop() {

@@ -569,6 +569,12 @@ Details of each stage:
   current. Because receivers come later in the list, the split borrow
   `tracks.split_at_mut(ti + 1)` gives the current track mutable access to every track after
   it.
+- **Instrument outputs**: an aux with `TrackParams::instrument_output` also pulls that output
+  bus from its instrument (`dsp/multi_out.rs`), which played earlier in the block because
+  `Project::feeds` counts the edge in `process_order`. It reads the plug-in's own buffers, through
+  a line of its own (`PdcParams::feed`) if the aux's other feeders arrive later, with a gain that
+  fades when the instrument goes off. An instrument that didn't run this block
+  (`instrument_ran`), or has no such bus, gives nothing.
 - **Sends**: pre-fader sends tap after the inserts; post-fader sends after the fader and pan.
   Mute and solo silence both. With delay compensation, each send reads the track's delay line
   at its own tap (`pdc.sends[k]`); a post-fader send at a different tap than the output
@@ -858,7 +864,9 @@ runs at startup only when there is no cache; otherwise only from Rescan.
    main one, for stereo, then mono, then whatever it had. `setBusArrangements`' answer is
    checked and the channel buffers are sized from what `getBusArrangement` reads back. Activate
    audio bus 0 in and out and event input bus 0; the aux input follows the slot's key source,
-   and every other extra input is explicitly inactive, whatever the plug-in's default.
+   and every other extra input is explicitly inactive, whatever the plug-in's default. The extra output buses, which
+   plug-ins often mark active by default, are deactivated too (see
+   [Extra output buses](#extra-output-buses)).
 5. `setupProcessing(kRealtime, kSample32, max_block, rate)` and `setActive(true)`.
 6. Read the `IMidiMapping` assignments for controllers 0–129 (CCs, aftertouch, pitch bend) on
    channel 0.
@@ -911,6 +919,19 @@ data is dropped rather than allocating. Each block:
 
 `setProcessing(true)` is called lazily on the first block. Offline renders also run in
 `kRealtime` mode.
+
+### Extra output buses
+
+`plugin/multi_out.rs`. All buses' buffers are allocated at instantiation, so switching one needs
+no allocation, but VST3 only allows it while the component is inactive, and `setActive` belongs
+to the main thread. `PluginController::set_active_outputs` therefore keeps the audio thread out
+without it ever waiting: each `process` and `suspend` takes `OutGate` with a compare-and-swap. The
+controller asks the processor to park; it fades its outputs over 5 ms, calls `setProcessing(0)`
+and leaves the gate parked, and `process` then outputs silence. If no block comes within 250 ms
+(nothing is calling `process`), or the plug-in isn't processing, the controller takes the gate
+itself, waiting only for a block under way. Then `setActive(0)`, `activateBus`, `setActive(1)`, and
+the next block starts the plug-in again and fades in. The rest of the graph plays on.
+`PluginProcessor::output_bus` reads a bus's last block; the engine's `dsp/multi_out.rs` uses it.
 
 ### Parameters and gestures
 
@@ -1459,6 +1480,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `dsp.rs` | The real-time graph: `Engine`, `TrackDsp`, `RegionDsp`, `TrackParams`, `Cmd`, `Garbage`, `EngineStatus`, meters, the click. |
 | `dsp/offline.rs` | `Engine::render` and `Isolate`: offline rendering of the full mix or one track. |
 | `dsp/pdc.rs` | `DelayLine` (power-of-two ring with read taps), `PdcParams`, `PdcGlobal`. |
+| `dsp/multi_out.rs` | `OutputFeed`: an aux reading its instrument's output bus. |
 | `dsp/builtin.rs` | `BuiltinDsp` (a built-in effect in an insert slot), `FxShared`, parameter normalization. |
 | `dsp/auto.rs` | Automation past a track's own strip: folder stacks' volume and mute (`FoldState`) and Stereo Out's lanes. |
 | `fx/mod.rs` | The `Effect` trait, `EffectInfo`, `ParamSpec`, the registry and factory presets. |
@@ -1475,6 +1497,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |
 | `session.rs` | `Session`: engine plumbing, `track_params`, `regions_dsp`, building tracks, undo (`checkpoint`, `undo`, `redo`, `restore`), transport and recording, track and region edits, import, plug-in slots, `idle`, `tick`, new/save/open. |
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
+| `session/multi_out.rs` | Multi-output instruments: the instruments' outputs for the UI, `add_output_aux`, `sync_output_buses` (called from `update_pdc`), what Freeze and Bounce in Place refuse. The design notes are at its top. |
 | `session/crossfades.rs` | Fade shapes and types from the inspector, the Crossfade command, the X-Fade drag mode (`auto_crossfade`), Crossfade Time (`crossfade_frames`). |
 | `session/drag_modes.rs` | Region edits as the Tracks area makes them: `drag_move_regions`, `drag_nudge_regions`, `drag_resize_region`, `drag_delete_regions`, `drag_paste_regions`, in the drag mode and with Move Automation with Regions. |
 | `session/auto_lanes.rs` | Stereo Out's lanes (`strip_lanes`), folder stacks' volume and mute automation, the extra lanes shown under a track (`set_auto_lanes`). |
@@ -1598,6 +1621,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `files.ts` | Open, save, import dialogs, unsaved-changes confirmation, undo/redo with toasts. |
 | `dnd.ts` | Dropping files from the desktop or the Browser into the tracks area. |
 | `routing.ts` | Send and output menus, New Aux. |
+| `multiOut.ts` | An instrument's next free output and what an aux on an output shows as its input; pure, tested. |
 | `automation.ts` | Automation lanes in the tracks area: values, scales, drawing, editing, point selection. |
 | `autoLanes.ts` | The extra lanes under a track, the Output track's lanes and automation curves (mirrors `automation::shape`); pure, tested. |
 | `laneFollow.ts` | The shown automation lane following a plug-in moved to another track; pure, tested. |

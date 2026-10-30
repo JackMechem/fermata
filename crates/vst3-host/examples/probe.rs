@@ -8,14 +8,20 @@ fn main() {
     let only = std::env::args().nth(2);
     let bundles = find_bundles(&default_search_paths());
     for b in bundles {
-        if let Some(f) = &filter {
-            if !b.to_string_lossy().contains(f.as_str()) {
-                continue;
-            }
-        }
         match scan_bundle(&b) {
             Ok(descs) => {
-                for d in descs.iter().filter(|d| only.as_ref().is_none_or(|o| d.name.contains(o.as_str()))).take(if only.is_some() { usize::MAX } else { 3 }) {
+                // A filter that names a plug-in's class shows it, wherever it is in the bundle.
+                let named: Vec<_> = descs.iter().filter(|d| filter.as_ref().is_some_and(|f| d.name.contains(f.as_str()))).collect();
+                if filter.as_ref().is_some_and(|f| named.is_empty() && !b.to_string_lossy().contains(f.as_str())) {
+                    continue;
+                }
+                let shown: Vec<_> = match &only {
+                    Some(o) => descs.iter().filter(|d| d.name.contains(o.as_str())).collect(),
+                    None if named.is_empty() => descs.iter().take(3).collect(),
+                    None => named,
+                };
+                let more = descs.len() - shown.len();
+                for d in shown {
                     let (mut p, c) = match instantiate(d, 48000.0, 512) {
                         Ok(x) => x,
                         Err(e) => {
@@ -41,9 +47,12 @@ fn main() {
                     }
                     let st = c.save_state();
                     println!("  OK   {:<28} [{}] vendor={} inst={} editor={} state={}B peak={peak:.3}", d.name, d.subcategories, d.vendor, d.is_instrument, c.has_editor(), st.component.len());
+                    for out in c.output_buses().iter().filter(|o| o.index > 0 || c.output_buses().len() > 1) {
+                        println!("         output bus {}: {:?}, {} channels", out.index, out.name, out.channels);
+                    }
                 }
-                if descs.len() > 3 && only.is_none() {
-                    println!("  ... {} more classes in {}", descs.len() - 3, b.display());
+                if more > 0 {
+                    println!("  ... {more} more classes in {}", b.display());
                 }
             }
             Err(e) => println!("SCAN FAIL {}: {e}", b.display()),

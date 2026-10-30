@@ -229,6 +229,8 @@ export interface Track {
   output: Id | null;
   /** For auxes: the bus feeding them ("Bus 3"). */
   bus: number;
+  /** For auxes: the extra output of an instrument that feeds them too (see multiOut.ts). */
+  instrument_output?: { track: Id; bus: number } | null;
   automation: AutoLane[];
   auto_mode: AutoMode;
   /** Set while frozen: the track plays this render, its plug-ins unloaded. */
@@ -428,6 +430,21 @@ export interface Snapshot {
   missing?: Id[];
   /** The notes of MIDI regions with playback parameters, as they play (region-relative). */
   played?: { region: Id; notes: Note[] }[];
+  /** Loaded instruments with extra output buses. */
+  instrument_outputs?: InstrumentOutputs[];
+}
+
+/** An output bus of an instrument; 0 is the main output, which plays through its strip. */
+export interface OutputBusInfo {
+  index: number;
+  name: string;
+  channels: number;
+  active: boolean;
+}
+
+export interface InstrumentOutputs {
+  track: Id;
+  outputs: OutputBusInfo[];
 }
 
 /** session::StripLatency: frames. */

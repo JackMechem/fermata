@@ -66,6 +66,7 @@ impl Session {
     /// plug-ins (not its fader, pan or sends) into the project's Freeze Files folder.
     pub fn render_freeze(&mut self, ids: &[Id], progress: &mut dyn FnMut(f64)) -> Result<Vec<FreezeRender>> {
         self.check_on(ids)?;
+        self.check_no_output_auxes(ids, "Freezing")?;
         let sr = self.sample_rate();
         let tail = (FREEZE_TAIL_SECS * sr).round() as i64;
         let n = ids.len().max(1) as f64;

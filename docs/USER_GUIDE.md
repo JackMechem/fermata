@@ -1588,7 +1588,7 @@ From top to bottom:
 | Part | What it does |
 |---|---|
 | **Setting** | The channel strip settings menu (see [Channel strip settings](#channel-strip-settings)). |
-| **Input** | Audio tracks: the mono/stereo button and the input ("No Input", "Input 1"..., "Input 1–2"...). Instrument tracks: the **instrument slot** (No Plug-in, Fermata Synth, or a VST3 instrument by category or vendor). Auxes show their bus ("Bus 1"); summing stacks show "Subtracks". |
+| **Input** | Audio tracks: the mono/stereo button and the input ("No Input", "Input 1"..., "Input 1–2"...). Instrument tracks: the **instrument slot** (No Plug-in, Fermata Synth, or a VST3 instrument by category or vendor). Auxes show their bus ("Bus 1"), or the instrument output they're on ("Drums: Direct out 0", see [Multi-output instruments](#multi-output-instruments)); summing stacks show "Subtracks". |
 | **EQ thumbnail** | The Channel EQ curve; click to open the editor. |
 | **Audio FX** | Insert slots: the filled ones plus one empty slot (up to 8). The label shows the strip's plug-in latency. |
 | **Sends** | Up to 8 send slots. |
@@ -2041,6 +2041,40 @@ mute/solo and an output. It plays whatever its bus receives.
   it audible. Muting an aux silences everything arriving there.
 - Feedback loops are refused with a message (sends that would make one are greyed out).
   Deleting an aux clears the sends and outputs that pointed at it (undoable).
+
+### Multi-output instruments
+
+A drum sampler or similar VST3 instrument can have outputs besides its main one, each drum on its
+own. As in Logic, each can get a strip of its own:
+
+- An instrument strip whose plug-in has extra outputs shows a **+** next to its R button. Each
+  click makes a new aux for the next output with no aux on it, named after the track and the
+  output ("Drums Direct out 0"), with its own fader, pan, plug-ins and sends. One undo removes it.
+  The + greys out when every output has an aux. The output starts working when its aux appears,
+  so an unused output costs nothing; while it switches, the instrument fades out and back in for
+  a few milliseconds, and the other strips play on.
+- The aux's **Input** slot shows where its audio comes from ("Drums: Direct out 0"). Sends and
+  outputs set to its bus still reach it too.
+- The main output plays through the instrument's strip as before. Whether a sound also leaves
+  through the main output or only the direct one is up to the plug-in.
+- The output leaves the instrument ahead of its strip, so the instrument's Audio FX, fader, pan,
+  mute and sends don't touch it. Soloing the instrument keeps its auxes audible; soloing an aux
+  plays the aux without the instrument's main output.
+- Delay compensation keeps the aux in step with the main output, whatever's latent on either.
+- **Track On/Off:** an Off instrument leaves its auxes silent. An Off aux gets nothing, and the
+  output stays switched on so it comes straight back.
+- **Bounce and Export:** a bounce has the auxes in it. Export All Tracks writes each aux as its
+  own file with the instrument's content.
+- **Freeze and Bounce in Place** refuse an instrument with such auxes, because they'd only take
+  the main output: delete the auxes first.
+- **Deleting the instrument** leaves the aux, with its settings, as an ordinary aux on its bus
+  (undo reconnects it). **Replacing the instrument** with one that has fewer outputs, or opening
+  the project where the plug-in is missing, leaves the aux silent: its Input slot says "Drums: no
+  output 3" in red, and the connection comes back with the plug-in.
+- **Duplicating** the instrument makes a copy with no auxes: use its + to add its own. Duplicating
+  an aux makes a second strip on the same output.
+- Channel strip settings leave an aux's input alone.
+- Built-in instruments have one output, so they have no +.
 
 ### VCA faders
 

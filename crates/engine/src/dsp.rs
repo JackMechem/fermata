@@ -13,7 +13,7 @@ use crate::automation::{value_at, AutoTarget, LaneDsp};
 use crate::clip::Clip;
 use crate::eq::{EqCoeffs, EqState};
 use crate::fades::FadeLaw;
-use crate::model::{AutoMode, CcEvent, CcKind, Id, InputSel, Note, TrackKind, CC_KINDS, INSERT_SLOTS, MASTER_ID, SEND_SLOTS};
+use crate::model::{AutoMode, CcEvent, CcKind, Id, InputSel, InstrumentOutput, Note, TrackKind, CC_KINDS, INSERT_SLOTS, MASTER_ID, SEND_SLOTS};
 use crate::prefs::{ClickSettings, ClickSound};
 use crate::synth::BasicSynth;
 use crate::tempo::{GridPoint, TempoMap};
@@ -28,6 +28,7 @@ pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, F
 mod auto;
 use auto::MasterAuto;
 mod track_off;
+mod multi_out;
 
 pub const MAX_BLOCK: usize = 1024;
 pub const MAX_INPUTS: usize = 32;
@@ -259,6 +260,8 @@ pub struct TrackParams {
     pub vca_mute: bool,
     /// The track or a stack it is in is switched off (`Track::off`): it runs nothing at all.
     pub off: bool,
+    /// For an aux: the instrument output that feeds it.
+    pub instrument_output: Option<InstrumentOutput>,
 }
 
 /// A send as the engine plays it. A muted send keeps its slot at gain 0, so it fades out
@@ -329,6 +332,10 @@ pub struct TrackDsp {
     resume_left: u32,
     /// Notes the player is holding through MIDI Thru, released if the track goes off meanwhile.
     live_held: [bool; 128],
+    /// The instrument played this block, so its outputs hold this block's audio.
+    instrument_ran: bool,
+    /// For an aux on an instrument's extra output: where that comes from.
+    feed: multi_out::OutputFeed,
 }
 
 impl TrackDsp {
@@ -374,6 +381,8 @@ impl TrackDsp {
             dormant: false,
             resume_left: 0,
             live_held: [false; 128],
+            instrument_ran: false,
+            feed: Default::default(),
         }
     }
 
@@ -458,8 +467,8 @@ pub enum Cmd {
     /// Whether live MIDI plays the target track (it is recorded either way).
     MidiThru(bool),
     /// A track's delay compensation, with a new delay line when the old one is too short (or
-    /// None to keep it).
-    Pdc { track: Id, params: PdcParams, line: Option<Box<DelayLine>> },
+    /// None to keep it), and the same for the line its instrument output comes through.
+    Pdc { track: Id, params: PdcParams, line: Option<Box<DelayLine>>, feed_line: Option<Box<DelayLine>> },
     PdcGlobal(PdcGlobal),
     /// Sent before `Record`: armed tracks keep playing outside `range` (None: they are silent
     /// throughout), and input is only captured between the `capture` positions (otherwise from
@@ -942,10 +951,13 @@ impl Engine {
                 sends[k] = s.and_then(|s| find(s.bus));
             }
             let fold = self.tracks[i].params.folder.and_then(find);
+            // Its instrument plays earlier in the list.
+            let source = self.tracks[i].params.instrument_output.and_then(|o| self.tracks[..i].iter().position(|t| t.id == o.track));
             let t = &mut self.tracks[i];
             t.out_idx = out;
             t.send_idx = sends;
             t.fold_idx = fold;
+            t.feed.source = source;
         }
         self.resolve_keys();
     }
@@ -1106,7 +1118,7 @@ impl Engine {
             Cmd::Params(id, p) => {
                 if let Some(t) = self.track_mut(id) {
                     let bus = |s: &Option<SendParams>| s.map(|s| s.bus);
-                    let rerouted = t.params.output != p.output || t.params.folder != p.folder || t.params.sends.iter().map(bus).ne(p.sends.iter().map(bus));
+                    let rerouted = t.params.output != p.output || t.params.folder != p.folder || t.params.instrument_output != p.instrument_output || t.params.sends.iter().map(bus).ne(p.sends.iter().map(bus));
                     t.params = p;
                     if rerouted {
                         self.resolve_routes();
@@ -1228,7 +1240,14 @@ impl Engine {
                 self.midi_thru = on;
                 self.flush_all_notes();
             }
-            Cmd::Pdc { track, params, line } => {
+            Cmd::Pdc { track, params, line, feed_line } => {
+                let old_feed = match self.track_mut(track) {
+                    Some(t) => t.feed.set_line(feed_line),
+                    None => feed_line,
+                };
+                if let Some(o) = old_feed {
+                    self.discard(Garbage::Delay(o));
+                }
                 let old = match self.track_mut(track) {
                     Some(t) => {
                         t.pdc = params;
@@ -1444,6 +1463,7 @@ impl Engine {
             let (before, rest) = self.tracks.split_at_mut(ti);
             let (cur, tail) = rest.split_first_mut().unwrap();
             let t = &mut **cur;
+            t.instrument_ran = false;
             let role = iso.map(|i| i.role(t.id));
             if role == Some(Role::Skip) {
                 continue;
@@ -1544,6 +1564,13 @@ impl Engine {
                     r.copy_from_slice(&t.sum_r[..n]);
                     t.sum_l[..n].fill(0.0);
                     t.sum_r[..n].fill(0.0);
+                    if let Some(o) = p.instrument_output {
+                        let pull = multi_out::Pull { bus: o.bus as usize, smooth, snap: snap_gains, delay: pdc.feed, fade: (pdc::FADE_SECS * sr) as u32 };
+                        t.feed.pull(before, &pull, &mut t.pdc_taps.feed, (l, r), (&mut self.tap_l[..n], &mut self.tap_r[..n]));
+                        if contain(l, r) {
+                            self.status.bad_audio.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
                 }
                 TrackKind::Audio => {
                     // A track being recorded is silent, or with Autopunch only inside the range.
@@ -1709,6 +1736,7 @@ impl Engine {
                         if !ins.bypass && ll_skip & INSTRUMENT_BIT == 0 {
                             ins.plugin.process(l, r, &t.midi, &transport);
                             check_output(&self.status, ins, l, r);
+                            t.instrument_ran = true;
                         }
                     }
                     // A frozen instrument track plays its freeze file instead.

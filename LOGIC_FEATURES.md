@@ -573,7 +573,7 @@ Audio File Editor (p. 499–523)
 
 - [x] Plug-in delay compensation (p. 573–575)
 - [~] Side-chain inputs for plug-ins (p. 570). *For the built-in Compressor, Noise Gate and De-Esser, keyed post- or pre-fader from any track; VST3 side-chain buses aren't connected.*
-- [ ] Multi-output instruments (p. 592)
+- [x] Multi-output instruments (p. 592). *A "+" on the strip adds an aux per output.*
 - [~] VCA faders and VCA groups (p. 603–604). *VCA strips with level, mute, names, colours and nesting, a VCA slot on each strip and an offset mark on its fader; no VCA automation, VCA solo, or VCAs made from groups.*
 - [~] Groups (p. 598–603). *Volume, pan, mute, solo, record, selection and editing links, plus an on/off clutch; missing are several groups per strip, a Groups window, automation, send and colour links, and copy/paste of group settings.*
 - [ ] Enable or disable all groups (⇧G) (p. 602)
@@ -1097,8 +1097,8 @@ are done too, and the rest are partly done, as noted. [TODO.md](TODO.md) has the
    VST3 presets are not.*
 5. **Side-chain inputs and multi-output instruments.** Ducking, gating and multi-out drum
    instruments are standard in modern mixing. *Side-chains work for the built-in Compressor,
-   Noise Gate and De-Esser, pre- or post-fader; VST3 side-chains and multi-output instruments
-   are missing.*
+   Noise Gate and De-Esser, pre- or post-fader; VST3 side-chains are missing. Multi-output
+   instruments are done.*
 6. **A bundled effects core:** Compressor, Limiter, Noise Gate, reverb, delay and a tuner. A new
    project should be mixable without third-party plug-ins. *Done, with a De-Esser, Loudness
    Meter, modulation (Chorus, Flanger, Phaser, Tremolo), Overdrive, Distortion and Gain.*

@@ -76,6 +76,9 @@ pub(crate) struct Node {
     pub sends: [Option<Id>; SEND_SLOTS],
     /// Switched off: it takes no part in the timing.
     pub off: bool,
+    /// For an aux on an instrument's extra output: that track and the instrument's latency. The
+    /// output leaves the instrument ahead of its strip's plug-ins. None if the track is off.
+    pub source: Option<(Id, u32)>,
 }
 
 /// When a strip's audio passes each point, in frames after the timeline.
@@ -88,6 +91,8 @@ pub(crate) struct Timing {
     /// Compensation delay before its output and before each send.
     pub output_delay: u32,
     pub send_delays: [u32; SEND_SLOTS],
+    /// Delay on an aux's instrument output, until the aux's other feeders arrive.
+    pub feed_delay: u32,
 }
 
 /// Works out every strip's timing so that all paths line up at Stereo Out. `nodes` are in
@@ -102,9 +107,15 @@ pub(crate) fn solve(nodes: &[Node]) -> (HashMap<Id, Timing>, u32) {
             timing.insert(n.id, Timing::default());
             continue;
         }
+        // The instrument comes first in the order.
+        let leaves = n.source.map(|(src, latency)| timing.get(&src).map(|t| t.input).unwrap_or(0).saturating_add(latency));
+        if let Some(at) = leaves {
+            let d = due.entry(n.id).or_insert(0);
+            *d = (*d).max(at);
+        }
         let input = due.get(&n.id).copied().unwrap_or(0);
         let post = input.saturating_add(n.latency);
-        timing.insert(n.id, Timing { input, post, ..Default::default() });
+        timing.insert(n.id, Timing { input, post, feed_delay: leaves.map(|at| input - at).unwrap_or(0), ..Default::default() });
         match n.output {
             Some(b) => {
                 let d = due.entry(b).or_insert(0);
@@ -169,10 +180,12 @@ impl Session {
 
     /// Re-reads every plug-in's latency and sends the engine the delays that line the graph
     /// up again. Cheap when nothing changed: only tracks whose compensation moved get a
-    /// command. Called whenever routing, plug-ins or the settings change.
+    /// command. Called whenever routing, plug-ins or the settings change, which also makes it
+    /// the place extra outputs are switched on and off (it reads latencies after that).
     pub(super) fn update_pdc(&mut self) {
         // A side-chain change activates a VST3's aux input, which may change its latency.
         self.sync_vst_keys();
+        self.sync_output_buses();
         let on = self.prefs.latency.compensation == PdcMode::All;
         let low_latency = self.prefs.latency.low_latency;
         let sr = self.sample_rate();
@@ -189,7 +202,9 @@ impl Session {
             for (k, s) in t.sends.iter().take(SEND_SLOTS).enumerate() {
                 sends[k] = s.filter(|s| s.bus != t.id && p.is_aux(s.bus)).map(|s| s.bus);
             }
-            nodes.push(Node { id, latency: sp.active + sp.bypassed, output: p.output_of(id), sends, off });
+            // Off, or gone: nothing arrives from it.
+            let source = t.instrument_output.filter(|o| !p.is_off(o.track)).and_then(|o| p.track(o.track)?.instrument.as_ref().map(|s| (o.track, self.slot_latency(s))));
+            nodes.push(Node { id, latency: sp.active + sp.bypassed, output: p.output_of(id), sends, off, source });
             plugins.insert(id, sp);
         }
         let (timing, master_due) = solve(&nodes);
@@ -214,6 +229,7 @@ impl Session {
                     output_time: t.post + t.output_delay,
                     active_latency: sp.active,
                     low_latency_skip: if low_latency { sp.skip } else { 0 },
+                    feed: t.feed_delay,
                 }
             } else {
                 // Uncompensated, a strip is only as late as its own running plug-ins. Renders
@@ -223,15 +239,17 @@ impl Session {
             if n.latency > 0 || params.output > 0 {
                 report.strips.push(StripLatency { track: n.id, latency: n.latency, delay: params.output, slots: sp.slots.clone() });
             }
-            let (sent, cap) = self.pdc_sent.get(&n.id).copied().unwrap_or_default();
+            let (sent, cap, feed_cap) = self.pdc_sent.get(&n.id).copied().unwrap_or_default();
             let need = params.max_delay() as usize;
             let line = (need > cap).then(|| Box::new(DelayLine::new(need.max(MIN_LINE))));
-            if line.is_none() && sent == params {
+            let feed_line = (params.feed as usize > feed_cap).then(|| Box::new(DelayLine::new((params.feed as usize).max(MIN_LINE))));
+            if line.is_none() && feed_line.is_none() && sent == params {
                 continue;
             }
             let cap = line.as_ref().map(|l| l.max_delay()).unwrap_or(cap);
-            self.pdc_sent.insert(n.id, (params, cap));
-            cmds.push(Cmd::Pdc { track: n.id, params, line });
+            let feed_cap = feed_line.as_ref().map(|l| l.max_delay()).unwrap_or(feed_cap);
+            self.pdc_sent.insert(n.id, (params, cap, feed_cap));
+            cmds.push(Cmd::Pdc { track: n.id, params, line, feed_line });
         }
         // Tracks that are gone keep no entry (a rebuilt track starts afresh in `build_track`).
         self.pdc_sent.retain(|id, _| timing.contains_key(id));
@@ -269,7 +287,7 @@ mod tests {
         for &(k, b) in sends {
             s[k] = Some(b);
         }
-        Node { id, latency, output, sends: s, off: false }
+        Node { id, latency, output, sends: s, off: false, source: None }
     }
 
     #[test]
@@ -331,6 +349,26 @@ mod tests {
         assert_eq!(t[&2].output_delay, 50);
         assert_eq!(t[&3].output_delay, 150);
         assert_eq!(t[&3].send_delays[0], 100);
+    }
+
+    #[test]
+    fn an_instrument_output_stays_in_step_with_the_main_output() {
+        // Instrument 1 has 100 frames itself and 50 of inserts; aux 9 is on its extra output and
+        // has 30 of its own.
+        let mut nodes = [node(1, 150, None, &[]), node(9, 30, None, &[])];
+        nodes[1].source = Some((1, 100));
+        let (t, master) = solve(&nodes);
+        assert_eq!(master, 150);
+        assert_eq!(t[&9].input, 100, "the output leaves ahead of the instrument's inserts");
+        assert_eq!(t[&9].feed_delay, 0);
+        assert_eq!(t[&1].output_delay, 0);
+        assert_eq!(t[&9].post + t[&9].output_delay, master, "both reach Stereo Out together");
+        // A later feeder holds the output back too.
+        let mut nodes = [node(1, 100, None, &[]), node(2, 400, None, &[(0, 9)]), node(9, 0, None, &[])];
+        nodes[2].source = Some((1, 100));
+        let (t, master) = solve(&nodes);
+        assert_eq!((t[&9].input, t[&9].feed_delay, master), (400, 300, 400));
+        assert_eq!(t[&1].output_delay, 300);
     }
 
     #[test]

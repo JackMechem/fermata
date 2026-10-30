@@ -98,6 +98,7 @@ impl TrackDsp {
         if let Some(d) = &mut self.delay {
             d.clear();
         }
+        self.feed.clear();
         // What an effect keyed from this track reads: silence, until it's back on.
         for key in [&mut self.key_l, &mut self.key_r, &mut self.pre_key_l, &mut self.pre_key_r] {
             key.fill(0.0);
@@ -202,6 +203,7 @@ mod tests {
             vca_gain: 1.0,
             vca_mute: false,
             off: false,
+            instrument_output: None,
         }
     }
 
@@ -316,7 +318,7 @@ mod tests {
         r.track(1, TrackKind::Audio, params(), true);
         let delay = 1000;
         let pdc = PdcParams { output: delay, output_time: delay, ..Default::default() };
-        r.send(Cmd::Pdc { track: 1, params: pdc, line: Some(Box::new(DelayLine::new(8192))) });
+        r.send(Cmd::Pdc { track: 1, params: pdc, line: Some(Box::new(DelayLine::new(8192))), feed_line: None });
         r.send(Cmd::Play { from: 0 });
         r.run(4800);
         r.set(1, TrackParams { off: true, ..params() });

@@ -96,7 +96,7 @@ Goal: a VST3 user on Windows or macOS gets the same workflow as on Linux.
 - [ ] HiDPI scaling for plug-in editors (`IPlugViewContentScaleSupport`)
 - [ ] ASIO on Windows
 - [x] Side-chain inputs for VST3 plug-ins
-- [ ] Multi-output instruments
+- [x] Multi-output instruments
 
 ## Stage 3: Audio editing
 

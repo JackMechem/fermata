@@ -167,6 +167,7 @@ mod tests {
             vca_gain: 1.0,
             vca_mute: false,
             off: false,
+            instrument_output: None,
         }
     }
 

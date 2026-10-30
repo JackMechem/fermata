@@ -28,6 +28,8 @@ use crate::recorder::{FinishedTake, Recorder, TakePreview};
 use crate::synth::BasicSynth;
 
 mod routing;
+mod multi_out;
+pub use multi_out::{InstrumentOutputs, OutputInfo};
 mod bounce;
 pub use bounce::{AudioFormat, BipOptions, BipSource, BitDepth, BounceResult, InPlaceRender, RenderOptions};
 mod range_edit;
@@ -188,7 +190,7 @@ pub struct Session {
     autosave_hash: u64,
     /// Plug-in delay compensation last sent to the engine: per track its settings and the
     /// longest delay its line holds (see `pdc.rs`).
-    pdc_sent: HashMap<Id, (PdcParams, usize)>,
+    pdc_sent: HashMap<Id, (PdcParams, usize, usize)>,
     pdc_global: PdcGlobal,
     pdc_report: PdcReport,
     /// How the recording in progress is cut into takes (see `session/takes.rs`).
@@ -504,10 +506,11 @@ impl Session {
             solo |= p.descendants(t.id).iter().filter_map(|id| p.track(*id)).any(|d| d.solo);
         }
         // Solo follows the routing too: a soloed track keeps the auxes it feeds audible, and a
-        // soloed aux keeps the tracks feeding it audible.
+        // soloed aux keeps the tracks feeding it audible. An aux on an instrument's extra output
+        // doesn't need the instrument's strip audible, so that stays out of the solo.
         if !solo && p.tracks.iter().any(|y| y.solo) {
             let soloed = |y: &Track| y.solo || p.ancestors(y.id).iter().filter_map(|a| p.track(*a)).any(|a| a.solo);
-            solo = p.tracks.iter().filter(|y| y.id != t.id).any(|y| (soloed(y) && p.reaches(y.id, t.id)) || (y.kind == TrackKind::Aux && y.solo && p.reaches(t.id, y.id)));
+            solo = p.tracks.iter().filter(|y| y.id != t.id).any(|y| (soloed(y) && p.reaches(y.id, t.id)) || (y.kind == TrackKind::Aux && y.solo && p.reaches_past_fader(t.id, y.id)));
         }
         // Summing stacks and auxes are buses; a folder passes its subtracks on to wherever it
         // plays. An explicit output overrides the stack.
@@ -540,6 +543,7 @@ impl Session {
             vca_gain: volume_gain(vca_db.max(-96.0)),
             vca_mute,
             off: p.is_off(t.id),
+            instrument_output: t.instrument_output,
         }
     }
 
@@ -1392,6 +1396,7 @@ impl Session {
             alternatives: Vec::new(),
             alternative: String::new(),
             auto_lanes: Vec::new(),
+            instrument_output: None,
             off: false,
         };
         if kind == TrackKind::Instrument {

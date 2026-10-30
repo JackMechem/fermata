@@ -552,6 +552,19 @@ pub struct Track {
     /// plug-ins stay loaded (see `dsp/track_off.rs`). A stack's subtracks go off with it.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub off: bool,
+    /// For auxes: the extra output of an instrument that feeds it, besides anything sent to its
+    /// bus (see `session/multi_out.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instrument_output: Option<InstrumentOutput>,
+}
+
+/// An output of a multi-output instrument, as an aux's input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InstrumentOutput {
+    /// The instrument track.
+    pub track: Id,
+    /// The plug-in's output bus (1 and up; 0 is the main output, which plays through the strip).
+    pub bus: u32,
 }
 
 /// An inactive track alternative: a named set of regions that replaces the track's regions
@@ -975,8 +988,23 @@ impl Project {
         }
     }
 
-    /// Every track `id` plays into directly: its output and the auxes its sends feed.
+    /// Every track `id` plays into directly: its output, the auxes its sends feed and, for an
+    /// instrument, the auxes on its extra outputs.
     pub fn feeds(&self, id: Id) -> Vec<Id> {
+        let mut out = self.feeds_past_fader(id);
+        if self.track(id).is_some_and(|t| t.kind == TrackKind::Instrument) {
+            for a in self.tracks.iter().filter(|a| a.instrument_output.is_some_and(|o| o.track == id)) {
+                if !out.contains(&a.id) {
+                    out.push(a.id);
+                }
+            }
+        }
+        out
+    }
+
+    /// Like [`Project::feeds`], for what leaves through the track's fader or sends: an
+    /// instrument's extra outputs don't.
+    fn feeds_past_fader(&self, id: Id) -> Vec<Id> {
         let mut out: Vec<Id> = self.output_of(id).into_iter().collect();
         if let Some(t) = self.track(id) {
             for s in t.sends.iter().flatten() {
@@ -1015,13 +1043,23 @@ impl Project {
 
     /// Whether `from`'s audio reaches `to`, through outputs, stacks and sends.
     pub fn reaches(&self, from: Id, to: Id) -> bool {
+        self.reaches_by(from, to, |p, id| p.feeds(id))
+    }
+
+    /// Whether `to` hears `from` only if `from` is audible: `reaches`, without an instrument's
+    /// extra outputs, which leave ahead of its fader, mute and solo.
+    pub fn reaches_past_fader(&self, from: Id, to: Id) -> bool {
+        self.reaches_by(from, to, |p, id| if id == from { p.feeds_past_fader(id) } else { p.feeds(id) })
+    }
+
+    fn reaches_by(&self, from: Id, to: Id, feeds: impl Fn(&Project, Id) -> Vec<Id>) -> bool {
         let mut stack = vec![from];
         let mut seen: HashSet<Id> = HashSet::new();
         while let Some(id) = stack.pop() {
             if !seen.insert(id) {
                 continue;
             }
-            for d in self.feeds(id) {
+            for d in feeds(self, id) {
                 if d == to {
                     return true;
                 }
@@ -1033,9 +1071,16 @@ impl Project {
 
     /// Drops routing that no longer makes sense: sends and outputs to tracks that are gone or
     /// aren't auxes, routing on folders (which carry no audio), auxes inside stacks, and any
-    /// edge that closes a feedback loop. Pads every track to `SEND_SLOTS` send slots.
+    /// edge that closes a feedback loop. Pads every track to `SEND_SLOTS` send slots. An aux
+    /// whose instrument is gone keeps its settings and its bus, without that input.
     pub fn prune_routes(&mut self) {
         let auxes: HashSet<Id> = self.tracks.iter().filter(|t| t.kind == TrackKind::Aux).map(|t| t.id).collect();
+        let instruments: HashSet<Id> = self.tracks.iter().filter(|t| t.kind == TrackKind::Instrument).map(|t| t.id).collect();
+        for t in &mut self.tracks {
+            if t.kind != TrackKind::Aux || t.instrument_output.is_some_and(|o| !instruments.contains(&o.track) || o.bus == 0) {
+                t.instrument_output = None;
+            }
+        }
         for t in &mut self.tracks {
             if t.sends.len() < SEND_SLOTS {
                 t.sends.resize(SEND_SLOTS, None);
@@ -1249,6 +1294,7 @@ mod routing_tests {
             alternatives: Vec::new(),
             alternative: String::new(),
             auto_lanes: Vec::new(),
+            instrument_output: None,
             off: false,
         });
         id

@@ -204,7 +204,8 @@ impl Session {
         self.project
             .tracks
             .iter()
-            .filter(|t| t.kind != TrackKind::Folder && !self.project.is_off(t.id) && self.content_span(t.id).is_some())
+            // An aux on an instrument's extra output has the instrument's content.
+            .filter(|t| t.kind != TrackKind::Folder && !self.project.is_off(t.id) && (self.content_span(t.id).is_some() || self.output_source(t.id).is_some_and(|s| self.content_span(s).is_some())))
             .map(|t| t.id)
             .collect()
     }
@@ -304,6 +305,7 @@ impl Session {
             }
         }
         self.check_on(&jobs.iter().map(|j| j.0).collect::<Vec<_>>())?;
+        self.check_no_output_auxes(&jobs.iter().map(|j| j.0).collect::<Vec<_>>(), "Bounce in Place")?;
         let sr = self.sample_rate();
         let tail = if o.tail { self.tail_frames(IN_PLACE_TAIL_SECS) } else { 0 };
         let n = jobs.len() as f64;

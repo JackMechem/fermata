@@ -375,6 +375,7 @@ fn main() {
             commands::color_tracks_by_region,
             commands::move_regions_to_new_tracks,
             commands::copy_regions_to_new_tracks,
+            commands::add_output_aux,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Fermata");

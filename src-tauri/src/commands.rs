@@ -7,7 +7,7 @@ use daw_engine::audio_io::{list_devices, AudioConfig, AudioStatus, DeviceList};
 use daw_engine::fades::{Crossfade, DragMode, FadeInType, FadeOutType};
 use daw_engine::model::{AutoMode, AutoParam, AutoPoint, ChannelEq, Group, Id, InputSel, Project, Region, TrackKind, TrackSend, MASTER_ID};
 use daw_engine::prefs::{BitDepth, ClickSettings, Prefs};
-use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, MidiContent, PdcReport, PlayedNotes, RangeEdit, RegionParamsPatch, RenderOptions, TrackPatch};
+use daw_engine::session::{BipOptions, BipSource, BounceResult, ClipInfo, InstrumentOutputs, MidiContent, PdcReport, PlayedNotes, RangeEdit, RegionParamsPatch, RenderOptions, TrackPatch};
 use daw_engine::vst3_host::{ParamInfo, PluginDescriptor};
 use daw_engine::tempo::{SigEvent, TempoEvent};
 use daw_engine::controllers::{CtlTarget, Takeover};
@@ -48,6 +48,8 @@ pub struct Snapshot {
     key_inputs: Vec<Id>,
     /// The notes of MIDI regions with playback parameters as they play, for drawing.
     played: Vec<PlayedNotes>,
+    /// Loaded instruments with extra output buses.
+    instrument_outputs: Vec<InstrumentOutputs>,
 }
 
 pub fn snapshot(s: &Session) -> Snapshot {
@@ -70,6 +72,7 @@ pub fn snapshot(s: &Session) -> Snapshot {
         missing: s.missing_plugins().iter().map(|p| p.uid).collect(),
         key_inputs: s.vst_key_inputs(),
         played: s.played_notes(),
+        instrument_outputs: s.instrument_outputs(),
     }
 }
 
@@ -1973,4 +1976,10 @@ pub fn move_regions_to_new_tracks(state: State<AppState>, moves: Vec<daw_engine:
 pub fn copy_regions_to_new_tracks(state: State<AppState>, items: Vec<(Id, Region)>, lanes: Vec<(Id, Vec<Region>)>) -> R<Made> {
     let regions = items.len() + lanes.iter().map(|l| l.1.len()).sum::<usize>();
     edit_made(&state, &new_track_label("Copy", regions, lanes.len()), false, |s| Ok(s.drag_copy_regions_to_new_tracks(&items, &lanes)))
+}
+
+/// A new aux on the next free output of the track's multi-output instrument.
+#[tauri::command]
+pub fn add_output_aux(state: State<AppState>, track: Id) -> R<Made> {
+    edit_made(&state, "New Aux", false, |s| Ok(vec![s.add_output_aux(track)?]))
 }

@@ -145,6 +145,7 @@ impl Engine {
             if let Some(d) = &mut t.delay {
                 d.clear();
             }
+            t.feed.clear();
             // No glide left over from playing live: every render starts the same.
             t.pdc_taps = super::pdc::PdcTaps::at(&t.pdc);
         }

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { act, api, canRecord, INSTRUMENT_SLOT, isStack, MASTER_ID, type Id, type InputSel, type PluginSlot, type Track } from "../api";
+import { act, actMade, api, canRecord, INSTRUMENT_SLOT, isStack, MASTER_ID, type Id, type InputSel, type PluginSlot, type Track } from "../api";
 import { Icon } from "../icons";
 import { pluginMenu } from "../pluginMenu";
 import { onTick, peakHold, useStore } from "../store";
@@ -22,6 +22,7 @@ import { fmt } from "../keymap";
 import { stripLearnMenu } from "../learn";
 import { canAssignVca, vcaOffset } from "../vca";
 import { isTrackOff, powerTitle } from "../trackOff";
+import { auxInput, hasExtraOutputs, nextOutput } from "../multiOut";
 import { useVcas, VcaSlot } from "./Vca";
 
 const PAN = { type: "pan" } as const;
@@ -193,6 +194,10 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   const project = useStore((s) => s.snap?.project);
   const strip = track ?? (project ? outputTrack(project) : null);
   const off = !!track && isTrackOff(tracks ?? [], track);
+  const instrumentOutputs = useStore((s) => s.snap?.instrument_outputs);
+  const extraOutputs = !!track && track.kind === "instrument" && hasExtraOutputs(instrumentOutputs, track.id);
+  const nextOut = extraOutputs ? nextOutput(instrumentOutputs, tracks ?? [], id) : null;
+  const auxIn = track?.kind === "aux" ? auxInput(track, tracks ?? [], instrumentOutputs) : null;
   const [autoVolume, volumeTouch] = useAutomation(strip, VOLUME, volume);
   const [autoPan, panTouch] = useAutomation(track, PAN, track?.pan ?? 0);
   // Like Logic, a strip with a dynamics effect shows its gain reduction beside the meter.
@@ -235,8 +240,8 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
             {track.kind === "summing" ? "Subtracks" : "Folder"}
           </div>
         ) : track.kind === "aux" ? (
-          <div className="slot static output" title="Sends and outputs set to this bus play through this strip">
-            Bus {track.bus}
+          <div className={"slot static output" + (auxIn?.silent ? " no-output" : "")} title={auxIn?.title}>
+            <span className="aux-input">{auxIn?.label}</span>
           </div>
         ) : track.kind === "instrument" ? (
           <PluginSlotView trackId={id} slot={INSTRUMENT_SLOT} plugin={track.instrument} instrument title={name} />
@@ -350,6 +355,18 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
             {track.kind === "audio" ? (
               <button className={"tbtn mon" + (track.monitor ? " on" : "")} onMouseDown={(e) => { e.stopPropagation(); api.updateTrack(id, { monitor: !track.monitor }); }}>
                 I
+              </button>
+            ) : extraOutputs ? (
+              <button
+                className="tbtn add-output"
+                disabled={!nextOut}
+                title={nextOut ? `New aux for this instrument's next output: ${nextOut.name}` : "Every output of this instrument has an aux"}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (e.button === 0 && nextOut) actMade("add_output_aux", { track: id });
+                }}
+              >
+                +
               </button>
             ) : (
               <span className="tbtn ghost" />

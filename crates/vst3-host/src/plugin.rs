@@ -18,6 +18,10 @@ use crate::process::{EventList, ParameterChanges};
 use crate::stream::{as_stream, MemoryStream};
 use crate::util::{unhex, utf16};
 
+mod multi_out;
+pub use multi_out::OutputBus;
+use multi_out::OutGate;
+
 /// Parameter changes the host can queue for one `process` call (automation).
 const MAX_QUEUED: usize = 512;
 
@@ -85,6 +89,8 @@ struct Shared {
     _handler: ComWrapper<ComponentHandler>,
     /// The audio thread has stopped calling the processor (see `Gate`).
     parked: AtomicBool,
+    /// Lets the controller change which output buses are active (see `multi_out.rs`).
+    out_gate: OutGate,
 }
 
 unsafe impl Send for Shared {}
@@ -158,7 +164,6 @@ pub struct PluginProcessor {
     out_tx: rtrb::Producer<(u32, f64)>,
     midi_map: [Option<ParamID>; 130],
     max_block: usize,
-    started: bool,
     pub is_instrument: bool,
     /// Host parameter changes (automation) for the next block: id, sample offset, value.
     queued: Vec<(ParamID, i32, f64)>,
@@ -169,6 +174,8 @@ pub struct PluginProcessor {
     /// The input while a fade needs it.
     dry_l: Vec<f32>,
     dry_r: Vec<f32>,
+    /// Fades around a change of the active output buses (see `multi_out.rs`).
+    out_fade: multi_out::OutFade,
 }
 
 unsafe impl Send for PluginProcessor {}
@@ -187,6 +194,8 @@ pub struct PluginController {
     /// has no aux input, or refused to activate it.
     key_bus: Option<usize>,
     key_active: bool,
+    /// Its audio output buses, and which of the extra ones are active (see `multi_out.rs`).
+    outputs: Vec<OutputBus>,
 }
 
 unsafe impl Send for PluginController {}
@@ -351,6 +360,7 @@ pub fn instantiate_keyed(
                 key_bus = None;
             }
         }
+        let output_buses = multi_out::read_outputs(&component, &outputs);
         let n_ev_in = component.getBusCount(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32);
         if n_ev_in > 0 {
             component.activateBus(MediaTypes_::kEvent as i32, BusDirections_::kInput as i32, 0, 1);
@@ -387,6 +397,7 @@ pub fn instantiate_keyed(
             connections,
             _handler: handler,
             parked: AtomicBool::new(false),
+            out_gate: OutGate::default(),
         });
 
         let blank = AudioBusBuffers { numChannels: 0, silenceFlags: 0, __field0: AudioBusBuffers__type0 { channelBuffers32: std::ptr::null_mut() } };
@@ -405,7 +416,6 @@ pub fn instantiate_keyed(
             out_tx,
             midi_map,
             max_block,
-            started: false,
             is_instrument: desc.is_instrument || n_in == 0,
             queued: Vec::with_capacity(MAX_QUEUED),
             key_bus,
@@ -413,8 +423,9 @@ pub fn instantiate_keyed(
             gate_frames: (GATE_FADE_SECS * sample_rate).max(1.0) as u32,
             dry_l: vec![0.0; max_block],
             dry_r: vec![0.0; max_block],
+            out_fade: multi_out::OutFade::new(sample_rate),
         };
-        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false, key_bus, key_active: keyed && key_bus.is_some() };
+        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false, key_bus, key_active: keyed && key_bus.is_some(), outputs: output_buses };
         Ok((proc_half, ctrl_half))
     }
 }
@@ -440,11 +451,14 @@ impl PluginProcessor {
     /// parameters and editor remain valid.
     pub fn suspend(&mut self) {
         self.queued.clear();
-        if self.started {
-            unsafe {
-                vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(0);
+        // Stopped already, if the controller is changing the active buses.
+        if self._shared.out_gate.enter() {
+            if self._shared.out_gate.processing.swap(false, Ordering::Relaxed) {
+                unsafe {
+                    vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(0);
+                }
             }
-            self.started = false;
+            self._shared.out_gate.leave();
         }
     }
 
@@ -452,7 +466,7 @@ impl PluginProcessor {
     /// isn't running now (its track is off) stops at once.
     pub fn close_gate(&mut self) {
         if matches!(self.gate, Gate::Open | Gate::Opening { .. }) {
-            if self.started {
+            if self._shared.out_gate.processing.load(Ordering::Relaxed) {
                 self.gate = Gate::Closing(self.gate_frames);
             } else {
                 self.shut_gate();
@@ -464,11 +478,10 @@ impl PluginProcessor {
     /// (bypassed), or hasn't finished fading in time. The main thread may use the component
     /// after this.
     pub fn shut_gate(&mut self) {
-        if self.started {
+        if self._shared.out_gate.processing.swap(false, Ordering::Relaxed) {
             unsafe {
                 vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(0);
             }
-            self.started = false;
         }
         self.gate = Gate::Shut;
         self._shared.parked.store(true, Ordering::Release);
@@ -529,15 +542,18 @@ impl PluginProcessor {
         if n == 0 || matches!(self.gate, Gate::Shut) {
             return;
         }
+        if !self._shared.out_gate.enter() {
+            self.parked_block(left, right, n);
+            return;
+        }
         let fading = !matches!(self.gate, Gate::Open);
         if fading {
             self.dry_l[..n].copy_from_slice(&left[..n]);
             self.dry_r[..n].copy_from_slice(&right[..n]);
         }
         unsafe {
-            if !self.started {
+            if !self._shared.out_gate.processing.swap(true, Ordering::Relaxed) {
                 vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(1);
-                self.started = true;
             }
 
             self.param_in.clear();
@@ -672,6 +688,7 @@ impl PluginProcessor {
                 let _ = tx.push((id, v));
             });
         }
+        self.after_block(left, right, n);
     }
 
     unsafe fn push_midi(&mut self, m: &MidiEvent) {

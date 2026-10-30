@@ -7586,3 +7586,19 @@ canvas.pr-cursor-line {
 .strip.is-off > .strip-buttons .btn-row {
   opacity: 0.45;
 }
+
+/* An instrument strip's + for its next output, in the place of the I button. */
+.tbtn.add-output:disabled {
+  opacity: 0.35;
+}
+
+.slot.static.output.no-output {
+  color: var(--red);
+}
+
+.slot.static.output > .aux-input {
+  overflow: hidden;
+  padding: 0 4px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

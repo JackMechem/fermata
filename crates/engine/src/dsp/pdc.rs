@@ -154,12 +154,14 @@ impl Tap {
 pub struct PdcTaps {
     pub output: Tap,
     pub sends: [Tap; SEND_SLOTS],
+    /// An aux's instrument output (see `multi_out.rs`), on a line of its own.
+    pub feed: Tap,
 }
 
 impl PdcTaps {
     /// Taps settled at a track's delays, for the start of an offline render.
     pub fn at(p: &PdcParams) -> PdcTaps {
-        PdcTaps { output: Tap::at(p.output), sends: p.sends.map(Tap::at) }
+        PdcTaps { output: Tap::at(p.output), sends: p.sends.map(Tap::at), feed: Tap::at(p.feed) }
     }
 }
 
@@ -182,6 +184,8 @@ pub struct PdcParams {
     /// Plug-ins Low Latency Mode turns off on this track while it is live: bits 0..8 are
     /// insert slots, [`INSTRUMENT_BIT`] the instrument.
     pub low_latency_skip: u16,
+    /// For an aux: delay on the instrument output feeding it, when other feeders arrive later.
+    pub feed: u32,
 }
 
 impl PdcParams {
