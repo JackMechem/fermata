@@ -64,6 +64,7 @@ mod marquee;
 mod controllers;
 pub use controllers::{controller_label, AssignmentRow};
 mod vca;
+mod vst_undo;
 pub use vca::VcaPatch;
 mod alternatives;
 mod backups;
@@ -235,6 +236,8 @@ pub struct Session {
     midi_seen: u64,
     /// What Cut Section Between Locators took out last, for Insert Cut Section.
     section_clip: Option<SectionClip>,
+    /// Plug-ins whose editor is open, watched for undo steps (see `session/vst_undo.rs`).
+    vst_watches: HashMap<Id, vst_undo::Watch>,
 }
 
 /// A project snapshot taken before an edit.
@@ -244,6 +247,9 @@ struct UndoEntry {
     /// Consecutive edits with the same key within a moment (a fader drag) share one entry.
     key: Option<String>,
     at: Instant,
+    /// A VST3 and its state to go with the snapshot: an edit in its own editor, which the
+    /// snapshot can't undo, since `restore` leaves a plug-in that's still there alone.
+    plugin: Option<(Id, Arc<PluginState>)>,
 }
 
 /// `folder/<src's name>` inside `target`, numbered ("take 2.wav") if that name is already in
@@ -368,6 +374,7 @@ impl Session {
             controls: Default::default(),
             midi_seen: 0,
             section_clip: None,
+            vst_watches: HashMap::new(),
         };
         s.restart_audio();
         s.sync_globals();
@@ -873,6 +880,12 @@ impl Session {
     /// Returns whether a new step was pushed (false when merged into the last one), for
     /// [`Session::abandon_checkpoint`].
     pub fn checkpoint(&mut self, label: &str, key: Option<String>, plugins: bool) -> bool {
+        // An edit just made in a plug-in's editor comes first.
+        self.flush_vst_edits();
+        self.push_checkpoint(label, key, plugins)
+    }
+
+    fn push_checkpoint(&mut self, label: &str, key: Option<String>, plugins: bool) -> bool {
         self.redo_stack.clear();
         if let (Some(k), Some(top)) = (&key, self.undo_stack.last_mut()) {
             if top.key.as_ref() == Some(k) && top.at.elapsed() < Duration::from_millis(1500) {
@@ -881,7 +894,7 @@ impl Session {
             }
         }
         let project = if plugins { self.capture_plugin_states() } else { self.project.clone() };
-        self.undo_stack.push(UndoEntry { project, label: label.to_string(), key, at: Instant::now() });
+        self.undo_stack.push(UndoEntry { project, label: label.to_string(), key, at: Instant::now(), plugin: None });
         let limit = self.prefs.general.undo_limit.max(1);
         if self.undo_stack.len() > limit {
             self.undo_stack.drain(..self.undo_stack.len() - limit);
@@ -908,19 +921,33 @@ impl Session {
 
     /// Steps back one edit. Returns its label.
     pub fn undo(&mut self) -> Option<String> {
+        self.flush_vst_edits();
         let e = self.undo_stack.pop()?;
-        let now = self.capture_plugin_states();
-        self.redo_stack.push(UndoEntry { project: now, label: e.label.clone(), key: None, at: Instant::now() });
-        self.restore(e.project);
-        Some(e.label)
+        let label = e.label.clone();
+        let back = self.step_to(e);
+        self.redo_stack.push(back);
+        Some(label)
     }
 
     pub fn redo(&mut self) -> Option<String> {
+        self.flush_vst_edits();
         let e = self.redo_stack.pop()?;
+        let label = e.label.clone();
+        let back = self.step_to(e);
+        self.undo_stack.push(back);
+        Some(label)
+    }
+
+    /// Brings the project to an undo or redo step, and returns the step that comes back here.
+    fn step_to(&mut self, e: UndoEntry) -> UndoEntry {
         let now = self.capture_plugin_states();
-        self.undo_stack.push(UndoEntry { project: now, label: e.label.clone(), key: None, at: Instant::now() });
+        let plugin = e.plugin.as_ref().map(|(uid, _)| (*uid, self.vst_state_now(*uid)));
+        let back = UndoEntry { project: now, label: e.label.clone(), key: None, at: Instant::now(), plugin };
         self.restore(e.project);
-        Some(e.label)
+        if let Some((uid, st)) = e.plugin {
+            self.restore_vst_state(uid, st);
+        }
+        back
     }
 
     /// Brings the engine to `target`, touching only what differs, so plug-ins that didn't
@@ -2583,7 +2610,9 @@ impl Session {
 
     pub fn open_editor(&mut self, uid: Id, title: &str) -> Result<()> {
         let c = self.controllers.get_mut(&uid).ok_or_else(|| anyhow!("this plug-in has no editor"))?;
-        c.open_editor(title).map_err(|e| anyhow!(e))
+        c.open_editor(title).map_err(|e| anyhow!(e))?;
+        self.watch_vst_edits(uid, false);
+        Ok(())
     }
 
     pub fn open_editors(&self) -> Vec<Id> {
@@ -2637,8 +2666,9 @@ impl Session {
             drop(g);
         }
         let written = self.auto_idle();
+        let stepped = self.vst_undo_idle();
         let controlled = self.controller_idle();
-        before != self.open_editors().len() || written || latency_changed || controlled
+        before != self.open_editors().len() || written || latency_changed || controlled || stepped
     }
 
     /// Plays a MIDI message on the current MIDI target track (the selected instrument track).
@@ -2780,6 +2810,7 @@ impl Session {
         }
         self.send(Cmd::Stop);
         self.controllers.clear();
+        self.vst_watches.clear();
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.auto = Default::default();
@@ -2873,6 +2904,7 @@ impl Session {
         // Instance ids restart in every project, so old controllers must not leak state into
         // the new one.
         self.controllers.clear();
+        self.vst_watches.clear();
         self.undo_stack.clear();
         self.redo_stack.clear();
         self.auto = Default::default();

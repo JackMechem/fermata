@@ -5,8 +5,10 @@
 // platform is a no-op on the other.
 #![cfg_attr(target_env = "msvc", allow(clippy::unnecessary_cast))]
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use vst3::Steinberg::Vst::*;
 use vst3::Steinberg::*;
@@ -24,6 +26,10 @@ use multi_out::OutGate;
 
 /// Parameter changes the host can queue for one `process` call (automation).
 const MAX_QUEUED: usize = 512;
+/// The longest the silent block of `pass_edits` needs to be.
+const EDIT_BLOCK: usize = 64;
+/// How long after the host set a parameter the same value from the plug-in counts as its answer.
+const HOST_ECHO: Duration = Duration::from_millis(200);
 
 /// How long a plug-in crossfades with its dry signal around a side-chain change.
 const GATE_FADE_SECS: f64 = 0.005;
@@ -176,6 +182,9 @@ pub struct PluginProcessor {
     dry_r: Vec<f32>,
     /// Fades around a change of the active output buses (see `multi_out.rs`).
     out_fade: multi_out::OutFade,
+    /// The silent block `pass_edits` runs.
+    edit_l: Vec<f32>,
+    edit_r: Vec<f32>,
 }
 
 unsafe impl Send for PluginProcessor {}
@@ -196,6 +205,13 @@ pub struct PluginController {
     key_active: bool,
     /// Its audio output buses, and which of the extra ones are active (see `multi_out.rs`).
     outputs: Vec<OutputBus>,
+    /// The plug-in said its parameters all changed (`restartComponent(kParamValuesChanged)`)
+    /// since the last `take_params_restarted`.
+    params_restarted: bool,
+    /// Counts what the host itself did to the parameters, and the values it set a moment ago,
+    /// so that undo can tell those from edits in the editor (see `host_echo`).
+    host_changes: AtomicU64,
+    host_set: parking_lot::Mutex<HashMap<u32, (f64, Instant)>>,
 }
 
 unsafe impl Send for PluginController {}
@@ -424,8 +440,10 @@ pub fn instantiate_keyed(
             dry_l: vec![0.0; max_block],
             dry_r: vec![0.0; max_block],
             out_fade: multi_out::OutFade::new(sample_rate),
+            edit_l: vec![0.0; EDIT_BLOCK.min(max_block)],
+            edit_r: vec![0.0; EDIT_BLOCK.min(max_block)],
         };
-        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false, key_bus, key_active: keyed && key_bus.is_some(), outputs: output_buses };
+        let ctrl_half = PluginController { desc: desc.clone(), shared, out_rx, editor: None, gestures_rx, latency_changed: false, key_bus, key_active: keyed && key_bus.is_some(), outputs: output_buses, params_restarted: false, host_changes: Default::default(), host_set: Default::default() };
         Ok((proc_half, ctrl_half))
     }
 }
@@ -528,6 +546,22 @@ impl PluginProcessor {
     /// Parameter edits from the controller (its editor window) wait for the next `process`.
     pub fn has_edits(&self) -> bool {
         !self.edits_rx.is_empty()
+    }
+
+    /// Gives a plug-in the engine isn't running (bypassed, say) the edits made in its editor, in
+    /// a short block of silence that goes nowhere: its state must have them, for saving and
+    /// for undo, and they mustn't wait in the ring until it runs again.
+    pub fn pass_edits(&mut self, t: &TransportInfo) {
+        if self.edits_rx.is_empty() {
+            return;
+        }
+        let (mut l, mut r) = (std::mem::take(&mut self.edit_l), std::mem::take(&mut self.edit_r));
+        l.fill(0.0);
+        r.fill(0.0);
+        self.process(&mut l, &mut r, &[], t);
+        self.edit_l = l;
+        self.edit_r = r;
+        self.suspend();
     }
 
     /// Processes one stereo block in place. `left`/`right` must be at most `max_block` long.
@@ -773,6 +807,9 @@ impl PluginController {
         if flags & RestartFlags_::kLatencyChanged != 0 {
             self.latency_changed = true;
         }
+        if flags & RestartFlags_::kParamValuesChanged != 0 {
+            self.params_restarted = true;
+        }
     }
 
     /// The processing latency the plug-in reports, in samples (`getLatencySamples`). Its
@@ -883,6 +920,23 @@ impl PluginController {
         out
     }
 
+    /// Every parameter's id, name and whether it's read-only (a meter), hidden ones included:
+    /// what the editor can send, unlike `parameters`.
+    pub fn param_names(&self) -> Vec<(u32, String, bool)> {
+        use ParameterInfo_::ParameterFlags_::*;
+        let Some(c) = &self.shared.controller else { return Vec::new() };
+        let mut out = Vec::new();
+        unsafe {
+            for i in 0..c.getParameterCount() {
+                let mut info: ParameterInfo = std::mem::zeroed();
+                if c.getParameterInfo(i, &mut info) == kResultOk {
+                    out.push((info.id, utf16(&info.title), info.flags & kIsReadOnly != 0));
+                }
+            }
+        }
+        out
+    }
+
     /// The controller's current normalized value of a parameter.
     pub fn param_value(&self, id: u32) -> Option<f64> {
         self.shared.controller.as_ref().map(|c| unsafe { c.getParamNormalized(id) })
@@ -891,6 +945,8 @@ impl PluginController {
     /// Moves the controller (and so the editor) to a value the host is playing, such as
     /// automation. Doesn't reach the processor: queue that with `PluginProcessor::queue_param`.
     pub fn set_param_value(&self, id: u32, value: f64) {
+        self.host_changes.fetch_add(1, Ordering::Relaxed);
+        self.host_set.lock().insert(id, (value.clamp(0.0, 1.0), Instant::now()));
         if let Some(c) = &self.shared.controller {
             unsafe {
                 c.setParamNormalized(id, value.clamp(0.0, 1.0));
@@ -904,6 +960,64 @@ impl PluginController {
         let v = value.clamp(0.0, 1.0);
         self.set_param_value(id, v);
         let _ = self.shared._handler.edits.lock().push((id, v));
+    }
+
+    /// How many times the host has set a parameter or loaded a state: when it changes, the
+    /// plug-in's state has changed by something other than its editor.
+    pub fn host_changes(&self) -> u64 {
+        self.host_changes.load(Ordering::Relaxed)
+    }
+
+    /// Whether an edit from the plug-in only repeats what the host set a moment ago: an editor
+    /// answering `setParamNormalized` with `performEdit`, as some do.
+    pub fn host_echo(&self, id: u32, value: f64) -> bool {
+        let mut set = self.host_set.lock();
+        let echo = set.get(&id).is_some_and(|(v, at)| (v - value).abs() < 1e-6 && at.elapsed() < HOST_ECHO);
+        if !echo {
+            set.remove(&id);
+        }
+        echo
+    }
+
+    /// Whether edits from the editor are still on their way to the processor.
+    pub fn edits_pending(&self) -> bool {
+        let edits = self.shared._handler.edits.lock();
+        edits.slots() < edits.buffer().capacity()
+    }
+
+    /// Whether the plug-in reported that its parameters changed since the last call (checked in
+    /// `idle`).
+    pub fn take_params_restarted(&mut self) -> bool {
+        std::mem::take(&mut self.params_restarted)
+    }
+
+    /// Calls the host's `IComponentHandler` as the plug-in's editor would, having moved the
+    /// controller first as an editor does: for headless checks, where no editor can open.
+    #[doc(hidden)]
+    pub fn drive_handler(&self, g: Gesture) {
+        let Some(h) = self.shared._handler.to_com_ptr::<IComponentHandler>() else { return };
+        unsafe {
+            match g {
+                Gesture::Begin(id) => h.beginEdit(id),
+                Gesture::Perform(id, v) => {
+                    if let Some(c) = &self.shared.controller {
+                        c.setParamNormalized(id, v);
+                    }
+                    h.performEdit(id, v)
+                }
+                Gesture::End(id) => h.endEdit(id),
+            };
+        }
+    }
+
+    /// `restartComponent(kParamValuesChanged)` through the same handler, for headless checks.
+    #[doc(hidden)]
+    pub fn drive_params_restarted(&self) {
+        if let Some(h) = self.shared._handler.to_com_ptr::<IComponentHandler>() {
+            unsafe {
+                h.restartComponent(RestartFlags_::kParamValuesChanged as _);
+            }
+        }
     }
 
     /// The editor's begin/perform/end edit calls since the last call, oldest first.
@@ -955,6 +1069,7 @@ impl PluginController {
     }
 
     pub fn load_state(&self, st: &PluginState) {
+        self.host_changes.fetch_add(1, Ordering::Relaxed);
         unsafe {
             if !st.component.is_empty() {
                 let s = MemoryStream::new(st.component.clone());

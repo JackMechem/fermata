@@ -24,6 +24,9 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
 - Freeze and Bounce in Place refuse an instrument with output auxes; Export Region renders only
   its main output.
 - An undo that turns a latent track back on during a take can shift where the take lands.
+- **VST3 editor undo has only been driven through `IComponentHandler` headlessly**
+  (`vst_undo_check`), never with a real editor open: check that the window follows Undo and
+  Redo, and how long Undo takes on TONE3000 with a model loaded, whose `setState` may reload it.
 
 ## Open items (2026-10-29)
 
@@ -155,7 +158,7 @@ Goal: finish a mix and deliver it without leaving Fermata.
 - [x] Channel strip settings; copy and paste a whole strip
 - [x] Several automation lanes per track, automation curves, automation for folder stacks and
       Stereo Out
-- [ ] Undo for parameter changes made in a VST3's own editor
+- [x] Undo for parameter changes made in a VST3's own editor
 - [x] VCA faders
 - [x] A pre-fader side-chain option for built-in effects
 - [x] Clip indicators and a gain-reduction meter on the strip

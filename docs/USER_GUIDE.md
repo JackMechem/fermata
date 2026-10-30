@@ -979,9 +979,18 @@ From the Track menu, the track header's right-click menu, or keys:
 ### Undo
 
 Ctrl+Z and Ctrl+Shift+Z undo and redo every edit: regions, tracks, names, colours, volume,
-pan, EQ, plug-in slots, sends, automation, recordings, imports, markers, take folders and
-Project Settings. The Edit menus show what will be undone, and a toast confirms it. A run of
-drags on one control counts as one step.
+pan, EQ, plug-in slots and settings, sends, automation, recordings, imports, markers, take
+folders and Project Settings. The Edit menus show what will be undone, and a toast confirms it. A
+run of drags on one control counts as one step.
+
+That includes a parameter moved in a VST3's own window, with its name in the step
+("TONE3000: Gain"). Each drag there is one step, and Undo and Redo put the plug-in and its window
+back. Moves of a parameter while automation is being written belong to that pass's **Write
+Automation** step instead; a controller assignment moving a VST3's parameter, and automation
+playing it, make no step. A plug-in that doesn't announce its drags gets a step for each burst of
+edits (a pause of a quarter of a second ends one), and one that keeps moving a parameter by itself
+gets none for it. A preset loaded inside a plug-in is one step if the plug-in tells the host that
+its parameters changed; if it doesn't, the load makes no step.
 
 Not undoable, as in Logic: mute, solo, record enable, input monitoring, the transport, the
 cycle and Autopunch ranges, and the metronome and count-in switches.
@@ -1692,7 +1701,8 @@ and macOS, `%APPDATA%\fermata\channel-strips` on Windows).
   source to another doesn't. Many such plug-ins have their own setting for where the key comes
   from (LSP's is "Sidechain type": External); it has to be set to external to hear this input,
   and what it does with no source is up to the plug-in. Instruments can't be keyed.
-- Plug-in settings are saved in the project and restored on undo.
+- Plug-in settings are saved in the project and restored on undo, including what you change in
+  a VST3's own window (see [Undo](#undo)).
 - Settings › Plug-ins (the Plug-in Manager) lists every scanned plug-in and lets you switch
   some off, so they don't appear in the Library and slot menus (projects that use them still
   load them). It also takes extra VST3 folders and shows the last scan's report, including each
@@ -2202,7 +2212,7 @@ strip.
 | **Write** | From where playback started, overwrites volume, pan and every existing lane (except send lanes) with the current values. After you stop, the track switches to Latch, as Logic does by default. |
 
 - Moves in a plug-in's own editor are written too (through the plug-in's begin/perform/end edit
-  calls).
+  calls). While they are, they undo with the pass, not as steps of their own.
 - Group members that share volume, pan or mute write together.
 - Each pass is one undo step, **Write Automation**. Written passes are thinned to the points the
   curve needs.

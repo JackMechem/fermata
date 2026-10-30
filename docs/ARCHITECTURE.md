@@ -681,6 +681,10 @@ stack.
   running with their state. Freeze transitions go through `restore_freeze`.
 - **Clips are never unloaded by undo**: recordings and imports made after a snapshot stay in
   memory, so redo can bring their regions back.
+- **VST3 editors**: `restore()` leaves a plug-in that's still there alone, so an edit in a VST3's
+  own editor can't undo through the snapshot. Its entry carries the state to load as well
+  (`UndoEntry::plugin`), and `step_to` swaps that with the plug-in's present one, as it does the
+  project. See [Undo of editor edits](#undo-of-editor-edits).
 - **`frozen_guard()`**, called after every checkpointed edit, compares frozen tracks with the
   checkpoint; if their regions, plug-ins or EQ changed it restores them and, when nothing else
   changed, drops the now-empty undo step.
@@ -949,11 +953,47 @@ the next block starts the plug-in again and fades in. The rest of the graph play
 - `PluginController::parameters()` lists the automatable, visible, writable parameters for the
   automation parameter pop-up.
 
+### Undo of editor edits
+
+`session/vst_undo.rs` turns the same gestures into undo steps, for plug-ins with an open editor
+(`Session::vst_watches`). Nothing else makes these steps, so a plug-in with its editor closed
+costs nothing.
+
+- **The state from before an edit** can't be read once the edit has begun, so each `Watch` keeps
+  the last known state: read when the editor opens, after each edit, and when the host has
+  changed the plug-in (`PluginController::host_changes`: automation following, a controller
+  assignment, `load_state`) and that has been quiet for 300 ms, at most once a second and 1 % of
+  the time. An open drag calls `getState` not at all, however long it lasts. In
+  `vst_undo_check`: 24 µs on TONE3000 without a model (4 KB), 365 µs on the 98 KB of LSP's
+  Multi-Sampler.
+- **When a step is made**: when the gesture ends, 60 ms later, once the edits have left the ring
+  for the processor, whose state `getState` reads; a bypassed plug-in gets them through
+  `PluginProcessor::pass_edits`. A gesture starting in those 60 ms joins the step, since a plug-in
+  loading a preset by hand sends a run of them. `checkpoint`, `undo` and `redo` make pending steps
+  first, keeping the order. The state read then is compared with the known one: no difference, no
+  step. So a click that moves nothing doesn't clear the redo stack.
+- **Edits without a begin and end** are a burst until they pause for 250 ms, and bursts on one
+  parameter merge through the undo key `vst-edit:<uid>:<param>`. Since a plug-in may be moving
+  a parameter itself, `Tracker` gives them less rope: read-only parameters are ignored, and a
+  parameter is ignored from then on if its burst runs 10 s without a pause, three of its bursts
+  leave the state as it was, or the plug-in has made eight such steps in 30 s (a gesture on it
+  still counts). `restartComponent(kParamValuesChanged)` is treated as a burst, labelled
+  "Parameters", and gets the same cap.
+- **Not steps**: what the host sets (`set_param_value`, `edit_param`), and the same value coming
+  back from the plug-in within 200 ms (`host_echo`). While the track writes automation during
+  playback the move belongs to the pass's step, and the known state just catches up.
+- **Restoring** is `load_state` with no parameter messages: the plug-in applies it as it does
+  when loading, on the main thread while the audio thread runs (VST3 allows this). Gestures from
+  the plug-in for the next 300 ms are its answer to that, and are dropped, also for automation
+  write. Edits still in the ring would land on top, so `flush_vst_edits` first waits up to 50 ms
+  for them.
+
 ### Latency
 
 `PluginController::latency()` calls `getLatencySamples` on the main thread. `restartComponent`
 stores its flags; `idle()` reports `kLatencyChanged`, and `Session::idle` then reruns
-`update_pdc`. Other restart flags are ignored, and the component is not reactivated.
+`update_pdc`. `kParamValuesChanged` goes to [undo](#undo-of-editor-edits). Other restart flags are
+ignored, and the component is not reactivated.
 
 ### State
 
@@ -1518,6 +1558,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `session/controllers.rs` | Controller assignments: the last touched parameter, learning, the saved list, applying controller moves through the normal edit paths (undo steps, automation touches that let go 0.5 s after the controller stops). Run from `idle`. |
 | `session/builtin.rs` | Built-in effects in slots: instantiation, parameters, side-chains, meters for open panels. |
 | `session/vst_key.rs` | VST3 side-chain inputs: keeping each plug-in's aux bus in line with its slot's key source. |
+| `session/vst_undo.rs` | Undo steps for edits in a VST3's own editor: the last known states, which edits make a step and when, and putting a plug-in back. |
 | `session/presets.rs` | Copy and paste of plug-ins and Channel EQ; loading and saving presets. |
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
 | `session/strip_settings.rs` | Copy, paste, reset, save and load channel strip settings. |

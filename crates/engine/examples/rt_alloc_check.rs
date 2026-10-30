@@ -117,6 +117,18 @@ fn vst_gate(d: &vst3_host::PluginDescriptor) {
     }
     let n = ALLOCS.load(Ordering::Relaxed) - mark;
     check(&format!("a VST3's key and its gate allocate nothing ({n})"), n == 0);
+
+    // Edits from its editor while it's bypassed, in a block of its own.
+    let id = c.parameters()[0].id;
+    let mark = ALLOCS.load(Ordering::Relaxed);
+    for i in 0..50 {
+        c.edit_param(id, i as f64 / 50.0);
+        COUNTING.with(|c| c.set(true));
+        p.pass_edits(&t);
+        COUNTING.with(|c| c.set(false));
+    }
+    let n = ALLOCS.load(Ordering::Relaxed) - mark;
+    check(&format!("a bypassed VST3 takes its editor's edits without allocating ({n})"), n == 0 && !p.has_edits());
 }
 
 fn main() {

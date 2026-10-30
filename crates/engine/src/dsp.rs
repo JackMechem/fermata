@@ -1782,6 +1782,8 @@ impl Engine {
                             ins.plugin.process(l, r, &t.midi, &transport);
                             check_output(&self.status, ins, l, r);
                             t.instrument_ran = true;
+                        } else {
+                            ins.plugin.pass_edits_aside(&transport);
                         }
                     }
                     // A frozen instrument track plays its freeze file instead.
@@ -1812,6 +1814,8 @@ impl Engine {
                         p => p.process(l, r, &[], &transport),
                     }
                     check_output(&self.status, ins, l, r);
+                } else {
+                    ins.plugin.pass_edits_aside(&transport);
                 }
             }
             // The delay line keeps the post-plug-in signal; the output and the sends read it
@@ -1972,6 +1976,8 @@ impl Engine {
                     p => p.process(bl, br, &[], &transport),
                 }
                 check_output(&self.status, ins, bl, br);
+            } else {
+                ins.plugin.pass_edits_aside(&transport);
             }
         }
         let master_target = if master_fx { self.master_auto.volume.unwrap_or(self.master_volume) } else { 1.0 };

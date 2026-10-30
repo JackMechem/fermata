@@ -8,6 +8,13 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Undo for changes made in a VST3's own editor:** a knob moved in a plug-in's window is an undo
+  step, labelled with the plug-in and the parameter ("TONE3000: Gain"), and Undo and Redo put the
+  plug-in and its open window back. A plug-in that doesn't announce its drags gets a step per
+  burst of edits; a preset loaded inside a plug-in that reports it is one step. Moves captured by
+  automation being written stay in that pass's step, and neither automation playing, a controller
+  assignment nor a plug-in moving its own parameters adds any. An edit on a bypassed plug-in now
+  reaches it at once rather than when it's next switched on.
 - **Dragging regions below the last track** creates a new track, as in Logic: the region is
   drawn on a new lane there while you drag, and the drop makes a track with the source track's
   settings (audio or software instrument, as the region). A selection spanning tracks gets one

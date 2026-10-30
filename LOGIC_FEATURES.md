@@ -81,7 +81,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] A run of drags on one control is one undo step
 - [x] Mute, solo, arm and monitoring are excluded from undo, as in Logic
 - [x] Number of undo steps is configurable (p. 61)
-- [~] Mixer and plug-in edits in the undo history (p. 61, 619). *Built-in effect and Channel EQ changes are undoable; parameter changes made in a VST3's own editor aren't.*
+- [x] Mixer and plug-in edits in the undo history (p. 61, 619). *Built-in effects, the Channel EQ and parameter changes made in a VST3's own editor.*
 
 ### Connect external devices (p. 68–77)
 
@@ -601,7 +601,7 @@ Audio File Editor (p. 499–523)
 - [~] Compare edits with the saved setting (p. 571). *The preset pop-up shows "(edited)" and offers Revert; no Compare switch.*
 - [~] Copy and paste plug-in settings; reset; default setting (p. 572). *Copy and paste for every plug-in (VST3 state included) and the Channel EQ; Default resets built-in effects only.*
 - [ ] Link or unlink plug-in windows (p. 569)
-- [ ] Plug-in undo and redo (p. 568)
+- [~] Plug-in undo and redo (p. 568). *In the project's undo history; plug-in windows have no undo and redo of their own.*
 - [ ] Controls view: a generic parameter view (p. 1039)
 - [~] Channel strip settings: save, load, step through, paste only plug-ins or sends (p. 581–582). *Save, load, copy, paste and reset (instrument, Audio FX, Channel EQ); no stepping, no partial paste, saved settings aren't sorted into folders.*
 - [~] Copy and paste a whole channel strip (key commands). *From the Setting menu; no key commands.*

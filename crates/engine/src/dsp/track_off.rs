@@ -62,6 +62,16 @@ impl Plugin {
     }
 }
 
+impl Plugin {
+    /// `pass_edits` for a plug-in the engine skips on a track that's playing (bypassed, or left
+    /// out by Low Latency Mode): the track's buffers are in use, so it brings its own.
+    pub(super) fn pass_edits_aside(&mut self, t: &TransportInfo) {
+        if let Plugin::Vst(p) = self {
+            p.pass_edits(t);
+        }
+    }
+}
+
 impl TrackDsp {
     /// Whether the fader and the pre-fader sends have finished fading (post-fader sends follow
     /// the fader).

@@ -29,7 +29,7 @@ const HOLD_RAMP: f64 = 0.01;
 pub(super) struct AutoWriter {
     passes: Vec<Pass>,
     /// What automation last moved each plug-in editor to, per (instance, parameter).
-    shown: HashMap<(Id, u32), f32>,
+    pub(super) shown: HashMap<(Id, u32), f32>,
     /// A pass went into its lane since `idle` last reported.
     written: bool,
 }
@@ -391,7 +391,7 @@ impl Session {
     }
 
     /// The track a plug-in instance is on (`MASTER_ID` for Stereo Out).
-    fn track_of_plugin(&self, uid: Id) -> Option<Id> {
+    pub(super) fn track_of_plugin(&self, uid: Id) -> Option<Id> {
         let track = self.project.tracks.iter().find(|t| t.inserts.iter().flatten().chain(t.instrument.iter()).any(|s| s.uid == uid)).map(|t| t.id);
         track.or_else(|| self.project.master.inserts.iter().flatten().any(|s| s.uid == uid).then_some(MASTER_ID))
     }
@@ -413,7 +413,11 @@ impl Session {
         let playing = self.is_playing();
         let uids: Vec<Id> = self.controllers.keys().copied().collect();
         for uid in uids {
-            let gestures = self.controllers.get_mut(&uid).map(|c| c.take_gestures()).unwrap_or_default();
+            let mut gestures = self.controllers.get_mut(&uid).map(|c| c.take_gestures()).unwrap_or_default();
+            // A plug-in's answers to undo putting it back are nobody's edits.
+            if self.feed_vst_edits(uid, &gestures) {
+                gestures.clear();
+            }
             // The last parameter moved in the editor is the one Learn Assignment learns.
             if let Some(id) = gestures.iter().rev().find_map(|g| match g {
                 Gesture::Begin(id) | Gesture::Perform(id, _) => Some(*id),
