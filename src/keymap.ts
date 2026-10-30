@@ -56,6 +56,8 @@ export const KEY_COMMANDS: KeyCommand[] = [
   { id: "track-mute", label: "Mute Track", group: "Tracks", keys: ["M"] },
   { id: "track-solo", label: "Solo Track", group: "Tracks", keys: ["S"] },
   { id: "track-arm", label: "Record Enable Track", group: "Tracks", keys: ["Ctrl+R"] },
+  // Logic's ⌃T would be Split Regions at Playhead (Ctrl+T) on Linux and Windows: no default key.
+  { id: "track-on-off", label: "Toggle Track On/Off", group: "Tracks", keys: [] },
   { id: "select-previous", label: "Select Previous Track", group: "Tracks", keys: ["ArrowUp"] },
   { id: "select-next", label: "Select Next Track", group: "Tracks", keys: ["ArrowDown"] },
   { id: "hide-tracks", label: "Hide Current Track and Select Next", group: "Tracks", keys: ["Ctrl+H"] },

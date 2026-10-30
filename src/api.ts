@@ -208,6 +208,8 @@ export interface Track {
   solo: boolean;
   armed: boolean;
   monitor: boolean;
+  /** Track On/Off, switched off (saved only when true). A stack's subtracks go off with it. */
+  off?: boolean;
   input: InputSel;
   instrument: PluginSlot | null;
   inserts: (PluginSlot | null)[];

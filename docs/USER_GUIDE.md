@@ -43,7 +43,7 @@ Contents:
    [Importing audio and MIDI](#importing-audio-and-midi) · [Tracks](#tracks) · [Undo](#undo)
 6. [Track stacks, groups, hiding and freezing](#6-track-stacks-groups-hiding-and-freezing):
    [Track stacks](#track-stacks) · [Groups](#groups) · [Hiding tracks](#hiding-tracks) ·
-   [Freezing tracks](#freezing-tracks)
+   [Freezing tracks](#freezing-tracks) · [Turning tracks off](#turning-tracks-off)
 7. [Take folders and comping](#7-take-folders-and-comping)
 8. [Markers and the Arrangement track](#8-markers-and-the-arrangement-track):
    [Markers](#markers) · [The Arrangement track](#the-arrangement-track)
@@ -222,7 +222,8 @@ From left to right:
   - the **bar numbers**: click or drag to move the playhead;
   - the **Autopunch strip** (red): works like the cycle strip, for the punch range;
   - the **marker lane** (see [Markers](#markers)).
-- **Track headers:** colour, number, icon, name, the M (Mute), S (Solo), R (Record Enable,
+- **Track headers:** colour, number, icon, name with the power button
+  ([On/Off](#turning-tracks-off)) at its end, the M (Mute), S (Solo), R (Record Enable,
   audio and instrument tracks), I (Input Monitoring, audio tracks) buttons, the Freeze
   (snowflake) button, a group badge, and a volume slider whose groove is the track's level
   meter. Short tracks put it all on one line (see below). The **+** button above the headers
@@ -309,7 +310,7 @@ status, the audio devices, and the number of MIDI inputs.
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Paste at Original Position, Paste Replace, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Join Regions per Track, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Snap Edits to Zero Crossings, Strip Silence…, Section Between Locators ›, Trim ›, Move ›, Name and Color ›, Select All, Select ›, Delete (see [Arranging commands](#arranging-commands)) |
-| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, New Pattern Region, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
+| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, New Pattern Region, Bounce in Place…, Freeze Track, Unfreeze Track, Toggle Track On/Off, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
 | View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Show Used Automation, Show Global Tracks, Show Overview, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
@@ -959,7 +960,7 @@ From the Track menu, the track header's right-click menu, or keys:
 - **Duplicate Track** copies settings, plug-ins with their current settings, automation and
   regions. **New Track with Same Settings** copies everything except the regions and
   automation.
-- **Rename Track**, **Track Color**, Mute, Solo, Record Enable, Select All Regions on Track,
+- **Rename Track**, **Track Color**, Track On, Mute, Solo, Record Enable, Select All Regions on Track,
   Export Track as MIDI File…, Reset Track Height.
 - **Track Alternatives** (Track › Track Alternatives, or the right-click menu): other sets of
   regions for an audio or instrument track, as in Logic. **New Alternative** starts an empty
@@ -1049,6 +1050,39 @@ with the plug-ins unloaded, so a heavy track stops using CPU.
 - Freeze and Unfreeze can be undone. Frozen tracks stay frozen when the project is saved and
   reopened. A duplicate of a frozen track is live.
 - Freeze files are in the project's `Freeze Files/` folder.
+
+### Turning tracks off
+
+The **power button** at the end of a track's name, or on its Mixer strip, turns the track off,
+as in Logic. Where Mute only silences a track, whose plug-ins go on using the CPU, an Off track
+runs nothing at all, so you can keep takes around without paying for their plug-ins. Use it for
+heavy tracks you aren't listening to.
+
+- An Off track plays no regions and runs no instrument, Channel EQ, plug-ins or sends. Its
+  header and strip are dimmed, its regions faded, and its meters fall to nothing. Its plug-in
+  latency leaves the delay compensation (the other tracks glide to their new delays, also while
+  playing).
+- The plug-ins stay loaded: you can open their editors and change them while the track is off.
+  When it's back on they carry on with those settings, their tails cleared, and the track fades
+  in without a click. A VST3 that ignores the host's request to clear itself may still ring out.
+- Switch several at once with the track menu (**Track On**) or Track › **Toggle Track On/Off**,
+  which act on the selected tracks. The key command Toggle Track On/Off has no key at first; give it one in
+  Settings › Key Commands. In short tracks the button is in the **⋯** menu, and shows in the
+  header while the track is off.
+- **Stacks:** turning a folder or summing stack off turns everything in it off too. Each subtrack
+  keeps its own switch, which counts again when the stack is back on.
+- **Auxes:** an Off aux passes nothing. Tracks sending to it play on and just lose that send.
+  Stereo Out has no power button.
+- **Side-chains:** an effect keyed from an Off track hears silence.
+- **Mute and Solo** work independently: an Off track that is unmuted stays silent, and comes back
+  with whatever Mute and Solo are set to.
+- **Recording:** an Off track can't record or monitor its input. It keeps its R button, and
+  Record leaves it out (and says so if no other track is enabled). You can't turn tracks on or
+  off during a recording; stop first.
+- **Bounces and exports** leave Off tracks out, and a frozen track that is off plays nothing.
+  Freeze, Bounce in Place and Export Region ask you to turn the track on first.
+- On/Off is saved with the project. Like Mute it isn't an undo step of its own. Duplicates of
+  an Off track are off too.
 
 ---
 
@@ -1564,6 +1598,7 @@ From top to bottom:
 | **Pan** | Drag vertically (Shift for fine); double-click to centre. |
 | **Readouts** | Volume in dB and the clip indicator: the highest peak since you last reset it, in dBFS, red once a peak went over 0 dBFS. Click it to reset it, Alt-click to reset every strip's (or use the key command **Reset All Clip Indicators**, unassigned at first). |
 | **Fader and meter** | Drag the fader (Shift for fine), double-click for 0 dB. -96 to +6 dB. On a strip assigned to a VCA, an outlined cap marks where the strip really plays (its fader plus the VCA). The meter holds peaks for 2 s, and its top lights red while the clip indicator is on. With a Compressor, Limiter, Noise Gate or De-Esser on the strip, a thin **gain-reduction meter** beside it grows down from the top as the first one that isn't bypassed reduces the gain (up to 30 dB). |
+| **Power** | Turns the track off: silent, and it runs nothing (see [Turning tracks off](#turning-tracks-off)). Not on Stereo Out. |
 | **M S R I** | Mute, Solo, Record Enable, Input Monitoring. |
 | **Name** | With the track colour. Right-click it for the channel strip settings menu. |
 

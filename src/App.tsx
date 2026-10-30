@@ -164,6 +164,9 @@ function handleMenu(id: string) {
     case "bounce-in-place":
       ops.bounceInPlace();
       break;
+    case "track-on-off":
+      ops.switchAll("off");
+      break;
     case "freeze-track":
       freezeTracks(ops.selectedTracks());
       break;
@@ -410,6 +413,7 @@ const KEY_ACTIONS: Record<string, () => void> = {
     const t = selectedTrack();
     if (t) api.updateTrack(t.id, { armed: !t.armed });
   },
+  "track-on-off": () => handleMenu("track-on-off"),
   "select-previous": () => moveSelection(-1),
   "select-next": () => moveSelection(1),
   // Clipboard keys stay with text fields (onKey skips them), so the menu bar doesn't take them.

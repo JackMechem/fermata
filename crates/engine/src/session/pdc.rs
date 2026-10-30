@@ -18,6 +18,11 @@
 //!   equally, so they need no compensation, but they count in the total, which delays the
 //!   click, shifts recordings and is skipped at the start of a bounce.
 //!
+//! A track that is off (`Project::is_off`) runs nothing, so it takes no part: it has no latency,
+//! nothing waits for it, and it gets no delays. A bus that is off waits for nobody either, so
+//! tracks that play or send into it don't hold up anything else. Switching a track on or off
+//! changes everyone's delays through the same glide as any other latency change.
+//!
 //! Live playing is the exception: an armed audio track that is recording, and in Low Latency
 //! Mode any monitored track, plays without its compensation delay (and in Low Latency Mode
 //! without plug-ins over the limit), so performers hear themselves as soon as possible.
@@ -69,6 +74,8 @@ pub(crate) struct Node {
     pub output: Option<Id>,
     /// The aux each send slot feeds.
     pub sends: [Option<Id>; SEND_SLOTS],
+    /// Switched off: it takes no part in the timing.
+    pub off: bool,
 }
 
 /// When a strip's audio passes each point, in frames after the timeline.
@@ -91,6 +98,10 @@ pub(crate) fn solve(nodes: &[Node]) -> (HashMap<Id, Timing>, u32) {
     let mut timing: HashMap<Id, Timing> = HashMap::new();
     let mut master = 0u32;
     for n in nodes {
+        if n.off {
+            timing.insert(n.id, Timing::default());
+            continue;
+        }
         let input = due.get(&n.id).copied().unwrap_or(0);
         let post = input.saturating_add(n.latency);
         timing.insert(n.id, Timing { input, post, ..Default::default() });
@@ -106,7 +117,7 @@ pub(crate) fn solve(nodes: &[Node]) -> (HashMap<Id, Timing>, u32) {
             *d = (*d).max(post);
         }
     }
-    for n in nodes {
+    for n in nodes.iter().filter(|n| !n.off) {
         let t = timing.get_mut(&n.id).unwrap();
         let at = |b: Option<Id>| b.map(|b| due.get(&b).copied().unwrap_or(0)).unwrap_or(master);
         t.output_delay = at(n.output).saturating_sub(t.post);
@@ -170,12 +181,13 @@ impl Session {
         let mut plugins: HashMap<Id, StripPlugins> = HashMap::new();
         for id in p.process_order() {
             let Some(t) = p.track(id).filter(|t| t.kind != TrackKind::Folder) else { continue };
-            let sp = self.strip_plugins(t.instrument.as_ref(), &t.inserts, limit);
+            let off = p.is_off(id);
+            let sp = if off { self.strip_plugins(None, &[], limit) } else { self.strip_plugins(t.instrument.as_ref(), &t.inserts, limit) };
             let mut sends = [None; SEND_SLOTS];
             for (k, s) in t.sends.iter().take(SEND_SLOTS).enumerate() {
                 sends[k] = s.filter(|s| s.bus != t.id && p.is_aux(s.bus)).map(|s| s.bus);
             }
-            nodes.push(Node { id, latency: sp.active + sp.bypassed, output: p.output_of(id), sends });
+            nodes.push(Node { id, latency: sp.active + sp.bypassed, output: p.output_of(id), sends, off });
             plugins.insert(id, sp);
         }
         let (timing, master_due) = solve(&nodes);
@@ -255,7 +267,7 @@ mod tests {
         for &(k, b) in sends {
             s[k] = Some(b);
         }
-        Node { id, latency, output, sends: s }
+        Node { id, latency, output, sends: s, off: false }
     }
 
     #[test]
@@ -301,6 +313,22 @@ mod tests {
         assert_eq!(synth, eq, "the id is reused");
         assert_eq!(s.pdc_total(), 0);
         assert!(s.pdc_report().strips.is_empty());
+    }
+
+    #[test]
+    fn off_strips_take_no_part() {
+        // 1 (500 frames) is off; 2 (100 frames) plays out and sends to aux 9 (50 frames) as 3
+        // does, and 4 (800 frames) plays only into aux 8, which is off.
+        let mut nodes = vec![node(1, 0, None, &[]), node(2, 100, None, &[(0, 9)]), node(3, 0, None, &[(0, 9)]), node(4, 800, Some(8), &[]), node(8, 0, None, &[]), node(9, 50, None, &[])];
+        nodes[0].off = true;
+        nodes[4].off = true;
+        let (t, master) = solve(&nodes);
+        assert_eq!(master, 150, "aux 9 is the latest");
+        assert_eq!(t[&1], Timing::default());
+        assert_eq!(t[&8], Timing::default());
+        assert_eq!(t[&2].output_delay, 50);
+        assert_eq!(t[&3].output_delay, 150);
+        assert_eq!(t[&3].send_delays[0], 100);
     }
 
     #[test]

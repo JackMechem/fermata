@@ -287,6 +287,11 @@ pub fn delete_track(state: State<AppState>, id: Id) -> Snapshot {
 
 #[tauri::command]
 pub fn update_track(state: State<AppState>, id: Id, patch: TrackPatch) -> Snapshot {
+    if patch.off.is_some() {
+        if let Some(refused) = with(&state, |s| s.off_refused()) {
+            return Snapshot { refused: Some(refused), ..snap(&state, |_| {}) };
+        }
+    }
     // Mute, solo, record-enable and monitoring are performance switches, not edits (as in Logic).
     let label = if patch.volume_db.is_some() {
         Some(("Volume", "volume"))

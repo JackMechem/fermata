@@ -166,6 +166,7 @@ mod tests {
             bus_mute: false,
             vca_gain: 1.0,
             vca_mute: false,
+            off: false,
         }
     }
 

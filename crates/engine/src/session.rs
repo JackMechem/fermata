@@ -88,6 +88,7 @@ pub use recovery::{discard_journals, read_journal, recording_journals, JournalTa
 mod zero_crossings;
 mod region_gain;
 mod musical_moves;
+mod track_off;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -101,6 +102,7 @@ pub struct TrackPatch {
     pub monitor: Option<bool>,
     pub input: Option<InputSel>,
     pub collapsed: Option<bool>,
+    pub off: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -536,6 +538,7 @@ impl Session {
             bus_mute,
             vca_gain: volume_gain(vca_db.max(-96.0)),
             vca_mute,
+            off: p.is_off(t.id),
         }
     }
 
@@ -848,7 +851,7 @@ impl Session {
 
     fn midi_target_id(&self) -> Option<Id> {
         let sel = self.selected.filter(|id| self.project.track(*id).map(|t| t.kind == TrackKind::Instrument).unwrap_or(false));
-        sel.or_else(|| self.project.tracks.iter().find(|t| t.kind == TrackKind::Instrument && t.armed).map(|t| t.id))
+        sel.or_else(|| self.project.tracks.iter().find(|t| t.kind == TrackKind::Instrument && t.armed && !self.project.is_off(t.id)).map(|t| t.id))
     }
 
     fn update_midi_target(&mut self) {
@@ -1110,9 +1113,11 @@ impl Session {
         };
         let depth = self.project.bit_depth.unwrap_or(rec.bit_depth);
 
-        let armed: Vec<Track> = self.project.tracks.iter().filter(|t| t.armed && t.frozen.is_none()).cloned().collect();
+        // An Off track can't record: it keeps its R button, ready for when it's back on.
+        let enabled = self.project.tracks.iter().filter(|t| t.armed && t.frozen.is_none());
+        let armed: Vec<Track> = enabled.clone().filter(|t| !self.project.is_off(t.id)).cloned().collect();
         if armed.is_empty() {
-            return Err(anyhow!("No tracks are record-enabled"));
+            return Err(anyhow!(if enabled.count() > 0 { "Every record-enabled track is off. Turn one on to record." } else { "No tracks are record-enabled" }));
         }
         let (plan, quiet, capture) = self.record_plan(from, punch, cycle)?;
         self.checkpoint("Record", None, false);
@@ -1386,6 +1391,7 @@ impl Session {
             alternatives: Vec::new(),
             alternative: String::new(),
             auto_lanes: Vec::new(),
+            off: false,
         };
         if kind == TrackKind::Instrument {
             let pid = instrument.unwrap_or_else(|| BUILTIN_SYNTH.to_string());
@@ -1766,6 +1772,7 @@ impl Session {
 
     pub fn update_track(&mut self, id: Id, patch: TrackPatch) {
         let solo_changed = patch.solo.is_some();
+        let recording = self.rec_punch.is_some();
         let Some(t) = self.project.track_mut(id) else { return };
         if let Some(v) = patch.name {
             t.name = v;
@@ -1799,9 +1806,14 @@ impl Session {
         if let Some(v) = patch.collapsed {
             t.collapsed = v;
         }
+        // Not while recording: `commands.rs` says so (see `Session::off_refused`).
+        let off_changed = !recording && patch.off.is_some_and(|v| v != t.off);
+        if off_changed {
+            t.off = patch.off.unwrap_or(t.off);
+        }
         // Stacks pass changes on to their subtracks, a subtrack's solo reaches its stacks, and
-        // solo follows sends and outputs.
-        if t.kind.is_stack() || t.parent.is_some() || solo_changed {
+        // solo follows sends and outputs. On/Off changes delay compensation too.
+        if t.kind.is_stack() || t.parent.is_some() || solo_changed || off_changed {
             self.push_all_params();
         } else {
             let params = Self::track_params(&self.project, self.project.track(id).unwrap());

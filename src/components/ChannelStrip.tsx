@@ -20,6 +20,7 @@ import { resetClipIndicators, stripSettingMenu } from "../stripSettings";
 import { fmt } from "../keymap";
 import { stripLearnMenu } from "../learn";
 import { canAssignVca, vcaOffset } from "../vca";
+import { isTrackOff, powerTitle } from "../trackOff";
 import { useVcas, VcaSlot } from "./Vca";
 
 const PAN = { type: "pan" } as const;
@@ -188,6 +189,7 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   // Stereo Out's fader follows its lane on the Output track.
   const project = useStore((s) => s.snap?.project);
   const strip = track ?? (project ? outputTrack(project) : null);
+  const off = !!track && isTrackOff(tracks ?? [], track);
   const [autoVolume, volumeTouch] = useAutomation(strip, VOLUME, volume);
   const [autoPan, panTouch] = useAutomation(track, PAN, track?.pan ?? 0);
   // Like Logic, a strip with a dynamics effect shows its gain reduction beside the meter.
@@ -201,7 +203,7 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   };
 
   return (
-    <div className={"strip" + (selected ? " selected" : "")} onMouseDown={() => track && !selected && api.selectTrack(track.id)} onContextMenu={(e) => stripLearnMenu(e, isMaster ? null : id)}>
+    <div className={"strip" + (selected ? " selected" : "") + (off ? " is-off" : "")} onMouseDown={() => track && !selected && api.selectTrack(track.id)} onContextMenu={(e) => stripLearnMenu(e, isMaster ? null : id)}>
       <div className="strip-section">
         {folder ? (
           <div className="slot static" />
@@ -323,6 +325,9 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
 
       {!isMaster ? (
         <div className="strip-buttons">
+          <button className={"tbtn power" + (track.off ? " on" : "")} title={powerTitle(tracks ?? [], track)} onMouseDown={(e) => { e.stopPropagation(); api.updateTrack(id, { off: !track.off }); }}>
+            <Icon.power />
+          </button>
           <div className="btn-row">
             <button className={"tbtn mute" + (track.mute ? " on" : "")} onMouseDown={(e) => { e.stopPropagation(); api.updateTrack(id, { mute: !track.mute }); }}>
               M

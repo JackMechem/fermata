@@ -13,6 +13,12 @@ All notable changes to Fermata are recorded here. The format follows
   settings (audio or software instrument, as the region). A selection spanning tracks gets one
   new track per source lane past the end. Alt-drag copies do the same, and one undo removes it
   all.
+- **Track On/Off** (Logic's power button): in the track header, the Mixer, the track menu and
+  Track › Toggle Track On/Off. An Off track makes no sound and runs nothing: no regions, no
+  instrument, no EQ, no plug-ins, no sends, no delay compensation, so it frees the CPU that a
+  muted track keeps using. Its plug-ins stay loaded and carry on when it's back on, without a
+  tail or a click. A stack's Off reaches its subtracks. An Off track can't record, and doesn't
+  appear in bounces or exports. It is saved with the project.
 
 ### Fixed
 

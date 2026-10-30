@@ -210,6 +210,7 @@ folder is kept when anything failed.
 | `linphase_check` | scratch dir | The Linear Phase EQ: flat, at each Quality, it reports its latency and plays the dry signal in time; with the same settings as a Channel EQ its magnitude at eleven frequencies matches within 0.25 dB, and each sine burst comes out as the dry one scaled (no phase shift), unlike the Channel EQ's. |
 | `restore_check` | scratch dir | Every feature in one project (`examples/common/all_features.rs`): each step (new effects, Linear Phase EQ and its latency, a pre-fader key, VCAs, folder, curved and Stereo Out automation, pattern regions, region parameters, take folders and comps, a MIDI take folder, loop crossfades, an arrangement move, marquee delete, Strip Silence, a zero-crossing split, track alternatives, a section cut) undone and redone with bit-identical renders and documents; all undone and all redone; save and reopen identical; an older project (the new fields stripped) opens with their defaults and renders the same. |
 | `soak_check` | scratch dir, optional edit count and seed | Feature interactions: the all-features project, then a few hundred edits drawn at random (fixed seed) from the session's public edit methods. After each the project must hold together (unique ids, positive lengths, comps in order, arrangement tiling, VCAs and keys that exist, delay compensation that matches the plug-ins); some are undone and redone with renders; every 50 the project saves and reopens with the same render; at the end undoing everything gives the first render back bit for bit. |
+| `onoff_check` | audio file, scratch dir | Track On/Off in offline renders: an Off track leaves the mix (and comes back bit for bit), with Mute independent; a folder and a summing stack take their subtracks; an Off aux passes nothing while its senders play on; a side-chain key from an Off track is silence; a latent track leaves delay compensation, also mid-render with no click; a frozen track plays nothing; Freeze and Bounce in Place refuse and exports skip; saved and reopened; live, an Off track's meter falls to nothing. |
 | `rt_alloc_check` | scratch dir | Real-time safety: plays the all-features project through `Engine::process` on its own thread with a counting allocator, and checks that no block allocates or frees once warmed up, while playing, through a latency change and its glide, edits, plug-ins and tracks coming and going, undo and redo, locating, cycling and stopping. |
 | `undo_check` | audio file | Undo and redo through a sequence of edits. |
 | `import_check` | project dir, files... | Imports files onto new tracks and reports what was created. |
@@ -276,6 +277,7 @@ instead and enforce rules that would otherwise only fail in the running app.
 | `linearPhaseEq.test.ts` | The Linear Phase EQ's parameters as Channel EQ settings. |
 | `stripMeters.test.ts` | The clip indicator readout and the gain-reduction meter. |
 | `vca.test.ts` | VCA offsets and loop checks in the Mixer. |
+| `trackOff.test.ts` | Whether a track is off through its stacks (`src/trackOff.ts`), and the power button's tooltip. |
 | `controllers.test.ts` | Controller assignment types and labels (MIDI Learn). |
 | `keyFormat.test.ts` | Shortcuts written as each platform writes them. |
 | `pluginKeys.test.ts` | Keys forwarded from a plug-in's editor window become the KeyboardEvent the main window would see. |
@@ -353,7 +355,7 @@ These keep the code maintainable and the merges clean.
   explicit: the C enums are `i32` in the MSVC bindings, so a cast that clippy calls a no-op on
   Linux is needed on Windows.
 - **Undo.** Every user edit goes through a checkpointed command (`edit`, `try_edit`,
-  `edit_made`). Performance switches (mute, solo, arm, monitor) and transport are not undoable.
+  `edit_made`). Performance switches (mute, solo, on/off, arm, monitor) and transport are not undoable.
   Anything you send to the engine must also be handled in `restore()`, `build_track()` and
   `rebuild_graph()`.
 - **Main thread for plug-ins.** VST3 controllers and editors are touched only on the main

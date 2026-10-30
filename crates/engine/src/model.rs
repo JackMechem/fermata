@@ -548,6 +548,10 @@ pub struct Track {
     /// parameter each shows. The main lane's parameter is a view setting of the UI.
     #[serde(default)]
     pub auto_lanes: Vec<AutoParam>,
+    /// Logic's Track On/Off, switched off: the track plays nothing and runs nothing, though its
+    /// plug-ins stay loaded (see `dsp/track_off.rs`). A stack's subtracks go off with it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub off: bool,
 }
 
 /// An inactive track alternative: a named set of regions that replaces the track's regions
@@ -869,6 +873,11 @@ impl Project {
     }
 
     /// The stacks `id` sits in, innermost first.
+    /// Whether a track is off, itself or through a stack it is in.
+    pub fn is_off(&self, id: Id) -> bool {
+        self.track(id).is_some_and(|t| t.off) || self.ancestors(id).iter().any(|a| self.track(*a).is_some_and(|t| t.off))
+    }
+
     pub fn ancestors(&self, id: Id) -> Vec<Id> {
         let mut out = Vec::new();
         let mut cur = self.track(id).and_then(|t| t.parent);
@@ -1195,6 +1204,12 @@ mod tests {
         )
         .unwrap();
         assert!(!t.hidden);
+        assert!(!t.off, "an older project's tracks are on");
+        let json = serde_json::to_string(&t).unwrap();
+        assert!(!json.contains("\"off\""), "a track that's on saves as older projects do");
+        let t: Track = serde_json::from_str(&json.replacen('{', "{\"off\":true,", 1)).unwrap();
+        assert!(t.off);
+        assert!(serde_json::to_string(&t).unwrap().contains("\"off\":true"));
     }
 }
 
@@ -1234,6 +1249,7 @@ mod routing_tests {
             alternatives: Vec::new(),
             alternative: String::new(),
             auto_lanes: Vec::new(),
+            off: false,
         });
         id
     }

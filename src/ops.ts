@@ -164,7 +164,7 @@ export const setGroup = (ids: Id[], group: Id | null) => act("set_track_group", 
 export const updateGroup = (group: Group) => act("update_group", { group });
 
 /** Applies a switch to every selected track, the way the clicked track goes. */
-function switchAll(field: "mute" | "solo" | "armed", ids = selectedTracks()) {
+export function switchAll(field: "mute" | "solo" | "armed" | "off", ids = selectedTracks()) {
   const sel = tracks().filter((t) => ids.includes(t.id));
   const on = !sel.every((t) => t[field]);
   sel.forEach((t) => api.updateTrack(t.id, { [field]: on }));
@@ -553,6 +553,7 @@ export function trackMenu(t: Track, rename: () => void): MenuItem[] {
       ],
     },
     { separator: true },
+    { label: many ? "Tracks On" : "Track On", hint: keyHint("track-on-off"), checked: sel.every((x) => !x.off), onClick: () => switchAll("off", ids) },
     { label: many ? "Mute Tracks" : "Mute", hint: keyHint("track-mute"), checked: sel.every((x) => x.mute), onClick: () => switchAll("mute", ids) },
     { label: many ? "Solo Tracks" : "Solo", hint: keyHint("track-solo"), checked: sel.every((x) => x.solo), onClick: () => switchAll("solo", ids) },
   );

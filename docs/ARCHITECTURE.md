@@ -195,7 +195,7 @@ The pieces:
 
   `key` coalesces a burst of edits into one step (see [Undo](#7-undo)); `plugins` makes the
   checkpoint capture plug-in states, for edits that remove plug-ins.
-- **Not undoable on purpose**: mute, solo, record enable and input monitoring (performance
+- **Not undoable on purpose**: mute, solo, track on/off, record enable and input monitoring (performance
   switches, as in Logic; `update_track` gives them no label), transport, cycle and Autopunch
   range changes, track selection, the metronome and count-in switches.
 - **The `Snapshot`** (`commands.rs`) carries the project without plug-in state blobs
@@ -488,6 +488,18 @@ flowchart TD
   K --> L["Output: parent/aux sum_l/sum_r or the Stereo Out bus"]
   L --> M["Post-fader sends (own tap, same gains)"]
 ```
+
+A track that is **off** (`Track::off`, or a stack above it: `Project::is_off`, sent as
+`TrackParams::off`) skips all of this. It first fades through its fader like a muted one, then
+goes dormant (`dsp/track_off.rs`): its VST3s get `setProcessing(0)` (allowed on the audio
+thread, and meant to clear tails; `setActive` stays on and the plug-in loaded), built-in effects
+and synths reset, the EQ, delay line and key buffers empty, and each block only empties what
+feeders wrote into its bus. Its meter stops being fed, so it falls. A VST3's editor edits still
+reach its processor, through one block of silence when any are pending. Back on, the source fades
+in over 5 ms before the plug-ins and the delay line, notes are released and chased, and
+automation is resent. The session leaves it out of delay compensation (`session/pdc.rs`). A
+track in the middle of a take stays on until the take ends; the session refuses the switch while
+recording anyway (`session/track_off.rs`), so only an undo can get there.
 
 After every track:
 

@@ -171,6 +171,11 @@ impl BuiltinDsp {
     pub fn set(&mut self, id: u32, value: f32) {
         let Some(spec) = self.spec(id) else { return };
         self.fx.set_param(id, clamp(spec, value));
+        // An effect that isn't running (bypassed, or on an Off track) reports no values, and
+        // its panel must still show this one.
+        if let Some(k) = self.specs.iter().position(|p| p.id == id) {
+            self.shared.params[k].store(self.fx.param(id).to_bits(), Ordering::Relaxed);
+        }
         self.publish();
     }
 
@@ -218,6 +223,17 @@ impl BuiltinDsp {
     pub fn reset(&mut self) {
         self.fx.reset();
         self.fresh = true;
+    }
+
+    /// Clears the effect for a track going Off: its tail is gone, and its meters show that
+    /// rather than freezing at their last values, since it won't run again until it's back on.
+    pub fn sleep(&mut self) {
+        self.reset();
+        self.fx.meters(&mut self.meter_buf);
+        for (m, v) in self.shared.meters.iter().zip(&self.meter_buf) {
+            m.store(v.to_bits(), Ordering::Relaxed);
+        }
+        self.shared.gr.store(0, Ordering::Relaxed);
     }
 
     /// Tells the effect whether the engine is rendering offline (see `Effect::set_offline`).

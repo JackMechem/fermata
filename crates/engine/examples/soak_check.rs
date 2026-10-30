@@ -199,6 +199,10 @@ fn pdc_problem(s: &Session) -> Option<String> {
         }
     }
     for t in s.project.tracks.iter().map(|t| t.id).chain([MASTER_ID]) {
+        // A track that's off takes no part.
+        if s.project.is_off(t) {
+            continue;
+        }
         for x in slots(t).into_iter().filter(|x| x.plugin_id == "builtin:linear-phase-eq") {
             if !report.strips.iter().any(|st| st.track == t && st.slots.iter().any(|(u, _)| *u == x.uid)) {
                 return Some(format!("delay compensation leaves out the Linear Phase EQ {} on track {t}", x.uid));
@@ -535,7 +539,7 @@ fn edit(s: &mut Session, g: &mut Rng, w: &World) -> (String, bool) {
             }
             44 => {
                 if let Some(t) = g.pick(&tracks) {
-                    s.update_track(t, TrackPatch { volume_db: Some(-20.0 + 26.0 * g.unit()), mute: g.chance(20).then(|| g.chance(30)), pan: Some(g.unit() * 2.0 - 1.0), ..Default::default() });
+                    s.update_track(t, TrackPatch { volume_db: Some(-20.0 + 26.0 * g.unit()), mute: g.chance(20).then(|| g.chance(30)), pan: Some(g.unit() * 2.0 - 1.0), off: g.chance(20).then(|| g.chance(30)), ..Default::default() });
                 }
             }
             45 => {

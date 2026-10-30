@@ -336,6 +336,25 @@ impl PluginProcessor {
         }
     }
 
+    /// Tells the plug-in processing has stopped, until the next `process` starts it again. VST3
+    /// allows this on the audio thread ("UI-thread or processing-thread"), and plug-ins are told
+    /// to use it to clear their delay lines and tails; the component stays active, so its state,
+    /// parameters and editor remain valid.
+    pub fn suspend(&mut self) {
+        self.queued.clear();
+        if self.started {
+            unsafe {
+                vst3::ComRef::from_raw(self.processor).unwrap().setProcessing(0);
+            }
+            self.started = false;
+        }
+    }
+
+    /// Parameter edits from the controller (its editor window) wait for the next `process`.
+    pub fn has_edits(&self) -> bool {
+        !self.edits_rx.is_empty()
+    }
+
     /// Processes one stereo block in place. `left`/`right` must be at most `max_block` long.
     pub fn process(&mut self, left: &mut [f32], right: &mut [f32], midi: &[MidiEvent], t: &TransportInfo) {
         let n = left.len().min(right.len()).min(self.max_block);

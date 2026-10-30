@@ -156,6 +156,14 @@ fn main() {
     s.update_track(w.folder, TrackPatch { volume_db: Some(-4.0), ..Default::default() });
     s.update_track(sum, TrackPatch { volume_db: Some(-2.0), ..Default::default() });
     run(&mut guard, 50, true);
+    // Tracks and a whole stack going off, sleeping and waking while playing, an aux with effects
+    // and an instrument among them.
+    for id in [w.folder, aux, w.inst] {
+        s.update_track(id, TrackPatch { off: Some(true), ..Default::default() });
+        run(&mut guard, 50, true);
+        s.update_track(id, TrackPatch { off: Some(false), ..Default::default() });
+        run(&mut guard, 50, true);
+    }
     if let Some(p) = s.project.track(w.drums).unwrap().regions.iter().find(|r| r.id == w.pattern).and_then(|r| r.pattern.clone()) {
         let mut p = p;
         p.swing = 0;

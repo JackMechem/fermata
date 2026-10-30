@@ -152,6 +152,7 @@ pub fn install<R: Runtime>(app: &App<R>) -> tauri::Result<()> {
         .item(&item("bounce-in-place", "Bounce in Place…", Some(BOUNCE_IN_PLACE_KEY))?)
         .item(&item("freeze-track", "Freeze Track", None)?)
         .item(&item("unfreeze-track", "Unfreeze Track", None)?)
+        .item(&item("track-on-off", "Toggle Track On/Off", None)?)
         .separator()
         .item(&item("folder-stack", "Create Folder Stack", Some("Shift+CmdOrCtrl+D"))?)
         .item(&item("summing-stack", "Create Summing Stack", None)?)

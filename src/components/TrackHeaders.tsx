@@ -13,6 +13,7 @@ import { canFreeze, toggleFreeze } from "../freeze";
 import { takeRowsHeight } from "../takes";
 import { fmt, keyHint } from "../keymap";
 import { headerTier } from "../trackHeader";
+import { isTrackOff, powerTitle } from "../trackOff";
 import { LevelSlider } from "./LevelSlider";
 import { TrackAltButton } from "./TrackAlternatives";
 import { showsTrackAlts } from "../alternativesModel";
@@ -48,6 +49,8 @@ interface Switch {
   title: string;
   hint?: string;
   toggle: () => void;
+  /** The tick in the "⋯" menu, when that isn't `on`. */
+  checked?: boolean;
 }
 
 /** Two signals merging into one bus. */
@@ -108,7 +111,13 @@ function Header({
   // The automation row takes a third line on tall tracks, or the buttons' place.
   const automation = useStore((s) => s.showAutomation) && automatable(track);
   const autoRow = full && automation && height >= 76;
+  const allTracks = useStore((s) => s.snap?.project.tracks) ?? [];
+  const off = isTrackOff(allTracks, track);
+  // "On" here means lit, which for this button is the track being off. Its menu entry reads the
+  // other way round.
+  const power: Switch = { cls: "power", label: <Icon.power />, name: "Track On", on: !!track.off, checked: !track.off, title: powerTitle(allTracks, track), hint: keyHint("track-on-off"), toggle: () => api.updateTrack(track.id, { off: !track.off }) };
   const switches: Switch[] = [
+    power,
     { cls: "mute", label: "M", name: "Mute", on: track.mute, title: "Mute", hint: keyHint("track-mute"), toggle: () => api.updateTrack(track.id, { mute: !track.mute }) },
     { cls: "solo", label: "S", name: "Solo", on: track.solo, title: "Solo", hint: keyHint("track-solo"), toggle: () => api.updateTrack(track.id, { solo: !track.solo }) },
   ];
@@ -141,7 +150,7 @@ function Header({
   // The "⋯" menu: every switch, checked when on, then the automation lane's parameter when
   // automation is shown (its mode button stays in the header).
   const openMore = async (el: HTMLElement) => {
-    const items: MenuItem[] = switches.map((sw) => ({ label: sw.name, checked: sw.on, hint: sw.hint, onClick: sw.toggle }));
+    const items: MenuItem[] = switches.map((sw) => ({ label: sw.name, checked: sw.checked ?? sw.on, hint: sw.hint, onClick: sw.toggle }));
     if (automation) items.push({ separator: true }, { label: "Automation Parameter", children: await paramMenu(track) });
     openMenuAt(el, items);
   };
@@ -175,7 +184,7 @@ function Header({
   };
   return (
     <div
-      className={`track-header tier-${tier}` + (selected ? " selected" : "") + (primary ? " primary" : "") + (stack ? " stack" : "") + (track.hidden ? " is-hidden" : "") + (track.frozen ? " frozen" : "")}
+      className={`track-header tier-${tier}` + (selected ? " selected" : "") + (primary ? " primary" : "") + (stack ? " stack" : "") + (track.hidden ? " is-hidden" : "") + (track.frozen ? " frozen" : "") + (off ? " is-off" : "")}
       style={{ height }}
       onMouseDown={(e) => {
         if (e.button === 0) clickTrack(track.id, e);
@@ -205,33 +214,37 @@ function Header({
         </div>
       )}
       <div className="th-main">
-        {editing ? (
-          <input
-            className="th-rename"
-            autoFocus
-            defaultValue={track.name}
-            onMouseDown={(e) => e.stopPropagation()}
-            onBlur={(e) => {
-              setEditing(false);
-              const v = e.target.value.trim();
-              if (v && v !== track.name) api.updateTrack(track.id, { name: v });
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-              if (e.key === "Escape") setEditing(false);
-            }}
-          />
-        ) : (
-          <div className="th-name" onDoubleClick={() => setEditing(true)} title={track.name}>
-            {track.name}
-          </div>
-        )}
+        <div className="th-name-row">
+          {editing ? (
+            <input
+              className="th-rename"
+              autoFocus
+              defaultValue={track.name}
+              onMouseDown={(e) => e.stopPropagation()}
+              onBlur={(e) => {
+                setEditing(false);
+                const v = e.target.value.trim();
+                if (v && v !== track.name) api.updateTrack(track.id, { name: v });
+              }}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") setEditing(false);
+              }}
+            />
+          ) : (
+            <div className="th-name" onDoubleClick={() => setEditing(true)} title={track.name}>
+              {track.name}
+            </div>
+          )}
+          {/* On the name's line: the button row has no room to spare at the usual widths. */}
+          {full && btn(power)}
+        </div>
         {full && automation && !autoRow && <AutomationControls track={track} />}
         <div className="th-buttons" hidden={full && automation && !autoRow}>
           {/* Short headers keep only the switches that are on, so a muted, soloed, armed or
               frozen track still shows it; the rest are in the "⋯" menu. */}
-          {(full ? switches : switches.filter((sw) => sw.on)).map(btn)}
+          {(full ? switches.filter((sw) => sw !== power) : switches.filter((sw) => sw.on)).map(btn)}
           {group && <GroupBadge group={group} onClick={() => setState({ groupSheet: group.id })} />}
           {showsTrackAlts(track) && <TrackAltButton track={track} />}
           {hideMode && (
@@ -250,7 +263,7 @@ function Header({
           {!full && (
             <button
               className="tbtn th-more"
-              title="Mute, Solo, Record and more"
+              title="On/Off, Mute, Solo, Record and more"
               onMouseDown={(e) => {
                 e.stopPropagation();
                 openMore(e.currentTarget);

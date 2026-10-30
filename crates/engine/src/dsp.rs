@@ -27,6 +27,7 @@ mod builtin;
 pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared};
 mod auto;
 use auto::MasterAuto;
+mod track_off;
 
 pub const MAX_BLOCK: usize = 1024;
 pub const MAX_INPUTS: usize = 32;
@@ -226,6 +227,8 @@ pub struct TrackParams {
     /// The track's VCA offset (gain) and mute, which a folder's automation leaves in place.
     pub vca_gain: f32,
     pub vca_mute: bool,
+    /// The track or a stack it is in is switched off (`Track::off`): it runs nothing at all.
+    pub off: bool,
 }
 
 /// A send as the engine plays it. A muted send keeps its slot at gain 0, so it fades out
@@ -290,6 +293,12 @@ pub struct TrackDsp {
     fold_idx: Option<usize>,
     /// Where the output and each send read the delay line, gliding when a delay changes.
     pdc_taps: pdc::PdcTaps,
+    /// Switched off and faded out: nothing of the strip runs (see `track_off.rs`).
+    dormant: bool,
+    /// Frames of the fade-in left since it was switched back on.
+    resume_left: u32,
+    /// Notes the player is holding through MIDI Thru, released if the track goes off meanwhile.
+    live_held: [bool; 128],
 }
 
 impl TrackDsp {
@@ -332,6 +341,9 @@ impl TrackDsp {
             pre_key_r: vec![0.0; MAX_BLOCK],
             fold_idx: None,
             pdc_taps: pdc::PdcTaps::default(),
+            dormant: false,
+            resume_left: 0,
+            live_held: [false; 128],
         }
     }
 
@@ -1389,6 +1401,23 @@ impl Engine {
             if role == Some(Role::Skip) {
                 continue;
             }
+            // An Off track goes quiet through its fader as a muted one does, then stops. A track
+            // in the middle of a take stays on until the take ends (only an undo can get here:
+            // the session refuses the switch while recording), so no audio is lost.
+            let taking = recording && t.params.armed && (t.rec.is_some() || self.midi_target == Some(t.id));
+            let off = t.params.off && !taking;
+            if off && (t.dormant || snap_gains || iso.is_some() || t.faded_out()) {
+                t.sleep_block(n, &transport);
+                if self.analyzer_target == Some(t.id) {
+                    for _ in 0..n {
+                        let _ = self.analyzer_tx.push(0.0);
+                    }
+                }
+                continue;
+            }
+            if t.dormant {
+                t.wake(if snap_gains { 0 } else { track_off::resume_frames(sr) });
+            }
             let tap = role == Some(Role::Tap);
             let fx = !tap || iso.map(|i| i.effects).unwrap_or(true);
             let (l, r) = (&mut t.l[..n], &mut t.r[..n]);
@@ -1621,6 +1650,7 @@ impl Engine {
                         for m in &self.live {
                             if self.midi_thru && t.midi.len() < t.midi.capacity() {
                                 t.midi.push(*m);
+                                track_off::note_held(&mut t.live_held, m.data);
                             }
                             if recording && p.armed && pos >= capture_from && pos < capture_end {
                                 let _ = self.midi_rec.push((pos, m.data));
@@ -1640,6 +1670,8 @@ impl Engine {
                     }
                 }
             }
+
+            track_off::fade_in(&mut t.resume_left, track_off::resume_frames(sr), l, r);
 
             if fx {
                 t.eq_state.process(&t.eq, l, r);
@@ -1672,12 +1704,13 @@ impl Engine {
             let tap_delay = |d: u32| if live { 0 } else { d };
             let pdc_fade = (pdc::FADE_SECS * sr) as u32;
 
-            let audible = match role {
-                Some(Role::Member { heard }) => heard,
-                Some(Role::Key) => !p.mute,
-                Some(_) => true,
-                None => !p.mute && (!any_solo || p.solo),
-            };
+            let audible = !off
+                && match role {
+                    Some(Role::Member { heard }) => heard,
+                    Some(Role::Key) => !p.mute,
+                    Some(_) => true,
+                    None => !p.mute && (!any_solo || p.solo),
+                };
             // Pre-fader sends tap the signal after the plug-ins, before the fader and pan. Mute
             // and solo still silence them, as in Logic.
             for k in 0..SEND_SLOTS {

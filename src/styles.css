@@ -7511,3 +7511,69 @@ canvas.pr-cursor-line {
 .step-seq:focus {
   outline: none;
 }
+
+/* ---- Track On/Off ---------------------------------------------------------------------------
+   The power glyph is lit while the track plays. "on" on the button means the track is off, shown
+   inverted so it stands out on the dimmed header in every theme. */
+
+.th-name-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.th-name-row .th-name,
+.th-name-row .th-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.track-header.tier-compact .th-name-row,
+.track-header.tier-tiny .th-name-row {
+  flex: 1 1 auto;
+}
+
+.tbtn.power {
+  color: var(--accent);
+}
+
+.tbtn.power.on {
+  background: var(--text);
+  color: var(--header);
+}
+
+.th-name-row .tbtn.power {
+  flex: none;
+  width: 18px;
+  height: 16px;
+}
+
+.track-header.tier-tiny .th-buttons .tbtn.power svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* The power button stays at full strength: it's what turns the track back on. */
+.track-header.is-off > :not(.th-main),
+.track-header.is-off .th-name,
+.track-header.is-off .th-buttons > :not(.power) {
+  opacity: 0.45;
+}
+
+.strip-buttons .tbtn.power {
+  width: 58px;
+  height: 17px;
+}
+
+.strip.is-off > * {
+  opacity: 0.45;
+}
+
+.strip.is-off > .strip-buttons {
+  opacity: 1;
+}
+
+.strip.is-off > .strip-buttons .btn-row {
+  opacity: 0.45;
+}

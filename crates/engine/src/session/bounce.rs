@@ -198,12 +198,13 @@ impl Session {
 
     /// The tracks Export All Tracks writes: every audio and instrument track, plus each summing
     /// stack as its mixed output (its subtracks are also written on their own). Folder stacks
-    /// have no channel strip, so they get no file. Tracks with nothing to play are left out.
+    /// have no channel strip, so they get no file. Tracks with nothing to play are left out,
+    /// and so are tracks that are off.
     pub fn export_targets(&self) -> Vec<Id> {
         self.project
             .tracks
             .iter()
-            .filter(|t| t.kind != TrackKind::Folder && self.content_span(t.id).is_some())
+            .filter(|t| t.kind != TrackKind::Folder && !self.project.is_off(t.id) && self.content_span(t.id).is_some())
             .map(|t| t.id)
             .collect()
     }
@@ -266,6 +267,7 @@ impl Session {
     /// region is exported too.
     pub fn export_region(&mut self, id: Id, path: &Path, o: &RenderOptions, progress: &mut dyn FnMut(f64)) -> Result<BounceResult> {
         let (track, idx) = self.find_region(id).ok_or_else(|| anyhow!("no such region"))?;
+        self.check_on(&[track])?;
         let mut t = self.project.track(track).unwrap().clone();
         let r = Region { muted: false, ..t.regions[idx].clone() };
         let (from, to) = crate::region_params::bounds(&r, &self.tempo_map());
@@ -301,6 +303,7 @@ impl Session {
                 }
             }
         }
+        self.check_on(&jobs.iter().map(|j| j.0).collect::<Vec<_>>())?;
         let sr = self.sample_rate();
         let tail = if o.tail { self.tail_frames(IN_PLACE_TAIL_SECS) } else { 0 };
         let n = jobs.len() as f64;

@@ -2,6 +2,7 @@ import { pixelRatio } from "../uiScale";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { act, actMade, type Id, type Project, type Region, type Track } from "../api";
 import { getState, liveTakes, onTick, setState, currentTick, useStore } from "../store";
+import { offTracks } from "../trackOff";
 import { drawWave, ensureWave, waveCache } from "../waveform";
 import { coalesced, framePos, onFrame } from "../frame";
 import { PEAK_BUCKET, samplesPerBeat, snapPos, toBbt } from "../time";
@@ -495,6 +496,7 @@ export function Arrange() {
     // In the No Overlap and Shuffle drag modes, where the drag will leave every region.
     let outcome: Map<Id, Outcome> | null = null;
     // Where each region draws, with any drag in progress applied.
+    const off = offTracks(project.tracks);
     const place = (r: Region, i: number, still = false) => {
       let start = r.start;
       let length = r.length;
@@ -536,7 +538,8 @@ export function Arrange() {
       const y = (lane !== undefined ? newLaneTop(lane) : layout.tops[ti] - vp.top) + 1;
       // Open take folders' rows sit below the lane; regions keep the lane's own height.
       const th = lane !== undefined ? newLaneH : layout.heights[ti] - layout.takeRows[ti];
-      return { start, length, loop, ti, lane, shift, fades, y, th, hidden: lane === undefined && project.tracks[ti].hidden, gone };
+      const dim = project.tracks[ti].hidden || off.has(project.tracks[ti].id);
+      return { start, length, loop, ti, lane, shift, fades, y, th, hidden: lane === undefined && dim, gone };
     };
     const mode = project.drag_mode ?? "overlap";
     if (drag && !drag.copy && mode !== "overlap" && mode !== "xfade") {

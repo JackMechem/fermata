@@ -53,6 +53,7 @@ CHECKS=(
   "restore_check dir"
   "soak_check dir"
   "rt_alloc_check dir"
+  "onoff_check tone dir"
 )
 # A check that hangs (a transport that never stops, say) fails instead of stalling CI.
 TIMEOUT=${HEADLESS_CHECK_TIMEOUT:-600}
