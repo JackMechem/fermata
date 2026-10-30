@@ -2,7 +2,7 @@
 
 What's left, in the order it matters for a usable release. Each stage builds on the one before.
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
-of what exists are in the [User Guide](docs/USER_GUIDE.md#19-known-limitations).
+of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
 ## Open items (2026-10-29)
 
