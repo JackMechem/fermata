@@ -19,6 +19,8 @@ import { clipResetTargets, isClip, peakText, reducesGain } from "../stripMeters"
 import { resetClipIndicators, stripSettingMenu } from "../stripSettings";
 import { fmt } from "../keymap";
 import { stripLearnMenu } from "../learn";
+import { canAssignVca, vcaOffset } from "../vca";
+import { useVcas, VcaSlot } from "./Vca";
 
 const PAN = { type: "pan" } as const;
 
@@ -187,6 +189,9 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
   const [autoPan, panTouch] = useAutomation(track, PAN, track?.pan ?? 0);
   // Like Logic, a strip with a dynamics effect shows its gain reduction beside the meter.
   const dynamics = !folder && !track?.frozen && inserts.some((p) => !!p && reducesGain(fxInfo(p.plugin_id)?.meters ?? []));
+  // A strip on a VCA shows where it really plays on its fader.
+  const vcas = useVcas();
+  const vca = track && canAssignVca(track.kind) && track.vca != null ? vcaOffset(vcas, track.vca).db : undefined;
   const settingMenu = async (x: number, y: number, minWidth?: number) => {
     if (folder) return;
     openMenu(x, y, await stripSettingMenu(id, name), minWidth);
@@ -279,6 +284,8 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
         {isMaster || folder ? <div className="slot static output">{isMaster ? "Output 1–2" : output}</div> : <OutputSlot track={track} />}
       </div>
 
+      <div className="strip-section">{track && canAssignVca(track.kind) ? <VcaSlot track={track} /> : <div className="slot static" />}</div>
+
       <div className="strip-pan">
         {/* Logic puts the automation mode right above the pan knob. */}
         {track && automatable(track) ? <AutoModeButton track={track} /> : <div className="auto-mode-spacer" />}
@@ -300,7 +307,7 @@ export function ChannelStrip({ track, selected }: { track: Track | null; selecte
       </div>
 
       <div className="strip-fader" ref={faderBox}>
-        <Fader db={autoVolume} onChange={setVolume} height={faderHeight} {...(isMaster ? {} : volumeTouch)} />
+        <Fader db={autoVolume} onChange={setVolume} height={faderHeight} vca={vca} {...(isMaster ? {} : volumeTouch)} />
         {folder ? (
           <div style={{ width: 11 }} />
         ) : (

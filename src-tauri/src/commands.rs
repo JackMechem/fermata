@@ -1529,3 +1529,51 @@ pub fn update_controller_assignment(state: State<AppState>, index: usize, mode: 
 pub fn delete_controller_assignment(state: State<AppState>, index: usize) -> R<Vec<AssignmentRow>> {
     with(&state, |s| s.delete_controller_assignment(index).map(|_| s.controller_assignments())).map_err(|e| e.to_string())
 }
+
+// ---- VCA faders and pre-fader side-chains ---------------------------------------------------
+
+/// Mixer › Options › Create New VCA (or a strip's VCA slot › New VCA…): a new VCA, with
+/// `tracks` assigned to it. Returns its id.
+#[tauri::command]
+pub fn create_vca(state: State<AppState>, tracks: Vec<Id>) -> R<Made> {
+    edit_made(&state, "Create New VCA", false, |s| Ok(vec![s.create_vca(&tracks)]))
+}
+
+#[tauri::command]
+pub fn delete_vca(state: State<AppState>, id: Id) -> Snapshot {
+    edit(&state, "Delete VCA", None, false, |s| s.delete_vca(id))
+}
+
+/// Changes a VCA's name, colour, level or mute. A fader drag is one undo step; mute is a
+/// performance switch, not an edit, as on a track.
+#[tauri::command]
+pub fn update_vca(state: State<AppState>, id: Id, patch: daw_engine::session::VcaPatch) -> Snapshot {
+    let label = match (&patch.level_db, &patch.name, &patch.color) {
+        (Some(_), ..) => Some(("VCA Level", Some(format!("vca:{id}:level")))),
+        (_, Some(_), _) => Some(("Rename VCA", None)),
+        (_, _, Some(_)) => Some(("VCA Color", None)),
+        _ => None,
+    };
+    match label {
+        Some((label, key)) => edit(&state, label, key, false, |s| s.update_vca(id, patch)),
+        None => snap(&state, |s| s.update_vca(id, patch)),
+    }
+}
+
+/// Assigns tracks to a VCA (null: No VCA).
+#[tauri::command]
+pub fn assign_vca(state: State<AppState>, tracks: Vec<Id>, vca: Option<Id>) -> R<Snapshot> {
+    try_edit(&state, if vca.is_some() { "Assign VCA" } else { "Remove from VCA" }, None, false, |s| s.assign_vca(&tracks, vca))
+}
+
+/// Assigns a VCA to another VCA (null: none); refuses loops.
+#[tauri::command]
+pub fn set_vca_parent(state: State<AppState>, id: Id, parent: Option<Id>) -> R<Snapshot> {
+    try_edit(&state, "Assign VCA", None, false, |s| s.set_vca_parent(id, parent))
+}
+
+/// Takes a built-in effect's side-chain key before (`pre`) or after the source's fader.
+#[tauri::command]
+pub fn set_sidechain_pre(state: State<AppState>, track: Id, slot: i64, pre: bool) -> R<Snapshot> {
+    try_edit(&state, "Side Chain", None, false, |s| s.set_sidechain_pre(track, slot_index(slot), pre))
+}

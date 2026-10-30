@@ -79,6 +79,10 @@ pub struct PluginSlot {
     /// effect's detector listens to its own input).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sidechain: Option<Id>,
+    /// The side-chain key is taken before the source's fader (still silenced by its mute)
+    /// instead of after it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub sidechain_pre: bool,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -469,6 +473,9 @@ pub struct Track {
     /// (pre-fader), and its plug-ins are unloaded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub frozen: Option<FreezeInfo>,
+    /// The VCA whose level offsets this track's fader (see `vca.rs`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vca: Option<Id>,
 }
 
 /// A frozen track's freeze file.
@@ -658,6 +665,24 @@ pub struct Project {
     /// The Tracks area's drag mode (Logic's Drag pop-up): what edits do to the regions they meet.
     #[serde(default)]
     pub drag_mode: DragMode,
+    /// The VCA faders, in the Mixer's order.
+    #[serde(default)]
+    pub vcas: Vec<Vca>,
+}
+
+/// A VCA fader (Logic's VCA strip). It passes no audio: its level offsets the faders of the
+/// strips assigned to it without moving them, and its mute mutes them. A VCA can itself be
+/// assigned to another (`parent`), whose level and mute then reach its strips too.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Vca {
+    pub id: Id,
+    pub name: String,
+    pub color: String,
+    /// -96 (silence) ..= +6 dB.
+    pub level_db: f32,
+    pub mute: bool,
+    #[serde(default)]
+    pub parent: Option<Id>,
 }
 
 pub const INSERT_SLOTS: usize = 8;
@@ -695,6 +720,7 @@ impl Project {
             tempo_map: Vec::new(),
             signatures: Vec::new(),
             drag_mode: DragMode::Overlap,
+            vcas: Vec::new(),
         }
     }
 
@@ -1089,6 +1115,7 @@ mod routing_tests {
             automation: Vec::new(),
             auto_mode: AutoMode::Read,
             frozen: None,
+            vca: None,
         });
         id
     }
@@ -1137,7 +1164,7 @@ mod routing_tests {
     }
 
     fn keyed(p: &mut Project, track: Id, source: Id) {
-        let slot = PluginSlot { uid: p.alloc_id(), plugin_id: "builtin:noise-gate".into(), name: "Noise Gate".into(), bypass: false, state: None, params: Vec::new(), sidechain: Some(source) };
+        let slot = PluginSlot { uid: p.alloc_id(), plugin_id: "builtin:noise-gate".into(), name: "Noise Gate".into(), bypass: false, state: None, params: Vec::new(), sidechain: Some(source), sidechain_pre: false };
         p.track_mut(track).unwrap().inserts = vec![Some(slot)];
     }
 

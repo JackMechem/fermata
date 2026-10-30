@@ -119,7 +119,8 @@ fn store_value(slot: &mut PluginSlot, id: u32, v: f32) {
 impl Session {
     /// A built-in effect instance for a slot, with its saved values and side-chain.
     pub(super) fn instantiate_builtin(&mut self, info: &EffectInfo, slot: &PluginSlot) -> Plugin {
-        let b = BuiltinDsp::new(info, self.sample_rate() as f32, &slot.params, slot.sidechain);
+        let mut b = BuiltinDsp::new(info, self.sample_rate() as f32, &slot.params, slot.sidechain);
+        b.key_pre = slot.sidechain_pre;
         let shared = b.shared();
         shared.set_watched(self.fx_watch.contains(&slot.uid));
         self.fx.insert(slot.uid, shared);
@@ -244,6 +245,23 @@ impl Session {
         Ok(())
     }
 
+    /// Takes a built-in effect's side-chain key before (`pre`) or after the source's fader.
+    /// The key leaves the source at the same point either way, so delay compensation is
+    /// unchanged.
+    pub fn set_sidechain_pre(&mut self, track: Id, slot: usize, pre: bool) -> Result<()> {
+        self.check_unfrozen(&[track])?;
+        let s = self.slot_ref(track, slot).and_then(|s| s.as_mut()).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
+        let info = fx::find(&s.plugin_id).ok_or_else(|| anyhow!("{} isn't a built-in effect", s.name))?;
+        if !info.sidechain {
+            return Err(anyhow!("{} has no side-chain input", info.name));
+        }
+        s.sidechain_pre = pre;
+        let uid = s.uid;
+        self.send(Cmd::SidechainPre { track, uid, pre });
+        self.dirty = true;
+        Ok(())
+    }
+
     /// Starts or stops sending an instance's meters and live values with each tick (while its
     /// panel is open).
     pub fn watch_builtin(&mut self, uid: Id, on: bool) {
@@ -295,6 +313,9 @@ impl Session {
         }
         if had.sidechain != want.sidechain {
             self.send(Cmd::Sidechain { track, uid: want.uid, source: want.sidechain });
+        }
+        if had.sidechain_pre != want.sidechain_pre {
+            self.send(Cmd::SidechainPre { track, uid: want.uid, pre: want.sidechain_pre });
         }
     }
 

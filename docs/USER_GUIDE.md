@@ -1109,9 +1109,9 @@ The editor's own keys apply after you click in it; elsewhere the usual ones do. 
 ## 12. Mixing
 
 Open the Mixer with X. It shows a channel strip for every track (stacks included), then the
-auxes, then Stereo Out. The **Audio**, **Inst** and **Aux** buttons filter the strips. Hidden
-tracks appear only in hide mode. The Inspector shows the selected track's strip and Stereo
-Out.
+auxes, then the [VCA strips](#vca-faders), then Stereo Out. The **Audio**, **Inst** and **Aux**
+buttons filter the strips. Hidden tracks appear only in hide mode. The Inspector shows the
+selected track's strip and Stereo Out.
 
 ### The channel strip
 
@@ -1125,10 +1125,11 @@ From top to bottom:
 | **Audio FX** | Insert slots: the filled ones plus one empty slot (up to 8). The label shows the strip's plug-in latency. |
 | **Sends** | Up to 8 send slots. |
 | **Output** | Stereo Out, the summing stack, or an aux. |
+| **VCA** | The VCA fader that controls the strip (see [VCA faders](#vca-faders)). |
 | **Automation mode** | Off, Read, Touch, Latch, Write (see [Automation](#13-automation)). |
 | **Pan** | Drag vertically (Shift for fine); double-click to centre. |
 | **Readouts** | Volume in dB and the clip indicator: the highest peak since you last reset it, in dBFS, red once a peak went over 0 dBFS. Click it to reset it, Alt-click to reset every strip's (or use the key command **Reset All Clip Indicators**, unassigned at first). |
-| **Fader and meter** | Drag the fader (Shift for fine), double-click for 0 dB. -96 to +6 dB. The meter holds peaks for 2 s, and its top lights red while the clip indicator is on. With a Compressor, Limiter, Noise Gate or De-Esser on the strip, a thin **gain-reduction meter** beside it grows down from the top as the first one that isn't bypassed reduces the gain (up to 30 dB). |
+| **Fader and meter** | Drag the fader (Shift for fine), double-click for 0 dB. -96 to +6 dB. On a strip assigned to a VCA, an outlined cap marks where the strip really plays (its fader plus the VCA). The meter holds peaks for 2 s, and its top lights red while the clip indicator is on. With a Compressor, Limiter, Noise Gate or De-Esser on the strip, a thin **gain-reduction meter** beside it grows down from the top as the first one that isn't bypassed reduces the gain (up to 30 dB). |
 | **M S R I** | Mute, Solo, Record Enable, Input Monitoring. |
 | **Name** | With the track colour. Right-click it for the channel strip settings menu. |
 
@@ -1259,7 +1260,11 @@ in the slot menu and the Library.
 - **Side Chain:** pick a track in the Side Chain pop-up and its post-fader output, instead of
   the effect's own input, drives the detector: a kick opening a gate on a bass, a vocal ducking
   a pad. Pick **None** to go back. The source plays before the effect's track, loops are refused,
-  and muting the source (or pulling its fader down) silences the key, as in Logic. Bounces and
+  and muting the source (or pulling its fader down) silences the key, as in Logic.
+  **Pre / Post** beside the pop-up picks where the key leaves the source: **Post** (the
+  default) after its fader and pan, **Pre** before them, so a trigger track with its fader all
+  the way down still keys the effect. A pre-fader key still goes silent when the source is
+  muted (or soloed out), like a pre-fader send. Delay compensation is the same either way. Bounces and
   freezes of the effect's track play the source along, unheard, so the key is right. The key is
   taken as the source leaves its plug-ins; if the source's own plug-ins add latency, the key
   arrives that much late. The Compressor, Noise Gate and De-Esser have a side-chain.
@@ -1531,6 +1536,34 @@ mute/solo and an output. It plays whatever its bus receives.
   it audible. Muting an aux silences everything arriving there.
 - Feedback loops are refused with a message (sends that would make one are greyed out).
   Deleting an aux clears the sends and outputs that pointed at it (undoable).
+
+### VCA faders
+
+A VCA fader controls the level of a set of strips without passing any audio, as in Logic: the
+strips keep their own fader positions (and their balance), and the VCA moves them all.
+
+- **Create one** with **Options › Create New VCA** in the Mixer's bar, or **New VCA…** in a
+  strip's **VCA** slot (under Output), which also assigns that strip (or every selected strip,
+  when it is one of them). New VCAs are named "VCA N" and appear after the auxes, before Stereo
+  Out.
+- **Assign strips** in their VCA slot: pick a VCA, or **No VCA**. Audio, instrument, aux and
+  summing stack strips have a VCA slot; folder stacks and Stereo Out don't.
+- **The VCA strip** has a fader (-96 to +6 dB, double-click for 0 dB), its level readout, a
+  **Mute** button that mutes every strip on it, and its name (double-click to rename). The slot
+  at the top says how many strips (and VCAs) it controls.
+- **What it does:** a strip plays at its own fader plus the VCA's level; a VCA at the bottom
+  silences its strips. The strip's fader shows an outlined cap where it really plays, and its
+  tooltip gives the offset. Volume automation on a strip still works: the VCA offsets the
+  automated level too.
+- **Nested VCAs:** a VCA strip has a VCA slot of its own. Assign it to another VCA and that
+  VCA's level and mute reach its strips as well. Loops are refused.
+- **Right-click a VCA strip** for Rename VCA, VCA Color, Create New VCA and **Delete VCA** (its
+  strips keep their faders and leave the VCA; VCAs nested in it move up to its parent).
+- Level, name, colour, assignments and deleting are undoable; the VCA's Mute, like a track's,
+  is a switch and not an undo step.
+- Bounces, exports with the fader on and Bounce in Place play the VCA's level. A frozen track
+  is frozen before its fader, so its VCA keeps working after freezing.
+- VCA levels can't be automated yet.
 
 ### Plug-in delay compensation
 

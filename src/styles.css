@@ -6905,3 +6905,62 @@ canvas.pr-cursor-line {
 .ctl-row.unavailable > span {
   color: var(--faint);
 }
+
+/* ---- VCA faders and pre-fader side-chains ------------------------------------------------- */
+
+/* Where a strip on a VCA really plays: an outline of the fader cap. */
+.fader-vca {
+  position: absolute;
+  left: 2px;
+  width: 22px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--accent);
+  pointer-events: none;
+}
+
+.slot.vca-slot {
+  cursor: default;
+}
+
+.slot.vca-slot:hover {
+  background: var(--slot-empty-hi);
+}
+
+.slot.vca-slot.assigned {
+  background: var(--slot-static);
+  color: var(--text);
+  box-shadow: var(--slot-shadow);
+}
+
+.slot.vca-slot.assigned:hover {
+  background: var(--slot-static-hi);
+}
+
+/* A VCA strip has no inserts or sends; this space keeps its fader from towering over the
+   channel strips' faders. */
+.vca-spacer {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.vca-rename {
+  width: 100%;
+  font: inherit;
+  text-align: center;
+  background: var(--field);
+  border: 1px solid var(--accent);
+  border-radius: 3px;
+  outline: none;
+}
+
+.fx-key-tap {
+  padding: 1px;
+}
+
+.fx-key-tap button {
+  min-width: 0;
+  height: 18px;
+  padding: 0 7px;
+  font-size: 11px;
+}

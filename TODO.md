@@ -98,8 +98,8 @@ Goal: finish a mix and deliver it without leaving Fermata.
 - [ ] Several automation lanes per track, automation curves, automation for folder stacks and
       Stereo Out
 - [ ] Undo for parameter changes made in a VST3's own editor
-- [ ] VCA faders
-- [ ] A pre-fader side-chain option for built-in effects
+- [x] VCA faders
+- [x] A pre-fader side-chain option for built-in effects
 - [x] Clip indicators and a gain-reduction meter on the strip
 - [x] FLAC and AIFF bounce; export the selected tracks
 - [ ] MP3 and AAC bounce (needs an encoder whose licence suits)

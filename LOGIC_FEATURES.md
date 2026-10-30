@@ -289,7 +289,7 @@ hosting, automation and undo. This stage is mostly done.
 ### Mixer (p. 539–620)
 
 - [x] A channel strip for every track plus Stereo Out (p. 539)
-- [~] Channel strip types (p. 541). *Audio, instrument, aux, summing stack and Stereo Out; no MIDI, output, master or VCA strips.*
+- [~] Channel strip types (p. 541). *Audio, instrument, aux, summing stack, VCA and Stereo Out; no MIDI, output or master strips.*
 - [x] Filter strips by type (Audio, Inst, Aux) (p. 542)
 - [x] Volume fader with Logic's taper (p. 552)
 - [x] Level meters with a 2 s peak hold (p. 551–553)
@@ -573,9 +573,9 @@ Audio File Editor (p. 499–523)
 ### Mixing: professional (p. 539–620)
 
 - [x] Plug-in delay compensation (p. 573–575)
-- [~] Side-chain inputs for plug-ins (p. 570). *For the built-in Compressor, Noise Gate and De-Esser, keyed post-fader from any track; VST3 side-chain buses aren't connected.*
+- [~] Side-chain inputs for plug-ins (p. 570). *For the built-in Compressor, Noise Gate and De-Esser, keyed post- or pre-fader from any track; VST3 side-chain buses aren't connected.*
 - [ ] Multi-output instruments (p. 592)
-- [ ] VCA faders and VCA groups (p. 603–604)
+- [~] VCA faders and VCA groups (p. 603–604). *VCA strips with level, mute, names, colours and nesting, a VCA slot on each strip and an offset mark on its fader; no VCA automation, VCA solo, or VCAs made from groups.*
 - [~] Groups (p. 598–603). *Volume, pan, mute, solo, record, selection and editing links, plus an on/off clutch; missing are several groups per strip, a Groups window, automation, send and colour links, and copy/paste of group settings.*
 - [ ] Enable or disable all groups (⇧G) (p. 602)
 - [ ] Solo safe (p. 558)

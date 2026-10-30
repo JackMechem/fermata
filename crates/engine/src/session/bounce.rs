@@ -119,13 +119,13 @@ impl Session {
     }
 
     /// The isolate settings for rendering `tap` through its channel strip. Its subtracks play
-    /// unless they (or a stack between them and `tap`) are muted; `tap` itself always plays,
+    /// unless they (or a stack between them and `tap`, or their VCA) are muted; `tap` itself always plays,
     /// whatever its mute and the project's solos say.
     pub fn isolate_track(&self, tap: Id, fader: bool, effects: bool) -> Isolate {
         let p = &self.project;
         let mut tracks = vec![(tap, true)];
         for d in p.descendants(tap) {
-            let muted = |id: Id| p.track(id).map(|t| t.mute).unwrap_or(false);
+            let muted = |id: Id| p.track(id).map(|t| t.mute || crate::vca::offset(&p.vcas, t.vca).1).unwrap_or(false);
             let mut heard = !muted(d);
             for a in p.ancestors(d).into_iter().take_while(|a| *a != tap) {
                 heard &= !muted(a);

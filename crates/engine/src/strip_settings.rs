@@ -43,6 +43,7 @@ impl StripSetting {
         let mut s = self.clone();
         for slot in s.instrument.iter_mut().chain(s.inserts.iter_mut().flatten()) {
             slot.sidechain = None;
+            slot.sidechain_pre = false;
         }
         // Trailing empty slots say nothing.
         while matches!(s.inserts.last(), Some(None)) {
@@ -114,7 +115,7 @@ mod tests {
     use super::*;
 
     fn slot(uid: u64, id: &str) -> PluginSlot {
-        PluginSlot { uid, plugin_id: id.into(), name: id.into(), bypass: false, state: Some("AAAA:BBBB".into()), params: vec![(1, 2.5)], sidechain: Some(7) }
+        PluginSlot { uid, plugin_id: id.into(), name: id.into(), bypass: false, state: Some("AAAA:BBBB".into()), params: vec![(1, 2.5)], sidechain: Some(7), sidechain_pre: false }
     }
 
     #[test]

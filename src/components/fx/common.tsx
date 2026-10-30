@@ -202,7 +202,8 @@ export function FxMeter({
 
 /**
  * The Side Chain pop-up: None, then every track with audio of its own (the effect's own track
- * left out). Picks the key source with `set_sidechain` (undoable; loops are refused).
+ * left out). Picks the key source with `set_sidechain` (undoable; loops are refused). With a
+ * source, Pre / Post picks where the key leaves it: before its fader or (the default) after.
  */
 export function FxSideChain({ uid }: { uid: Id }) {
   const project = useStore((s) => s.snap?.project);
@@ -210,6 +211,8 @@ export function FxSideChain({ uid }: { uid: Id }) {
   if (!project || !at) return null;
   const source = at.plugin.sidechain ?? null;
   const set = (src: Id | null) => act("set_sidechain", { track: at.track, slot: at.slot, source: src });
+  const pre = !!at.plugin.sidechain_pre;
+  const setPre = (on: boolean) => on !== pre && act("set_sidechain_pre", { track: at.track, slot: at.slot, pre: on });
   const name = source === null ? "None" : project.tracks.find((t) => t.id === source)?.name ?? "None";
   const open = (e: React.MouseEvent<HTMLButtonElement>) => {
     const items: MenuItem[] = [{ label: "None", checked: source === null, onClick: () => set(null) }, { separator: true }];
@@ -225,6 +228,16 @@ export function FxSideChain({ uid }: { uid: Id }) {
       <button className="fx-popup" onMouseDown={open} title="The track whose output drives the detector">
         {name}
       </button>
+      {source !== null && (
+        <span className="segmented fx-key-tap">
+          <button className={pre ? "on" : ""} onMouseDown={() => setPre(true)} title="Key from the source before its fader (its mute still silences it)">
+            Pre
+          </button>
+          <button className={pre ? "" : "on"} onMouseDown={() => setPre(false)} title="Key from the source after its fader">
+            Post
+          </button>
+        </span>
+      )}
     </span>
   );
 }

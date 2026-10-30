@@ -14,6 +14,8 @@ import { isLooped } from "../loops";
 import { toggleLoop } from "../ops";
 import { loadPlugin } from "../fxHost";
 import { DetachButton } from "./DetachButton";
+import { createVca, useVcas, VcaStrip } from "./Vca";
+import { openMenuAt } from "./Menu";
 
 function Disclosure({ title, children, initial = true }: { title: string; children: React.ReactNode; initial?: boolean }) {
   const [open, setOpen] = useState(initial);
@@ -116,6 +118,7 @@ export function Mixer() {
   const selected = useStore((s) => s.snap?.selected);
   const [filter, setFilter] = useState({ audio: true, instrument: true, aux: true });
   const showHidden = useStore((s) => s.showHidden);
+  const vcas = useVcas();
   if (!project) return null;
   const shown = project.tracks.filter((t) => (t.hidden ? showHidden : true) && (t.kind === "audio" || t.kind === "instrument" || t.kind === "aux" ? filter[t.kind] : true));
   // Auxes come after the tracks, as in Logic's mixer.
@@ -124,6 +127,9 @@ export function Mixer() {
     <div className="mixer">
       <div className="local-bar">
         <div className="local-menus">
+          <button className="local-menu" onMouseDown={(e) => openMenuAt(e.currentTarget, [{ label: "Create New VCA", onClick: () => createVca() }])}>
+            Options
+          </button>
           <span className="local-title">Mixer</span>
         </div>
         <div className="mixer-filters">
@@ -145,6 +151,10 @@ export function Mixer() {
         <div className="mixer-row">
           {tracks.map((t) => (
             <ChannelStrip key={t.id} track={t} selected={t.id === selected} />
+          ))}
+          {/* VCA strips come after the auxes, before Stereo Out, as in Logic. */}
+          {vcas.map((v) => (
+            <VcaStrip key={`vca-${v.id}`} vca={v} />
           ))}
           <div className="mixer-gap" />
           <ChannelStrip track={null} />

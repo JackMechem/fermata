@@ -246,8 +246,8 @@ mod tests {
     fn missing_plug_ins_stay_as_missing_slots() {
         let mut s = session("missing");
         let a = s.add_track(TrackKind::Audio, InputSel::Mono(0), None, None).unwrap();
-        let gone = PluginSlot { uid: 1, plugin_id: "/nowhere/Gone.vst3|0123456789ABCDEF".into(), name: "Gone".into(), bypass: false, state: Some("AAAA:".into()), params: Vec::new(), sidechain: None };
-        let st = StripSetting { inserts: vec![Some(gone), Some(PluginSlot { uid: 2, plugin_id: "builtin:limiter".into(), name: "Limiter".into(), bypass: false, state: None, params: Vec::new(), sidechain: Some(a) })], ..Default::default() };
+        let gone = PluginSlot { uid: 1, plugin_id: "/nowhere/Gone.vst3|0123456789ABCDEF".into(), name: "Gone".into(), bypass: false, state: Some("AAAA:".into()), params: Vec::new(), sidechain: None, sidechain_pre: false };
+        let st = StripSetting { inserts: vec![Some(gone), Some(PluginSlot { uid: 2, plugin_id: "builtin:limiter".into(), name: "Limiter".into(), bypass: false, state: None, params: Vec::new(), sidechain: Some(a), sidechain_pre: false })], ..Default::default() };
         s.paste_strip(&[a], &through_json(&st)).unwrap();
         let t = s.project.track(a).unwrap();
         let kept = t.inserts[0].as_ref().unwrap();

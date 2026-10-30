@@ -8,6 +8,13 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
+  fader offsets the level of every strip assigned to it without moving their faders (an
+  outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be
+  nested. Volume automation, bounces, exports and frozen tracks follow the VCA.
+- **Pre-fader side-chains:** a **Pre / Post** switch beside the Side Chain pop-up of the
+  Compressor, Noise Gate and De-Esser keys the effect from the source before its fader, so a
+  trigger track pulled all the way down still works. Existing projects stay post-fader.
 - **Channel strip settings:** the **Setting** button at the top of each strip (and the strip
   name's right-click menu) copies and pastes a strip's instrument, Audio FX (VST3 state
   included) and Channel EQ, resets the strip, and saves settings to load in any project.

@@ -249,6 +249,17 @@ subtrack, and solo follows routing (a soloed track keeps the auxes it feeds audi
 aux keeps its feeders audible). Because one track's change can reach others, stack members and
 solo changes resend every track (`push_all_params`).
 
+**VCA faders** (`Project::vcas`, `Track::vca`; rules in `vca.rs`, edits in `session/vca.rs`)
+never reach the engine as objects. `track_params` adds the VCA chain's offset (levels add up
+through nested VCAs; one at -96 dB silences) to the volume and to `stack_gain`, and its mute to
+`mute` and `stack_mute`, exactly like a folder's fader. So the fader smoothing covers VCA moves,
+volume and mute automation of a member combine with the VCA (the engine multiplies the
+automated value by `stack_gain`), and every render path (bounce, export, Bounce in Place with
+the fader on) follows it. A freeze is rendered before the fader, so a frozen track's VCA keeps
+working. VCA edits resend all tracks' parameters without re-solving delay compensation
+(`push_vca_params`); undo needs nothing extra, since `restore()` ends with `push_all_params`.
+VCA levels can't be automated: automation lanes belong to tracks, and a VCA has none.
+
 ### Routing and loop prevention
 
 `session/routing.rs` and `model.rs`:
@@ -486,7 +497,8 @@ Details of each stage:
   given its key signal when it has one (see [Built-in effects](#13-built-in-effects-and-presets)).
   A track that keys another (`keyed`) copies its signal as it leaves its plug-ins, before its
   compensation delay, into `key_l`/`key_r` and applies the fader gains to it, so the key is
-  post-fader.
+  post-fader. A pre-fader key (`keyed_pre`) is copied at the same point into
+  `pre_key_l`/`pre_key_r`, silenced by mute but not scaled by the fader.
 
 ### Plug-in delay compensation
 
@@ -1057,6 +1069,10 @@ it like any plug-in.
   panel or not, for the strip's gain-reduction meter (`take_gain_reduction`).
 - `Cmd::FxParam` sets a value; `Cmd::Sidechain` sets the key source, and `resolve_keys` keeps
   each effect's `key_idx` (the source's index in the track list) current.
+- `Cmd::SidechainPre` (`PluginSlot::sidechain_pre`) makes the key pre-fader: the source keeps a
+  second buffer (`keyed_pre`, `pre_key_l`/`pre_key_r`) copied at the same point as the
+  post-fader key but gated only by mute and solo, not scaled by the fader and pan. Both taps are
+  before the source's compensation delay, so the key path's delay compensation doesn't change.
 
 ### On the session side
 
@@ -1168,6 +1184,7 @@ it like any plug-in.
 | `session/insert_order.rs` | Reordering Audio FX inserts; moving or copying a plug-in to another strip. |
 | `session/strip_settings.rs` | Copy, paste, reset, save and load channel strip settings. |
 | `session/strip_meters.rs` | The clip indicators' peak holds (`PeakHolds`) and each strip's gain reduction for the tick. |
+| `session/vca.rs` | VCA edits: create, delete, level, mute, name, colour, assigning strips, nesting. |
 | `session/region_moves.rs` | Moving several regions as one edit. |
 | `session/tempo.rs` | Tempo and Signature track edits, Move MIDI Regions with Tempo. |
 | `session/region_params.rs` | Region inspector parameter edits, Apply Region Parameters, the playback list entries of regions with parameters, the snapshot's played notes. |
@@ -1189,6 +1206,7 @@ it like any plug-in.
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
 | `synth.rs` | Fermata Synth, the built-in polyphonic instrument. |
 | `transients.rs` | Onset detection for transient markers and Split at Transients. |
+| `vca.rs` | VCA faders: the offset and mute a strip gets from its VCA chain, loop checks. |
 | `sysvol.rs` | Linux only: the sound server's input volume for the recording device (input level check). |
 
 ### `crates/vst3-host/src`
@@ -1263,6 +1281,7 @@ it like any plug-in.
 | `fxHost.ts` | Built-in effect registry and panel windows, the plug-in and Channel EQ clipboard, the slot right-click menu. |
 | `stripSettings.ts` | The channel strip Setting menu: the strip clipboard, Reset, saving and loading; resetting clip indicators. |
 | `stripMeters.ts` | The clip indicator's readout and the gain-reduction meter's scale and fall; pure, tested. |
+| `vca.ts` | VCA offsets and loop checks for drawing the Mixer (mirrors `vca.rs`); pure, tested. |
 | `slotDrag.ts` | Dragging plug-ins between Audio FX slots. |
 | `waveform.ts` | Waveform fetching, caching and the four drawing styles. |
 | `eqMath.ts` | Channel EQ frequency response for drawing (mirrors `eq.rs`). |
@@ -1290,6 +1309,7 @@ it like any plug-in.
 | `Panels.tsx` | Inspector, Mixer, Library, Browser. |
 | `ChannelStrip.tsx` | A mixer channel strip. |
 | `Sends.tsx` | The channel strip's Sends section and Output slot. |
+| `Vca.tsx` | The Mixer's VCA strips and the channel strip's VCA slot. |
 | `Eq.tsx` | Channel EQ thumbnail and editor window. |
 | `Latency.tsx` | Plug-in latency options, readouts and the PDC status. |
 | `Controls.tsx` | Fader, knob, slider and meter controls, the gain-reduction meter. |

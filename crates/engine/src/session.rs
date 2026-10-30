@@ -60,6 +60,8 @@ mod strip_settings;
 mod marquee;
 mod controllers;
 pub use controllers::{controller_label, AssignmentRow};
+mod vca;
+pub use vca::VcaPatch;
 
 pub const BUILTIN_SYNTH: &str = "builtin:synth";
 const PROJECT_FILE: &str = "project.json";
@@ -461,6 +463,13 @@ impl Session {
             stack_mute |= a.mute;
             solo |= a.solo;
         }
+        // A VCA offsets the fader without moving it and mutes with it; like a folder's, both
+        // still apply when automation drives the track's own volume and mute.
+        let (vca_db, vca_mute) = crate::vca::offset(&p.vcas, t.vca.filter(|_| crate::vca::can_assign(t.kind)));
+        volume_db += vca_db;
+        stack_db += vca_db;
+        mute |= vca_mute;
+        stack_mute |= vca_mute;
         if t.kind.is_stack() {
             solo |= p.descendants(t.id).iter().filter_map(|id| p.track(*id)).any(|d| d.solo);
         }
@@ -1294,6 +1303,7 @@ impl Session {
             automation: Vec::new(),
             auto_mode: AutoMode::Read,
             frozen: None,
+            vca: None,
         };
         if kind == TrackKind::Instrument {
             let pid = instrument.unwrap_or_else(|| BUILTIN_SYNTH.to_string());
@@ -1303,7 +1313,7 @@ impl Session {
                 self.find_plugin(&pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into())
             };
             track.name = if pid == BUILTIN_SYNTH { format!("Inst {count}") } else { name.clone() };
-            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params: Vec::new(), sidechain: None });
+            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params: Vec::new(), sidechain: None, sidechain_pre: false });
         }
         let dsp = self.build_track(&track);
         let idx = index.unwrap_or(self.project.tracks.len()).min(self.project.tracks.len());
@@ -2390,7 +2400,7 @@ impl Session {
         // A built-in effect's values are all written out, so the project file reads clearly.
         let params = builtin.map(|i| i.params.iter().map(|p| (p.id, p.default)).collect()).unwrap_or_default();
         let uid = self.project.alloc_id();
-        let new_slot = PluginSlot { uid, plugin_id: plugin_id.to_string(), name, bypass: false, state: None, params, sidechain: None };
+        let new_slot = PluginSlot { uid, plugin_id: plugin_id.to_string(), name, bypass: false, state: None, params, sidechain: None, sidechain_pre: false };
         let ins = self.instantiate_slot(&new_slot)?;
         let old = self.slot_ref(track, slot).ok_or_else(|| anyhow!("no such slot"))?.replace(new_slot);
         if let Some(o) = old {

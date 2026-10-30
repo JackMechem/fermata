@@ -20,6 +20,8 @@ export interface PluginSlot {
   params?: [number, number][];
   /** The track keying a built-in effect's side-chain. */
   sidechain?: Id | null;
+  /** The side-chain key is taken before the source's fader (absent: after it). */
+  sidechain_pre?: boolean;
   /** A VST3's state, only in what `copy_plugin` returns (for the clipboard). */
   state?: string | null;
 }
@@ -167,6 +169,8 @@ export interface Track {
   auto_mode: AutoMode;
   /** Set while frozen: the track plays this render, its plug-ins unloaded. */
   frozen?: FreezeInfo | null;
+  /** The VCA whose level offsets this track's fader. */
+  vca?: Id | null;
 }
 
 export interface FreezeInfo {
@@ -263,6 +267,20 @@ export interface Project {
   signatures: SigEvent[];
   /** The Tracks area's drag mode: "xfade" crossfades audio regions that edits overlap. */
   drag_mode?: DragMode;
+  /** The VCA faders, in the Mixer's order. */
+  vcas?: Vca[];
+}
+
+/** A VCA fader: no audio, but its level offsets its strips' faders and its mute mutes them. */
+export interface Vca {
+  id: Id;
+  name: string;
+  color: string;
+  /** -96 (silence) to +6 dB. */
+  level_db: number;
+  mute: boolean;
+  /** The VCA this one is assigned to. */
+  parent: Id | null;
 }
 
 export type BitDepth = "int24" | "float32";

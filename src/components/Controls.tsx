@@ -4,7 +4,8 @@ import { gainReduction, meterLevels, peakHold, tickSeq, useStore } from "../stor
 import { onFrame } from "../frame";
 import { pixelRatio } from "../uiScale";
 import { theme } from "../theme";
-import { dbToFader, faderToDb, gainToDb } from "../time";
+import { dbToFader, faderToDb, formatDb, gainToDb } from "../time";
+import { effectiveDb } from "../vca";
 import { grFraction, isClip, nextGr } from "../stripMeters";
 
 /** Shared vertical/horizontal drag helper. Shift gives fine control, like Logic. */
@@ -34,7 +35,9 @@ export interface TouchProps {
   onTouchEnd?: () => void;
 }
 
-export function Fader({ db, onChange, height = 180, onTouchStart, onTouchEnd }: { db: number; onChange: (db: number) => void; height?: number } & TouchProps) {
+/** A channel fader. `vca` is the offset (dB) of the VCA the strip is assigned to: an outline
+ *  cap marks where the strip really plays, as in Logic. */
+export function Fader({ db, onChange, height = 180, onTouchStart, onTouchEnd, vca }: { db: number; onChange: (db: number) => void; height?: number; vca?: number } & TouchProps) {
   const pos = useRef(dbToFader(db));
   pos.current = dbToFader(db);
   const travel = height - 18;
@@ -52,10 +55,11 @@ export function Fader({ db, onChange, height = 180, onTouchStart, onTouchEnd }: 
         start(e, "y");
       }}
       onDoubleClick={() => onChange(0)}
-      title="Volume — double-click for 0 dB"
+      title={vca === undefined ? "Volume — double-click for 0 dB" : `Volume — double-click for 0 dB\nVCA ${formatDb(vca)} dB: plays at ${formatDb(effectiveDb(db, vca))} dB`}
     >
       <div className="fader-track" />
       <div className="fader-unity" style={{ top: (1 - dbToFader(0)) * travel + 9 }} />
+      {vca !== undefined && vca !== 0 && <div className="fader-vca" style={{ top: (1 - dbToFader(effectiveDb(db, vca))) * travel }} />}
       <div className="fader-cap" style={{ top: y }} />
     </div>
   );

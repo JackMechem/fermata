@@ -208,8 +208,8 @@ pub struct TrackParams {
     pub output: Option<Id>,
     /// Per send slot: the aux it feeds and at what gain.
     pub sends: [Option<SendParams>; SEND_SLOTS],
-    /// The part of `volume` and `mute` that comes from the folder stacks the track is in, which
-    /// still applies when automation drives the track's own volume and mute.
+    /// The part of `volume` and `mute` that comes from the folder stacks the track is in and
+    /// its VCA, which still applies when automation drives the track's own volume and mute.
     pub stack_gain: f32,
     pub stack_mute: bool,
 }
@@ -268,6 +268,10 @@ pub struct TrackDsp {
     keyed: bool,
     key_l: Vec<f32>,
     key_r: Vec<f32>,
+    /// Like `keyed`, for side-chains that take the signal before the fader.
+    keyed_pre: bool,
+    pre_key_l: Vec<f32>,
+    pre_key_r: Vec<f32>,
 }
 
 impl TrackDsp {
@@ -305,6 +309,9 @@ impl TrackDsp {
             keyed: false,
             key_l: vec![0.0; MAX_BLOCK],
             key_r: vec![0.0; MAX_BLOCK],
+            keyed_pre: false,
+            pre_key_l: vec![0.0; MAX_BLOCK],
+            pre_key_r: vec![0.0; MAX_BLOCK],
         }
     }
 
@@ -400,6 +407,8 @@ pub enum Cmd {
     FxParam { track: Id, uid: Id, id: u32, value: f32 },
     /// Which track keys a built-in effect's side-chain (None: it listens to its input).
     Sidechain { track: Id, uid: Id, source: Option<Id> },
+    /// Whether a built-in effect's side-chain key is taken before the source's fader.
+    SidechainPre { track: Id, uid: Id, pre: bool },
 }
 
 pub enum Garbage {
@@ -726,12 +735,15 @@ pub fn mix_regions(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32]
 }
 
 /// The side-chain signal for a built-in effect keyed by the track at `idx` (played earlier in
-/// the block): its post-fader output, or None when there is none (no source, or one an
-/// isolated render leaves out).
-fn key_signal<'a>(tracks: &'a [Box<TrackDsp>], idx: Option<usize>, iso: Option<&Isolate>, n: usize) -> crate::fx::Key<'a> {
+/// the block): its post-fader output (or with `pre`, its signal before the fader), or None when
+/// there is none (no source, or one an isolated render leaves out).
+fn key_signal<'a>(tracks: &'a [Box<TrackDsp>], idx: Option<usize>, pre: bool, iso: Option<&Isolate>, n: usize) -> crate::fx::Key<'a> {
     let src = tracks.get(idx?)?;
-    if !src.keyed || src.kind == TrackKind::Folder || iso.map(|i| i.role(src.id) == Role::Skip).unwrap_or(false) {
+    if !(if pre { src.keyed_pre } else { src.keyed }) || src.kind == TrackKind::Folder || iso.map(|i| i.role(src.id) == Role::Skip).unwrap_or(false) {
         return None;
+    }
+    if pre {
+        return Some((&src.pre_key_l[..n], &src.pre_key_r[..n]));
     }
     Some((&src.key_l[..n], &src.key_r[..n]))
 }
@@ -864,6 +876,7 @@ impl Engine {
     fn resolve_keys(&mut self) {
         for t in &mut self.tracks {
             t.keyed = false;
+            t.keyed_pre = false;
         }
         let n = self.tracks.len();
         for i in 0..=n {
@@ -872,13 +885,18 @@ impl Engine {
                 let slots = if i < n { &self.tracks[i].inserts } else { &self.master_inserts };
                 let Some(InsertDsp { plugin: Plugin::Builtin(b), .. }) = &slots[k] else { continue };
                 let key = b.key;
+                let pre = b.key_pre;
                 let idx = key.and_then(|id| self.tracks[..i].iter().position(|t| t.id == id));
                 let slots = if i < n { &mut self.tracks[i].inserts } else { &mut self.master_inserts };
                 if let Some(InsertDsp { plugin: Plugin::Builtin(b), .. }) = &mut slots[k] {
                     b.key_idx = idx;
                 }
                 if let Some(j) = idx {
-                    self.tracks[j].keyed = true;
+                    if pre {
+                        self.tracks[j].keyed_pre = true;
+                    } else {
+                        self.tracks[j].keyed = true;
+                    }
                 }
             }
         }
@@ -1135,6 +1153,12 @@ impl Engine {
             Cmd::Sidechain { track, uid, source } => {
                 if let Some(b) = self.builtin_mut(track, uid) {
                     b.key = source;
+                }
+                self.resolve_keys();
+            }
+            Cmd::SidechainPre { track, uid, pre } => {
+                if let Some(b) = self.builtin_mut(track, uid) {
+                    b.key_pre = pre;
                 }
                 self.resolve_keys();
             }
@@ -1546,7 +1570,7 @@ impl Engine {
                 if !ins.bypass && ll_skip & (1 << k) == 0 {
                     match &mut ins.plugin {
                         Plugin::Builtin(b) => {
-                            let key = key_signal(before, b.key_idx, iso, n);
+                            let key = key_signal(before, b.key_idx, b.key_pre, iso, n);
                             b.process(l, r, key, &fx_context(&transport));
                         }
                         p => p.process(l, r, &[], &transport),
@@ -1611,6 +1635,14 @@ impl Engine {
             if t.keyed {
                 t.key_l[..n].copy_from_slice(l);
                 t.key_r[..n].copy_from_slice(r);
+            }
+            // A pre-fader key ignores the fader and pan but, like a pre-fader send, not mute.
+            if t.keyed_pre {
+                let g = if audible { 1.0 } else { 0.0 };
+                for i in 0..n {
+                    t.pre_key_l[i] = l[i] * g;
+                    t.pre_key_r[i] = r[i] * g;
+                }
             }
             if let (true, Some(d)) = (delayed && pdc.output > 0, &t.delay) {
                 d.read(pdc.output as usize, l, r);
@@ -1683,7 +1715,7 @@ impl Engine {
         for ins in self.master_inserts.iter_mut().flatten().filter(|_| master_fx) {
             if !ins.bypass {
                 match &mut ins.plugin {
-                    Plugin::Builtin(b) => b.process(bl, br, key_signal(&self.tracks, b.key_idx, None, n), &fx_context(&transport)),
+                    Plugin::Builtin(b) => b.process(bl, br, key_signal(&self.tracks, b.key_idx, b.key_pre, None, n), &fx_context(&transport)),
                     p => p.process(bl, br, &[], &transport),
                 }
                 check_output(&self.status, ins, bl, br);

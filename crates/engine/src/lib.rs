@@ -30,6 +30,7 @@ pub mod sysvol;
 pub mod takes;
 pub mod tempo;
 pub mod transients;
+pub mod vca;
 pub mod wav_repair;
 
 pub use session::Session;
