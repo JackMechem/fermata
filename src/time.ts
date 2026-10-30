@@ -54,6 +54,8 @@ export function formatTime(p: Project, pos: number): string {
   return `${String(m).padStart(2, "0")}:${s.toFixed(3).padStart(6, "0")}`;
 }
 
+/** `pos` snapped to the grid, in whole samples: at most tempos a beat isn't a whole number of
+ *  samples, and the engine takes positions as integers. */
 export function snapPos(p: Project, pos: number, mode: string, pxPerBeat: number): number {
   if (mode === "off") return Math.round(pos);
   const m = tempoMap(p);
@@ -67,7 +69,7 @@ export function snapPos(p: Project, pos: number, mode: string, pxPerBeat: number
     step = pxPerBeat > 60 ? beat / 4 : pxPerBeat > 14 ? beat : beat * num;
   }
   // Counted from the bar line, so the grid follows tempo and signature changes.
-  return m.sampleAt(m.snapQ(m.beatsAt(pos), step));
+  return Math.round(m.sampleAt(m.snapQ(m.beatsAt(pos), step)));
 }
 
 export function dbToFader(db: number): number {

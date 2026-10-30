@@ -41,3 +41,17 @@ test("nudges count bars, beats and note values through the tempo map", () => {
   assert.equal(nudgeTarget(map, 1000, "bar", -1), 0);
   assert.equal(nudgeTarget(map, 1000, "ms10", 1), null);
 });
+
+test("moved starts are whole samples, at tempos where a beat isn't", () => {
+  // At 130 BPM a beat is 22153.846… samples, so a snapped drop lands between two samples, and
+  // the engine refuses a fractional position (`move_regions` takes i64).
+  const m130 = new TempoMap(SR, [], [], 130, [4, 4]);
+  const to = m130.sampleAt(263);
+  assert.ok(!Number.isInteger(to));
+  for (const musical of [true, false]) {
+    for (const pos of [1000, 1000 + 22153, 5833846]) {
+      const s = movedStart(m130, pos, 1000, to, musical);
+      assert.ok(Number.isInteger(s), `${musical} ${pos} → ${s}`);
+    }
+  }
+});

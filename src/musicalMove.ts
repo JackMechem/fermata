@@ -12,8 +12,8 @@ import type { Nudge } from "./prefs";
 /** Where a region at `pos` goes when a move takes `from` to `to`: the same distance in quarter
  *  notes when `musical`, otherwise in samples. Never before 0. */
 export function movedStart(map: TempoMap, pos: number, from: number, to: number, musical: boolean): number {
-  if (pos === from) return Math.max(0, to);
-  if (!musical) return Math.max(0, pos + (to - from));
+  if (pos === from) return Math.max(0, Math.round(to));
+  if (!musical) return Math.max(0, Math.round(pos + (to - from)));
   const dq = map.beatsAt(to) - map.beatsAt(from);
   return Math.max(0, Math.round(map.sampleAt(map.beatsAt(pos) + dq)));
 }
