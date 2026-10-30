@@ -6,6 +6,16 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.3] - 2026-10-30
+
+### Fixed
+
+- With snapping on, moving a region failed with "invalid args `moves` for command
+  `move_regions`" at most tempos other than 120 BPM, where a beat isn't a whole number of
+  samples. Trimming regions, dragging a loop's end or an Arrangement section's end, setting
+  the cycle in the ruler and adding a marker at the playhead could fail the same way. Snapped
+  positions are now whole samples.
+
 ## [0.1.0-alpha.2] - 2026-10-30
 
 ### Added
@@ -369,6 +379,7 @@ The first prerelease. Everything below is new.
 - The `takes_check` headless check "autopunch trims the take" fails about one run in five,
   from the null audio device's timing.
 
-[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.2...HEAD
+[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.3...HEAD
+[0.1.0-alpha.3]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/JackMechem/fermata/releases/tag/v0.1.0-alpha.1

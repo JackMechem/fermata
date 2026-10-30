@@ -779,7 +779,7 @@ checksum = "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
 
 [[package]]
 name = "daw"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "anyhow",
  "daw-engine",
@@ -797,7 +797,7 @@ dependencies = [
 
 [[package]]
 name = "daw-engine"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4890,7 +4890,7 @@ dependencies = [
 
 [[package]]
 name = "vst3-host"
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 dependencies = [
  "core-foundation",
  "dispatch2",
