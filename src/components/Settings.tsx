@@ -356,11 +356,13 @@ function RecordingPane({ close }: { close: () => void }) {
         <Row
           label="MIDI:"
           note={
-            r.midi_overlap === "replace"
-              ? "Notes and controllers from where recording starts (or the punch-in) to where it stops are replaced by what you play."
-              : r.replace
-                ? "Replace is on in the control bar: recordings replace what they overlap, audio and MIDI alike."
-                : undefined
+            r.replace
+              ? "Replace is on in the control bar: recordings replace what they overlap, audio and MIDI alike."
+              : r.midi_overlap === "replace"
+                ? "Notes and controllers from where recording starts (or the punch-in) to where it stops are replaced by what you play."
+                : r.midi_overlap === "take_folders"
+                  ? "Each cycle pass becomes a take, and recording over MIDI regions packs them into a take folder with the new take. Choose the take to hear from the folder's menu. The Replace button still replaces."
+                  : undefined
           }
         >
           <Select
@@ -369,6 +371,7 @@ function RecordingPane({ close }: { close: () => void }) {
               ["new_region", "Create a new region"],
               ["merge", "Merge into the existing region"],
               ["replace", "Replace in the recorded range"],
+              ["take_folders", "Create take folders"],
             ]}
             onChange={(v) => setPrefs("recording", { midi_overlap: v })}
           />
@@ -688,6 +691,8 @@ function EditingPane({ close }: { close: () => void }) {
   const ui = useSettings((s) => s.ui);
   const fade = useSettings((s) => s.prefs.editing.fade_ms);
   const moveAutomation = useSettings((s) => s.prefs.editing.move_automation) ?? "never";
+  const xfadeMs = useSettings((s) => s.prefs.editing.crossfade_ms) ?? 20;
+  const xfadeCurve = useSettings((s) => s.prefs.editing.crossfade_curve) ?? 0.5;
   return (
     <>
       <Section title="Regions">
@@ -718,6 +723,18 @@ function EditingPane({ close }: { close: () => void }) {
           note="Whether moving a region along its track takes the track's automation under it along, replacing the automation where it lands. Ask asks on each move that would."
         >
           <Select value={moveAutomation} options={MOVE_AUTOMATION} onChange={(v) => setPrefs("editing", { move_automation: v })} />
+        </Row>
+        <Row
+          label="Crossfade Time:"
+          note="The crossfades where one take hands over to the next in a take folder, those the X-Fade drag mode puts between regions that just touch, and the Crossfade menu's first choice."
+        >
+          <div className="row-inline">
+            <NumberField value={xfadeMs} min={0} max={1000} step={1} resolution={1} onChange={(v) => setPrefs("editing", { crossfade_ms: v })} />
+            <span className="dim">ms</span>
+          </div>
+        </Row>
+        <Row label="Crossfade Curve:" note="Their shape, as in the Region inspector: 0 is a straight line, 50 (the default) a quarter sine, which keeps two different takes from dipping where they cross.">
+          <NumberField value={Math.round(xfadeCurve * 100)} min={-100} max={100} step={10} resolution={1} onChange={(v) => setPrefs("editing", { crossfade_curve: Math.max(-1, Math.min(1, v / 100)) })} />
         </Row>
       </Section>
       <Section title="Scrolling">

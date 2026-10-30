@@ -48,6 +48,14 @@ impl BasicSynth {
         }
     }
 
+    /// Stops every voice at once, release tails included, and lets go of the pedal and bend:
+    /// for offline renders, which must not start with the previous render's tail.
+    pub fn silence(&mut self) {
+        self.voices = [Voice::default(); VOICES];
+        self.sustain = false;
+        self.bend = 1.0;
+    }
+
     fn handle(&mut self, data: [u8; 3]) {
         let status = data[0] & 0xF0;
         match status {

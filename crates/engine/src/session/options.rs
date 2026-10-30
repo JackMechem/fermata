@@ -122,6 +122,11 @@ impl Session {
         self.send(Cmd::Click(ClickParams::from_settings(&self.project.click)));
         // Settings › Audio › Plug-in Delay Compensation and Low Latency Mode.
         self.update_pdc();
+        // Crossfade Time and Curve shape take folder comps and loop seams as they play.
+        if (old.editing.crossfade_ms, old.editing.crossfade_curve) != (self.prefs.editing.crossfade_ms, self.prefs.editing.crossfade_curve) {
+            let ids: Vec<Id> = self.project.tracks.iter().map(|t| t.id).collect();
+            ids.into_iter().for_each(|t| self.push_regions(t));
+        }
     }
 
     /// Where new projects go.

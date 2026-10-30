@@ -129,6 +129,17 @@ export interface TakeFolder {
   takes: Take[];
   /** Sorted, non-overlapping; gaps are silent. */
   comp: CompSegment[];
+  /** Saved comps; `comp` is the one at `current`. Absent: one comp, "Comp 1". */
+  comps?: Comp[];
+  current?: number;
+  /** A MIDI take folder's take time at the region's start. */
+  offset?: number;
+}
+
+/** A saved comp of a take folder. */
+export interface Comp {
+  name: string;
+  comp: CompSegment[];
 }
 
 export interface Take {
@@ -140,6 +151,9 @@ export interface Take {
   start: number;
   end: number;
   gain_db: number;
+  /** A MIDI take's notes and controllers, in take time. */
+  notes?: Note[];
+  cc?: CcEvent[];
 }
 
 export interface CompSegment {

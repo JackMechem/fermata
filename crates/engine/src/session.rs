@@ -609,8 +609,11 @@ impl Session {
         // Pattern regions play the notes their patterns make (see `session/patterns.rs`).
         let patterns = self.realize_patterns(regions);
         let regions = patterns.as_deref().unwrap_or(regions);
-        let xfade = (crate::takes::COMP_XFADE_MS * self.project.sample_rate as f64 / 1000.0).round() as i64;
-        let crossfades = crate::fades::crossfades(regions, |c| self.clips.get(&c).map(|c| c.frames() as i64));
+        // Settings › Editing › Crossfade Time and Curve, for comp boundaries and loop seams.
+        let xfade = self.crossfade_frames();
+        let comp_law = FadeLaw::Curve(self.prefs.editing.crossfade_curve.clamp(-1.0, 1.0));
+        let clip_frames = |c: Id| self.clips.get(&c).map(|c| c.frames() as i64);
+        let crossfades = crate::fades::crossfades(regions, clip_frames);
         // Loop repetitions first, then the region bodies, so bodies always win.
         for repeats in [true, false] {
             for r in regions.iter().filter(|r| !r.muted) {
@@ -619,20 +622,32 @@ impl Session {
                 match &r.content {
                     // A take folder plays its comp: each pass covers what's under it, then its
                     // pieces go in side by side so their crossfades overlap. The folder's own
-                    // fades take its shape; the comp's crossfades stay quarter sines.
+                    // fades take its shape, the comp's crossfades the Crossfade Curve. Crossfades
+                    // with neighbours replace the folder's own fades at those ends.
                     RegionContent::Audio { gain_db, fade_in, fade_out, fade_shape, .. } if r.takes.is_some() => {
                         let folder = r.takes.as_ref().unwrap();
                         let last = passes.last().map(|p| p.1).unwrap_or(r.length);
                         let fi = (*fade_in).clamp(0, r.length);
                         let fo = if r.is_looped() { (*fade_out).clamp(0, last) } else { (*fade_out).clamp(0, r.length - fi) };
-                        let own = ((r.start, fi), (r.end() - fo, fo));
+                        let x_in = crossfades.iter().find(|x| x.in_region == r.id);
+                        let x_out = crossfades.iter().find(|x| x.out_region == r.id);
+                        let own_in = x_in.map(|x| (x.fade_in, x.laws().1)).unwrap_or(((r.start, fi), FadeLaw::fade_in(fade_shape)));
+                        let own_out = x_out.map(|x| (x.fade_out, x.laws().0)).unwrap_or(((r.end() - fo, fo), FadeLaw::fade_out(fade_shape)));
+                        let keep: Vec<Id> = x_in.map(|x| x.out_region).into_iter().chain(x_out.map(|x| x.in_region)).collect();
                         for &(ps, pl) in picked {
-                            cut(&mut segs, ps, ps + pl, &[]);
-                            for p in crate::takes::pass_pieces(r, folder, ps, pl, xfade) {
+                            let mut edges = crate::takes::PassEdges::default();
+                            if let (Some(x), true) = (x_in, ps == r.start) {
+                                (edges.lead, edges.fade_in) = (ps - x.fade_in.0, Some(x.fade_in));
+                            }
+                            if let (Some(x), true) = (x_out, ps + pl >= r.end()) {
+                                (edges.tail, edges.fade_out) = (x.fade_out.0 + x.fade_out.1 - (ps + pl), Some(x.fade_out));
+                            }
+                            cut(&mut segs, ps - edges.lead.max(0), ps + pl + edges.tail.max(0), &keep);
+                            for p in crate::takes::pass_pieces_edged(r, folder, ps, pl, xfade, edges) {
                                 let Some(c) = self.clips.get(&p.clip) else { continue };
                                 let gain = volume_gain(*gain_db + p.gain_db);
-                                let law_in = if fi > 0 && p.fade_in == own.0 { FadeLaw::fade_in(fade_shape) } else { FadeLaw::default() };
-                                let law_out = if fo > 0 && p.fade_out == own.1 { FadeLaw::fade_out(fade_shape) } else { FadeLaw::default() };
+                                let law_in = if own_in.0 .1 > 0 && p.fade_in == own_in.0 { own_in.1.clone() } else { comp_law.clone() };
+                                let law_out = if own_out.0 .1 > 0 && p.fade_out == own_out.0 { own_out.1.clone() } else { comp_law.clone() };
                                 segs.push(Seg { region: r.id, start: p.start, end: p.end, offset: p.offset, gain, clip: c.clone(), fade_in: p.fade_in, fade_out: p.fade_out, laws: [law_in, law_out] });
                             }
                         }
@@ -642,22 +657,40 @@ impl Session {
                         let (end, last) = (r.end(), passes.last().map(|p| p.1).unwrap_or(r.length));
                         let fi = (*fade_in).clamp(0, r.length);
                         let fo = if r.is_looped() { (*fade_out).clamp(0, last) } else { (*fade_out).clamp(0, r.length - fi) };
-                        let mut fades = ((r.start, fi), (end - fo, fo));
-                        let mut laws = [FadeLaw::fade_in(fade_shape), FadeLaw::fade_out(fade_shape)];
-                        // A crossfade stretches the region (which then doesn't loop) to cover it.
-                        let (mut from, mut to) = (r.start, end);
+                        // The first pass fades in and the last fades out, with the region's own
+                        // fades or a crossfade, which stretches the region to cover it.
+                        let mut first_in = ((r.start, fi), FadeLaw::fade_in(fade_shape));
+                        let mut last_out = ((end - fo, fo), FadeLaw::fade_out(fade_shape));
                         let mut keep = Vec::new();
                         if let Some(x) = crossfades.iter().find(|x| x.in_region == r.id) {
-                            (fades.0, laws[0], from) = (x.fade_in, x.laws().1, x.fade_in.0);
+                            first_in = (x.fade_in, x.laws().1);
                             keep.push(x.out_region);
                         }
                         if let Some(x) = crossfades.iter().find(|x| x.out_region == r.id) {
-                            (fades.1, laws[1], to) = (x.fade_out, x.laws().0, x.fade_out.0 + x.fade_out.1);
+                            last_out = (x.fade_out, x.laws().0);
                             keep.push(x.in_region);
                         }
+                        // Repetitions that crossfade overlap each other at the seams.
+                        let seams = crate::fades::loop_seams(r, clip_frames, xfade);
+                        if !seams.is_empty() {
+                            keep.push(r.id);
+                        }
+                        let seam_law = FadeLaw::Curve(crate::fades::DEFAULT_CURVE);
+                        let (first, n) = (r.start, passes.len());
                         for &(ps, pl) in picked {
-                            let (s, e) = if keep.is_empty() { (ps, ps + pl) } else { (from, to) };
-                            let seg = Seg { region: r.id, start: s, end: e, offset: *offset + (s - ps), gain: volume_gain(*gain_db), clip: c.clone(), fade_in: fades.0, fade_out: fades.1, laws: laws.clone() };
+                            let k = passes.iter().position(|p| p.0 == ps).unwrap_or(0);
+                            let (fin, law_in) = match (ps == first, k.checked_sub(1).and_then(|j| seams.get(j))) {
+                                (true, _) => first_in.clone(),
+                                (false, Some(z)) => (z.1, seam_law.clone()),
+                                (false, None) => ((ps, 0), FadeLaw::default()),
+                            };
+                            let (fout, law_out) = match (k + 1 == n, seams.get(k)) {
+                                (true, _) => last_out.clone(),
+                                (false, Some(z)) => (z.0, seam_law.clone()),
+                                (false, None) => ((ps + pl, 0), FadeLaw::default()),
+                            };
+                            let (s, e) = (ps.min(fin.0), (ps + pl).max(fout.0 + fout.1));
+                            let seg = Seg { region: r.id, start: s, end: e, offset: *offset + (s - ps), gain: volume_gain(*gain_db), clip: c.clone(), fade_in: fin, fade_out: fout, laws: [law_in, law_out] };
                             lay(&mut segs, seg, &keep);
                         }
                     }
@@ -1202,36 +1235,27 @@ impl Session {
             let hi = w.hi.max(w.lo + 1) as f64;
             let last = map.bar_at(hi);
             let end = if map.bar_start(last) >= hi { map.bar_start(last) } else { map.bar_start(last + 1) } as i64;
-            let mut held: [Option<(i64, u8)>; 128] = [None; 128];
-            let mut notes = Vec::new();
-            let mut cc = Vec::new();
-            for (pos, d) in events {
-                let status = d[0] & 0xF0;
-                let pitch = d[1] as usize & 127;
-                if let Some((kind, value)) = CcKind::from_message(d) {
-                    if w.keeps(pos) {
-                        cc.push(CcEvent { start: pos - start, kind, value });
-                    }
-                } else if status == 0x90 && d[2] > 0 {
-                    if w.keeps(pos) {
-                        held[pitch] = Some((pos, d[2]));
-                    }
-                } else if status == 0x80 || status == 0x90 {
-                    if let Some((on, vel)) = held[pitch].take() {
-                        notes.push(Note { start: on - start, length: (w.note_end(on, pos) - on).max(1), pitch: pitch as u8, velocity: vel, muted: false });
-                    }
+            if self.prefs.recording.midi_mode() == MidiOverlap::TakeFolders {
+                // Each cycle pass is a take; a held note ends at the cycle end, or where
+                // recording stopped in the last pass.
+                let passes = crate::takes::midi_passes(&events);
+                let n = passes.len();
+                let takes: Vec<(Vec<Note>, Vec<CcEvent>)> = passes
+                    .iter()
+                    .enumerate()
+                    .map(|(k, p)| takes::midi_take(p, &w, start, if k + 1 == n { stop_pos } else { w.hi }))
+                    .filter(|(n, c)| !n.is_empty() || !c.is_empty())
+                    .collect();
+                if !takes.is_empty() {
+                    self.place_midi_takes(track, start, end, takes);
+                    touched.push(track);
                 }
+                events.clear();
             }
-            for (pitch, h) in held.iter().enumerate() {
-                if let Some((on, vel)) = h {
-                    notes.push(Note { start: on - start, length: (w.note_end(*on, stop_pos) - on).max(1), pitch: pitch as u8, velocity: *vel, muted: false });
-                }
-            }
+            let (notes, cc) = takes::midi_take(&events, &w, start, stop_pos);
             if !notes.is_empty() || !cc.is_empty() {
-                notes.sort_by_key(|n| n.start);
-                cc.sort_by_key(|c| c.start);
                 let merged = match self.prefs.recording.midi_mode() {
-                    MidiOverlap::NewRegion => false,
+                    MidiOverlap::NewRegion | MidiOverlap::TakeFolders => false,
                     MidiOverlap::Merge => self.merge_midi_take(track, start, end, &notes, &cc),
                     // From the punch-in (or where recording started) to where it stopped.
                     MidiOverlap::Replace => self.replace_midi_take(track, (w.lo, w.hi), start, end, &notes, &cc),
@@ -1829,6 +1853,9 @@ impl Session {
             start = r.start + (new_off - *offset);
             length = length.min(frames - new_off);
             *offset = new_off;
+        } else if r.takes.is_some() {
+            // A MIDI take folder keeps its takes whole: it shows the take's notes in its new span.
+            crate::takes::retrim_midi_folder(r, start.max(0), length);
         } else if let RegionContent::Midi { notes, cc } = &mut r.content {
             crate::midi::trim_front(notes, cc, delta);
         }
@@ -1915,6 +1942,10 @@ impl Session {
                 (RegionContent::Midi { notes, cc }, RegionContent::Midi { notes: left, cc: left_cc }) => {
                     let ((ln, lc), (rn, rc)) = crate::midi::split(notes, cc, cut);
                     (*left, *left_cc, *notes, *cc) = (ln, lc, rn, rc);
+                    // The right half of a MIDI take folder starts later in its takes.
+                    if let Some(f) = &mut right.takes {
+                        f.offset += cut;
+                    }
                 }
                 _ => {}
             }

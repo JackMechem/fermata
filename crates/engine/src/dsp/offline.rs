@@ -124,6 +124,7 @@ impl Engine {
         // Nothing is live in a render, and no audio from before it leaks in.
         self.pdc.low_latency = false;
         self.reset_effects();
+        self.silence_instruments();
         for t in &mut self.tracks {
             if let Some(d) = &mut t.delay {
                 d.clear();
@@ -162,6 +163,7 @@ impl Engine {
         self.flush_all_notes();
         // Live playback starts clean too, not with the render's ringing tail.
         self.reset_effects();
+        self.silence_instruments();
         // What the render played isn't for the meters, nor for the clip indicators they feed.
         for t in &self.tracks {
             t.meter.take();

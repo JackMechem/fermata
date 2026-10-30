@@ -1404,10 +1404,14 @@ pub fn set_region_fade_shape(state: State<AppState>, ids: Vec<Id>, in_curve: Opt
     edit(&state, if curve { "Fade Curve" } else { "Fade Type" }, key, false, |s| s.set_region_fade_shape(&ids, in_curve, out_curve, in_type, out_type))
 }
 
-/// Crossfades each region with the one that follows it over `length` frames (0 removes it).
+/// Crossfades each region with the one that follows it over `length` frames (0 removes it;
+/// none: Settings › Editing › Crossfade Time).
 #[tauri::command]
-pub fn crossfade_regions(state: State<AppState>, ids: Vec<Id>, length: i64, kind: Option<FadeOutType>) -> Snapshot {
-    edit(&state, if length > 0 { "Crossfade" } else { "Remove Crossfade" }, None, false, |s| s.crossfade_regions(&ids, length, kind))
+pub fn crossfade_regions(state: State<AppState>, ids: Vec<Id>, length: Option<i64>, kind: Option<FadeOutType>) -> Snapshot {
+    edit(&state, if length != Some(0) { "Crossfade" } else { "Remove Crossfade" }, None, false, |s| {
+        let length = length.unwrap_or_else(|| s.crossfade_frames());
+        s.crossfade_regions(&ids, length, kind)
+    })
 }
 
 /// The Tracks area's drag mode (not an undo step).
@@ -1782,4 +1786,38 @@ pub fn set_region_gains(state: State<AppState>, gains: Vec<(Id, f32)>, first: bo
     } else {
         snap(&state, |s| s.set_region_gains(&gains))
     }
+}
+
+/// Take folder menu › Create New Comp.
+#[tauri::command]
+pub fn create_comp(state: State<AppState>, region: Id) -> Snapshot {
+    edit(&state, "Create New Comp", None, false, |s| s.create_comp(region))
+}
+
+/// Take folder menu › Duplicate Comp.
+#[tauri::command]
+pub fn duplicate_comp(state: State<AppState>, region: Id) -> Snapshot {
+    edit(&state, "Duplicate Comp", None, false, |s| s.duplicate_comp(region))
+}
+
+/// Switches a take folder to its comp number `index` (from 0).
+#[tauri::command]
+pub fn select_comp(state: State<AppState>, region: Id, index: usize) -> Snapshot {
+    edit(&state, "Select Comp", None, false, |s| s.select_comp(region, index))
+}
+
+#[tauri::command]
+pub fn rename_comp(state: State<AppState>, region: Id, index: usize, name: String) -> Snapshot {
+    edit(&state, "Rename Comp", None, false, |s| s.rename_comp(region, index, name))
+}
+
+#[tauri::command]
+pub fn delete_comp(state: State<AppState>, region: Id, index: usize) -> Snapshot {
+    edit(&state, "Delete Comp", None, false, |s| s.delete_comp(region, index))
+}
+
+/// Crossfades a looping region's repetitions into each other, or stops doing so.
+#[tauri::command]
+pub fn set_loop_crossfade(state: State<AppState>, ids: Vec<Id>, on: bool) -> Snapshot {
+    edit(&state, "Crossfade Loop Repetitions", None, false, |s| s.set_loop_crossfade(&ids, on))
 }

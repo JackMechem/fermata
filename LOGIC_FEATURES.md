@@ -176,7 +176,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Takes written as 24-bit or 32-bit float WAV in the project's Audio Files folder (p. 1054, 1082)
 - [x] Regions draw live while recording
 - [x] Take naming options
-- [~] Overlapping recordings (p. 1057). *On top, new track or replace; take folders come only from cycle recording, not as an overlap option.*
+- [~] Overlapping recordings (p. 1057). *On top, new track or replace for audio; MIDI also merges or creates take folders. Audio take folders come only from cycle recording.*
 - [x] A newer region hides the older audio it overlaps during playback
 
 ### Record software instruments (p. 200–215)
@@ -439,8 +439,8 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 - [x] Fade curve shape (p. 351)
 - [x] Fade types: crossfade, equal-power crossfade, speed-up and slow-down fades (p. 351–352)
-- [~] Crossfades between adjacent regions (p. 352). *Not for take folders, looped or muted regions.*
-- [~] Automatic crossfades on edits (p. 352). *The X-Fade drag mode; no Crossfade Time or Curve settings.*
+- [~] Crossfades between adjacent regions (p. 352). *Take folders and loops (at the loop end) too; not muted regions.*
+- [x] Automatic crossfades on edits (p. 352). *The X-Fade drag mode, with the Crossfade Time and Curve settings.*
 - [ ] Apply the last fade to a marquee selection (p. 350)
 
 ### Region parameters (p. 363–371)
@@ -465,7 +465,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [ ] Record to several software instrument tracks at once (p. 207)
 - [ ] Several MIDI devices to several instrument tracks (p. 208)
 - [x] Record MIDI over an existing region (Replace) (p. 206)
-- [ ] MIDI cycle recording into take folders (p. 203)
+- [x] MIDI cycle recording into take folders (p. 203)
 - [ ] Spot erase notes while recording (p. 204)
 - [ ] Note Repeat (p. 205)
 - [x] Step input: musical typing, Step Input keyboard, MIDI keyboard, rests (p. 210–211)
@@ -480,7 +480,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 - [x] Take folders from cycle recording (p. 222)
 - [x] Quick Swipe Comping (p. 222)
 - [x] Open a take folder and preview or choose takes (p. 223–224)
-- [~] Create, save, rename and delete comps (p. 224–233). *One comp per folder; takes can be renamed and deleted.*
+- [x] Create, save, rename and delete comps (p. 224–233)
 - [ ] Edit comp sections: move, alternate between lanes, remove a take (p. 227–229)
 - [ ] Edit take regions: trim, cut, slice at comp borders, move between lanes (p. 234–237)
 - [ ] Export the active take to a new track (p. 238)

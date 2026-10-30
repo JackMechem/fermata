@@ -7,7 +7,7 @@ import { tempoMap } from "./tempo";
 import type { WheelScrolls } from "./wheel";
 
 export type AudioOverlap = "on_top" | "new_track" | "replace";
-export type MidiOverlap = "new_region" | "merge" | "replace";
+export type MidiOverlap = "new_region" | "merge" | "replace" | "take_folders";
 export type TakeNames = "track_number" | "track" | "project_track";
 export type VelocityCurve = "linear" | "soft" | "hard" | "fixed";
 export type Startup = "chooser" | "last_project" | "empty_project";
@@ -39,7 +39,8 @@ export interface Prefs {
     chase_notes?: boolean;
     chase_controllers?: boolean;
   };
-  editing: { fade_ms: number; move_automation?: MoveAutomation };
+  /** Crossfade Time (ms) and Curve (-1..1) for comp boundaries, X-Fade and Crossfade. */
+  editing: { fade_ms: number; move_automation?: MoveAutomation; crossfade_ms?: number; crossfade_curve?: number };
   /** Metronome settings for new projects. */
   click: ClickSettings;
   /** Settings › Audio: plug-in delay compensation and Low Latency Mode. */
@@ -103,7 +104,7 @@ const DEFAULTS: AppSettings = {
       replace: false,
     },
     midi: { disabled_inputs: [], thru: true, velocity: "linear", fixed_velocity: 100, chase_notes: true, chase_controllers: true },
-    editing: { fade_ms: 0, move_automation: "never" },
+    editing: { fade_ms: 0, move_automation: "never", crossfade_ms: 20, crossfade_curve: 0.5 },
     click: DEFAULT_CLICK,
     latency: { compensation: "all", low_latency: false, low_latency_limit_ms: 5 },
   },

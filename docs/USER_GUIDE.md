@@ -634,11 +634,23 @@ As in Logic, a looping region repeats its own content from its end up to its **l
 - **Crossfades:** a crossfade type on a region whose end meets the next region on the track
   (touching or overlapping) crossfades the two over the Fade Out length, centred on the
   junction (or the middle of the overlap). Choosing a crossfade type for a region without a
-  fade-out gives it 20 ms (or the overlap). The next region's own fade-in isn't used meanwhile;
+  fade-out gives it the Crossfade Time (or the overlap). The next region's own fade-in isn't used meanwhile;
   its Fade In rows are dimmed. Followed by a gap, the type fades out like Out.
-- Region menu › **Crossfade** (None, 10 ms, 20 ms, 50 ms, 250 ms, 1 Beat) crossfades each selected
-  audio region with the one that follows it, as EqP unless it already has a crossfade type;
-  None removes it. It is greyed out when no selected region is followed directly.
+- Region menu › **Crossfade** (Crossfade Time, None, 10 ms, 20 ms, 50 ms, 250 ms, 1 Beat)
+  crossfades each selected audio region with the one that follows it, as EqP unless it already
+  has a crossfade type; None removes it. It is greyed out when no selected region is followed
+  directly.
+- **Take folders and loops crossfade too.** A take folder crossfades with its neighbours like
+  any audio region, using the takes its comp plays at its ends. A looping region crossfades at
+  its loop end, from its last repetition into the region that starts there.
+- **Crossfade Loop Repetitions** (region menu, for looping audio regions) crossfades each
+  repetition into the next over the Crossfade Time (equal power), so a loop whose end doesn't
+  meet its start doesn't click at every seam. Logic has no such option; it's off by default.
+- **Settings › Editing › Crossfade Time and Crossfade Curve** (20 ms and 50 by default), as
+  Logic's settings of those names: the crossfades between takes in a take folder, the ones the
+  X-Fade drag mode makes between regions that just touch (overlapping regions crossfade over
+  the overlap), and the Crossfade menu's first entry. The curve shapes take folder boundaries
+  on both sides and the X crossfades the X-Fade mode makes.
 - A crossfade plays audio from the outgoing region's file past its end and from the incoming
   one's before its start. Where a file has none to spare, the crossfade slides and shortens to
   fit; where neither has any, the two regions fade out and in at the junction, over half the
@@ -858,7 +870,15 @@ Take folders follow Logic's Quick Swipe Comping.
   Control+⌘F on macOS; also in the Edit and region menus): one take per region.
 - **The comp.** A folder plays its *comp*: which take is heard where. A new folder starts with
   the newest take, older takes filling in where it has no audio. Where one take hands over to
-  another they crossfade over 10 ms (equal power), so boundaries don't click.
+  another they crossfade over the Crossfade Time (Settings › Editing, 20 ms equal power by
+  default), so boundaries don't click.
+- **Several comps.** A folder can keep several comps and switch between them, as in Logic. The
+  take folder menu lists them (the one heard is ticked; choose another to hear it), with
+  **Create New Comp** (a fresh comp: the newest take wherever it has audio), **Duplicate Comp**
+  (a copy of the comp heard, to try changes on), **Rename Comp…** and **Delete Comp** (the last
+  comp stays). Comps are named Comp 1, Comp 2 and so on. Swipes change the comp heard; Flatten,
+  Flatten and Merge and Unpack use it. The folder's name bar shows the comp's name (or the
+  take's, when one take plays throughout).
 - **Opening a folder.** Click the disclosure triangle at the start of the folder's name bar.
   The track grows by one row per take below its lane. The badge next to the triangle shows the
   take heard (or **C** for a comp).
@@ -872,9 +892,17 @@ Take folders follow Logic's Quick Swipe Comping.
   Delete Unused Takes, **Flatten** (the comp becomes ordinary regions, one per stretch),
   **Flatten and Merge** (the comp is rendered to one new audio file), and **Unpack to New
   Tracks** (every take on its own new, muted track, and the comp flattened in place).
-- A folder moves, trims, splits, loops, fades and changes gain like any audio region. Every
-  comp edit can be undone, folders are saved with the project, and bounces, exports and Bounce
-  in Place render the comp.
+- A folder moves, trims, splits, loops, fades, crossfades and changes gain like any audio
+  region. Every comp edit can be undone, folders are saved with the project, and bounces,
+  exports and Bounce in Place render the comp.
+- **MIDI take folders.** With Settings › Recording › MIDI › **Create take folders**, each pass
+  of a MIDI cycle recording becomes a take (passes where nothing was played are left out), and
+  recording over MIDI regions packs them into a folder with the new take; recording over a
+  MIDI take folder adds takes to it. As in Logic, a MIDI folder plays one whole take: click a
+  take row or choose it in the take folder menu (there is no swipe comping and no comp list).
+  Editing the folder's notes edits that take. Flatten leaves a plain region of the take heard,
+  Unpack to New Tracks puts every take on its own muted track. The control bar's **Replace**
+  button wins: with it on, a recording replaces what it overlaps instead.
 
 ---
 

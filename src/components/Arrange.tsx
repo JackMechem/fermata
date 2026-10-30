@@ -16,6 +16,7 @@ import { automationHover, automationLeave, automationMenu, automationMouseDown, 
 import { refuseFrozen } from "../freeze";
 import { getSettings } from "../prefs";
 import { crossfadeLaws, crossfadesByRegion, draggedFadeOut, fadeCurve, fadeHandles, resized, shapeOf, type Crossfade, type RegionCrossfades } from "../fades";
+import { folderLabel, isMidiFolder } from "../comps";
 import { drawCompWave, drawFolderBadge, drawTakeRows, ensureTakeWaves, FOLDER_BADGE_W, isFolder, isOpen, swipeComp, takeAtRow, takeFolderMenu, takeShift, toggleFolder } from "../takes";
 import { onRevealPlayhead, revealLeft } from "../view";
 import { timeWheel } from "../wheel";
@@ -142,7 +143,10 @@ export function drawRegion(
     ctx.fillStyle = style === "light" ? "#ffffff" : theme.ink;
     ctx.font = `600 ${geom.font}px Inter, 'SF Pro Text', system-ui, sans-serif`;
     ctx.textBaseline = "middle";
-    ctx.fillText(r.muted ? `${r.name} (muted)` : r.name, Math.max(x, 0) + 5 + badge, y + headerH / 2 + 0.5, Math.max(0, w - 8 - badge));
+    // A take folder names the comp (or whole take) it plays, as Logic's "Audio 1: Comp 2".
+    const label = folderLabel(r);
+    const name = label ? `${r.name}: ${label}` : r.name;
+    ctx.fillText(r.muted ? `${name} (muted)` : name, Math.max(x, 0) + 5 + badge, y + headerH / 2 + 0.5, Math.max(0, w - 8 - badge));
   }
   const bodyTop = y + geom.bodyTop;
   const bodyH = geom.bodyH;
@@ -1067,6 +1071,8 @@ export function Arrange() {
     const { project, pps } = live.current;
     if (!project) return;
     setState({ selectedRegions: [r.id], focus: "regions" });
+    // A MIDI take folder plays whole takes: clicking a take chooses it.
+    if (isMidiFolder(r)) return act("select_take", { region: r.id, take });
     const el = scrollRef.current!;
     const left = el.getBoundingClientRect().left - el.scrollLeft;
     const snap = (v: number) => Math.min(r.start + r.length, Math.max(r.start, snapPos(project, v, getState().snapMode, getState().pxPerBeat)));

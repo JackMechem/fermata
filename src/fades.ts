@@ -13,6 +13,8 @@ export interface FadeShape {
   out_curve: number;
   in_type: FadeInType;
   out_type: FadeOutType;
+  /** A loop crossfades its repetitions into each other (Crossfade Loop Repetitions). */
+  loop_xfade?: boolean;
 }
 
 /** fades::Crossfade: timeline (start, length) of each side's fade. */
@@ -122,18 +124,26 @@ export function draggedFadeOut(from: number, dx: number, crossfade: boolean, max
   return Math.round(Math.max(0, Math.min(max, from - (crossfade ? 2 : 1) * dx)));
 }
 
-/** Whether a region can crossfade: plain audio (not a take folder or a loop) that is heard. */
+/** Whether a region can crossfade: audio (plain, a take folder, or a loop at its loop end)
+ *  that is heard. */
 function crossfadeable(r: Region): boolean {
-  return r.content.type === "audio" && !r.takes && !r.muted && !(r.loop_end != null && r.loop_end > r.start + r.length) && r.length > 0;
+  return r.content.type === "audio" && !r.muted && r.length > 0;
+}
+
+/** Where a region stops sounding (loops.ts's regionEnd, kept here so this file stays free of
+ *  imports). */
+function regionEnd(r: Region): number {
+  const own = r.start + r.length;
+  return r.loop_end == null || r.length <= 0 ? own : Math.min(Math.max(r.loop_end, own), r.start + r.length * 4096);
 }
 
 /** The region a crossfade from `a` would go into (fades::following): the next one on the
- *  track to start inside `a` or right at its end and run on past it. */
+ *  track to start inside `a` or right at its end (its loop end) and run on past it. */
 export function followingRegion(regions: Region[], a: Region): Region | undefined {
-  const end = a.start + a.length;
+  const end = regionEnd(a);
   let best: Region | undefined;
   for (const b of regions) {
-    if (b.id === a.id || !crossfadeable(b) || b.start <= a.start || b.start > end || b.start + b.length <= end) continue;
+    if (b.id === a.id || !crossfadeable(b) || b.start <= a.start || b.start > end || regionEnd(b) <= end) continue;
     if (!best || b.start < best.start || (b.start === best.start && b.id < best.id)) best = b;
   }
   return best;

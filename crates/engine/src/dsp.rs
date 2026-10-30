@@ -949,6 +949,17 @@ impl Engine {
         })
     }
 
+    /// Built-in synths stop dead, release tails included (offline renders start and end with
+    /// this, so one render's tail never reaches the next). VST3 instruments get note-offs from
+    /// `flush_all_notes`, as before.
+    fn silence_instruments(&mut self) {
+        for t in &mut self.tracks {
+            if let Some(InsertDsp { plugin: Plugin::Synth(s), .. }) = &mut t.instrument {
+                s.silence();
+            }
+        }
+    }
+
     fn flush_all_notes(&mut self) {
         for t in &mut self.tracks {
             t.flush_notes = true;
@@ -1272,6 +1283,10 @@ impl Engine {
                 if looping && self.pos >= ce {
                     self.pos = cs;
                     self.flush_all_notes();
+                    // MIDI cycle recording: where one pass ends (a take each, if so set).
+                    if self.recording {
+                        let _ = self.midi_rec.push((cs, crate::takes::PASS_MARK));
+                    }
                 }
             }
             done += n;

@@ -100,6 +100,9 @@ pub enum MidiOverlap {
     /// The notes and controllers in the recorded range (punch-in to where recording stopped)
     /// are removed from the regions underneath, and the recording is merged in their place.
     Replace,
+    /// Each cycle pass becomes a take, and a recording over MIDI regions packs them with it
+    /// into a MIDI take folder (Logic's "Create take folders"). The Replace button still wins.
+    TakeFolders,
 }
 
 /// How new recordings are named.
@@ -257,11 +260,19 @@ pub struct EditingPrefs {
     pub fade_ms: f32,
     /// Whether a region's automation moves with it (Logic's Move Automation with Regions).
     pub move_automation: MoveAutomation,
+    /// Logic's Crossfade Time, in milliseconds: the length of the crossfades at take folder comp
+    /// boundaries, of those the X-Fade drag mode puts between regions that just touch, and of
+    /// the Crossfade command's default.
+    pub crossfade_ms: f32,
+    /// Logic's Crossfade Curve (-1..1, see `fades::curve`): the comp boundaries' curve on both
+    /// sides, and the X crossfades the X-Fade drag mode makes. The default, a quarter sine, is
+    /// an equal-power crossfade.
+    pub crossfade_curve: f32,
 }
 
 impl Default for EditingPrefs {
     fn default() -> Self {
-        EditingPrefs { fade_ms: 0.0, move_automation: MoveAutomation::Never }
+        EditingPrefs { fade_ms: 0.0, move_automation: MoveAutomation::Never, crossfade_ms: crate::fades::DEFAULT_XFADE_MS as f32, crossfade_curve: crate::fades::DEFAULT_CURVE }
     }
 }
 

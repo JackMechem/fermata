@@ -59,6 +59,11 @@ test("the following region is the next to start inside or at the end and run pas
   assert.equal(followingRegion([a, audio(2, 101, 50)], a), undefined, "a gap");
   assert.equal(followingRegion([a, audio(2, 20, 50)], a), undefined, "inside");
   assert.equal(followingRegion([a, audio(2, 100, 50, { muted: true })], a), undefined, "muted");
+  // Loops crossfade at their loop end; take folders like any region.
+  const looped = { ...a, loop_end: 250 };
+  assert.equal(followingRegion([looped, audio(2, 100, 50), audio(3, 250, 50)], looped)?.id, 3);
+  const folder = { ...audio(4, 100, 50), takes: { takes: [], comp: [] } };
+  assert.equal(followingRegion([a, folder], a)?.id, 4);
 });
 
 test("shape defaults, handles and crossfade drags", () => {

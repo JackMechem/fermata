@@ -14,7 +14,8 @@ import { currentTick, getState, setState } from "./store";
 import { tempoMap } from "./tempo";
 import { TRACK_COLORS } from "./view";
 import { isFolder, packTakeFolder, takeFolderMenu } from "./takes";
-import { followingRegion } from "./fades";
+import { followingRegion, shapeOf } from "./fades";
+import { getSettings } from "./prefs";
 import { canHaveAlternatives, trackAltMenu } from "./trackAlternatives";
 import { isDefault, paramsOf } from "./regionParams";
 
@@ -355,18 +356,22 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
     ).map(([label, v]) => ({ label, onClick: () => act("set_region_fades", { ids: audio, fadeIn: which === "fade_in" ? v : null, fadeOut: which === "fade_out" ? v : null }) }));
   // Crossfade with the following region (Logic's EqP by default, or the region's own type).
   const meets = regs.filter((x) => x.content.type === "audio" && followingRegion(trackOf(x.id)?.regions ?? [], x)).map((x) => x.id);
+  // The first entry follows Settings › Editing › Crossfade Time (the engine reads it).
+  const xfadeMs = getSettings().prefs.editing.crossfade_ms ?? 20;
   const crossfades = (
     [
+      [`Crossfade Time (${xfadeMs} ms)`, null],
       ["None", 0],
       ["10 ms", ms(p, 10)],
       ["20 ms", ms(p, 20)],
       ["50 ms", ms(p, 50)],
       ["250 ms", ms(p, 250)],
       ["1 Beat", Math.round(beat)],
-    ] as [string, number][]
+    ] as [string, number | null][]
   ).map(([label, v]): MenuItem => ({ label, onClick: () => act("crossfade_regions", { ids: meets, length: v }) }));
   const muted = regs.every((x) => x.muted);
   const looped = regs.filter(isLooped);
+  const loopedAudio = looped.filter((x) => x.content.type === "audio" && !x.takes);
   const items: MenuItem[] = [
     { label: "Cut", hint: keyHint("cut"), onClick: () => cutRegions(ids) },
     { label: "Copy", hint: keyHint("copy"), onClick: () => copyRegions(ids) },
@@ -402,6 +407,9 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
       { label: "Fade In", children: fades("fade_in") },
       { label: "Fade Out", children: fades("fade_out") },
       { label: "Crossfade", disabled: !meets.length, children: crossfades },
+      ...(loopedAudio.length
+        ? [{ label: "Crossfade Loop Repetitions", checked: loopedAudio.every((x) => shapeOf(x.content).loop_xfade), onClick: () => act("set_loop_crossfade", { ids: loopedAudio.map((x) => x.id), on: !loopedAudio.every((x) => shapeOf(x.content).loop_xfade) }) }]
+        : []),
       { label: "Reverse", onClick: () => act("reverse_regions", { ids: audio }) },
     );
     // Take folders: the folder's own menu, and Pack Take Folder for plain regions on one track.
@@ -431,6 +439,8 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
         ).map(([label, n]) => ({ label, onClick: () => act("transpose_regions", { ids: midi, semitones: n }) })),
       },
       { label: "Export as MIDI File…", onClick: () => exportMidi(midi, midi.length === 1 ? regs.find((x) => x.id === midi[0])!.name : p.name) },
+      // A MIDI take folder (MIDI cycle recording with "Create take folders").
+      ...(isFolder(r) && r.content.type === "midi" ? [{ label: "Take Folder", children: takeFolderMenu(r) }] : []),
     );
     // Pattern regions (Step Sequencer) and back.
     const patterns = regs.filter((x) => x.pattern).map((x) => x.id);

@@ -235,8 +235,9 @@ fn main() {
     s.delete_track(t);
 
     // ---- Automatic crossfades on edits (X-Fade drag mode) ------------------------------------------
-    s.set_drag_mode(DragMode::XFade);
+    // (Set up first: in X-Fade mode the butted pair would crossfade over the Crossfade Time.)
     let (t, _, rb) = pair(&mut s, &l, &f.dc, &f.silence);
+    s.set_drag_mode(DragMode::XFade);
     s.checkpoint("Move Region", None, false);
     s.move_region(rb, l.j - l.len, None);
     let xs = s.crossfades();

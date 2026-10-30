@@ -6,11 +6,16 @@ use super::*;
 use crate::fades::{following, Crossfade};
 
 impl Session {
+    /// Settings › Editing › Crossfade Time, in frames.
+    pub fn crossfade_frames(&self) -> i64 {
+        self.ms_frames(self.prefs.editing.crossfade_ms.clamp(0.0, 10_000.0) as f64)
+    }
+
     /// Sets fade curves (-1..1) and types; None leaves that setting alone. Choosing a
     /// crossfade type for a region that has no fade-out but meets the next region gives it
-    /// one: the overlap, or [`crate::fades::DEFAULT_XFADE_MS`] where the two just touch.
+    /// one: the overlap, or the Crossfade Time where the two just touch.
     pub fn set_region_fade_shape(&mut self, ids: &[Id], in_curve: Option<f32>, out_curve: Option<f32>, in_type: Option<FadeInType>, out_type: Option<FadeOutType>) {
-        let default_len = self.ms_frames(crate::fades::DEFAULT_XFADE_MS);
+        let default_len = self.crossfade_frames();
         let starting: Vec<(Id, i64)> = ids
             .iter()
             .filter_map(|&id| {
@@ -18,7 +23,7 @@ impl Session {
                 let regions = &self.project.track(track)?.regions;
                 let a = &regions[idx];
                 let b = following(regions, a)?;
-                Some((id, (a.start + a.length - b.start).max(0)))
+                Some((id, (a.end() - b.start).max(0)))
             })
             .collect();
         self.edit_regions(ids, |r, _| {
@@ -59,7 +64,7 @@ impl Session {
             })
             .collect();
         self.edit_regions(&meets, |r, _| {
-            let len = r.length;
+            let len = r.passes().last().map(|p| p.1).unwrap_or(r.length);
             let RegionContent::Audio { fade_out, fade_shape: s, .. } = &mut r.content else { return };
             if length <= 0 {
                 *fade_out = 0;
@@ -67,6 +72,16 @@ impl Session {
             } else {
                 *fade_out = length.min(len);
                 s.out_type = kind.filter(|k| k.is_crossfade()).unwrap_or(if s.out_type.is_crossfade() { s.out_type } else { FadeOutType::EqP });
+            }
+        });
+    }
+
+    /// Turns the crossfades between a looping region's repetitions on or off (see
+    /// [`crate::fades::FadeShape::loop_xfade`]).
+    pub fn set_loop_crossfade(&mut self, ids: &[Id], on: bool) {
+        self.edit_regions(ids, |r, _| {
+            if let RegionContent::Audio { fade_shape, .. } = &mut r.content {
+                fade_shape.loop_xfade = on;
             }
         });
     }
@@ -107,13 +122,15 @@ impl Session {
     }
 
     /// After a move, trim or paste of `ids` in the X-Fade drag mode: audio regions that now
-    /// overlap crossfade over the overlap (X, unless the region already had a crossfade
-    /// type), and crossfades from `before` whose regions no longer meet are removed. Does
-    /// nothing in the Overlap mode.
+    /// overlap crossfade over the overlap, and ones that now just touch over the Crossfade
+    /// Time (X with the Crossfade Curve, unless the region already had a crossfade type).
+    /// Crossfades from `before` whose regions no longer meet are removed. Does nothing in the
+    /// Overlap mode.
     pub(super) fn auto_crossfade(&mut self, ids: &[Id], before: Vec<(Id, Id)>) {
         if self.project.drag_mode != DragMode::XFade {
             return;
         }
+        let (touching, curve) = (self.crossfade_frames(), self.prefs.editing.crossfade_curve.clamp(-1.0, 1.0));
         // (region, new fade-out length) for every change.
         let mut set: Vec<(Id, i64)> = Vec::new();
         for (a, _) in before {
@@ -132,9 +149,16 @@ impl Session {
             }
             for o in regions.iter().filter(|o| o.id != id) {
                 let (a, b) = if o.start < r.start { (o, r) } else { (r, o) };
-                if following(regions, a).map(|f| f.id) == Some(b.id) && b.start < a.start + a.length {
+                if following(regions, a).map(|f| f.id) == Some(b.id) {
+                    let overlap = a.end() - b.start;
+                    // Regions that already crossfade keep their length where they just touch.
+                    let had = matches!(&a.content, RegionContent::Audio { fade_out, fade_shape, .. } if *fade_out > 0 && fade_shape.out_type.is_crossfade());
+                    if overlap <= 0 && had {
+                        set.retain(|(x, _)| *x != a.id);
+                        continue;
+                    }
                     set.retain(|(x, _)| *x != a.id);
-                    set.push((a.id, a.start + a.length - b.start));
+                    set.push((a.id, if overlap > 0 { overlap } else { touching }));
                 }
             }
         }
@@ -143,7 +167,7 @@ impl Session {
             return;
         }
         self.edit_regions(&ids, |r, _| {
-            let len = r.length;
+            let len = r.passes().last().map(|p| p.1).unwrap_or(r.length);
             let Some(&(_, l)) = set.iter().find(|(id, _)| *id == r.id) else { return };
             let RegionContent::Audio { fade_out, fade_shape: s, .. } = &mut r.content else { return };
             if l == 0 {
@@ -153,6 +177,7 @@ impl Session {
                 *fade_out = l.min(len);
                 if !s.out_type.is_crossfade() {
                     s.out_type = FadeOutType::X;
+                    s.out_curve = curve;
                 }
             }
         });
@@ -254,6 +279,48 @@ mod tests {
         let made = s.paste_regions(&[(t, r)], 40_000);
         assert_eq!(fade_out(&s, a), (8_000, FadeOutType::X));
         assert_eq!(made.len(), 1);
+    }
+
+    #[test]
+    fn crossfade_time_sets_touching_xfades() {
+        let (mut s, t, clip) = session();
+        let a = add(&mut s, t, clip, 48_000, 48_000, 10_000);
+        let b = add(&mut s, t, clip, 200_000, 48_000, 100_000);
+        s.set_drag_mode(DragMode::XFade);
+        s.prefs.editing.crossfade_ms = 50.0;
+        s.prefs.editing.crossfade_curve = 0.0;
+        // Butted against a: the Crossfade Time, an X with the Crossfade Curve.
+        s.move_region(b, 96_000, None);
+        assert_eq!(fade_out(&s, a), (2_400, FadeOutType::X));
+        assert!(matches!(&s.region(a).unwrap().content, RegionContent::Audio { fade_shape, .. } if fade_shape.out_curve == 0.0));
+        // Moving away and back with another time: the new one.
+        s.nudge_regions(&[b], 10_000);
+        s.prefs.editing.crossfade_ms = 20.0;
+        s.move_region(b, 96_000, None);
+        assert_eq!(fade_out(&s, a).0, 960);
+        assert_eq!(s.crossfade_frames(), 960);
+    }
+
+    #[test]
+    fn take_folders_and_loops_crossfade_with_neighbours() {
+        let (mut s, t, clip) = session();
+        let a = add(&mut s, t, clip, 48_000, 24_000, 10_000);
+        let b = add(&mut s, t, clip, 72_000, 24_000, 100_000);
+        let c = add(&mut s, t, clip, 200_000, 48_000, 200_000);
+        let folder = s.pack_take_folder(&[a, b]).unwrap();
+        // The folder is followed by c once it's moved against it.
+        s.move_region(c, 96_000, None);
+        s.crossfade_regions(&[folder], 4_800, Some(FadeOutType::X));
+        let x = s.crossfades();
+        assert_eq!((x.len(), x[0].out_region, x[0].in_region), (1, folder, c));
+        // A loop crossfades at its loop end.
+        let d = add(&mut s, t, clip, 300_000, 10_000, 300_000);
+        s.project.track_mut(t).unwrap().regions.iter_mut().find(|r| r.id == d).unwrap().loop_end = Some(340_000);
+        let e = add(&mut s, t, clip, 340_000, 10_000, 400_000);
+        s.crossfade_regions(&[d], 960, None);
+        assert!(s.crossfades().iter().any(|x| x.out_region == d && x.in_region == e && x.fade_out == (339_520, 960)));
+        s.set_loop_crossfade(&[d], true);
+        assert!(matches!(&s.region(d).unwrap().content, RegionContent::Audio { fade_shape, .. } if fade_shape.loop_xfade));
     }
 
     #[test]

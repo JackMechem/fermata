@@ -18,8 +18,7 @@ use crate::model::{Id, Region, RegionContent};
 /// projects saved earlier sound the same.
 pub const DEFAULT_CURVE: f32 = 0.5;
 
-/// Length of a crossfade made by choosing a crossfade type for a region that has no fade-out
-/// yet (Logic's Crossfade Time setting).
+/// The default of Logic's Crossfade Time setting (`EditingPrefs::crossfade_ms`).
 pub const DEFAULT_XFADE_MS: f64 = 20.0;
 
 /// What a region's fade-in does (the pop-up on the inspector's Fade In row).
@@ -72,11 +71,15 @@ pub struct FadeShape {
     pub out_curve: f32,
     pub in_type: FadeInType,
     pub out_type: FadeOutType,
+    /// A looping region crossfades each repetition into the next (equal power, over the
+    /// Crossfade Time), so a loop whose end doesn't meet its start doesn't click. Logic has
+    /// no such option; it is off unless chosen.
+    pub loop_xfade: bool,
 }
 
 impl Default for FadeShape {
     fn default() -> Self {
-        FadeShape { in_curve: DEFAULT_CURVE, out_curve: DEFAULT_CURVE, in_type: FadeInType::Fade, out_type: FadeOutType::Out }
+        FadeShape { in_curve: DEFAULT_CURVE, out_curve: DEFAULT_CURVE, in_type: FadeInType::Fade, out_type: FadeOutType::Out, loop_xfade: false }
     }
 }
 
@@ -93,6 +96,7 @@ impl FadeShape {
             out_curve: self.in_curve,
             in_type: if self.out_type == FadeOutType::SlowDown { FadeInType::SpeedUp } else { FadeInType::Fade },
             out_type: if self.in_type == FadeInType::SpeedUp { FadeOutType::SlowDown } else { FadeOutType::Out },
+            loop_xfade: self.loop_xfade,
         }
     }
 }
@@ -252,20 +256,61 @@ impl Crossfade {
     }
 }
 
-/// Whether a region can take part in a crossfade: plain audio (not a take folder or a loop)
-/// that is heard.
+/// Whether a region can take part in a crossfade: audio (a plain region, a take folder or a
+/// loop, which crossfades at its loop end) that is heard.
 fn crossfadeable(r: &Region) -> bool {
-    matches!(r.content, RegionContent::Audio { .. }) && r.takes.is_none() && !r.muted && !r.is_looped() && r.length > 0
+    matches!(r.content, RegionContent::Audio { .. }) && !r.muted && r.length > 0
 }
 
 /// The region a crossfade from `a` goes into: the next one to start inside `a` (or right at its
-/// end) that runs on past it. None when a gap follows.
+/// end, its loop end for a loop) that runs on past it. None when a gap follows.
 pub fn following<'a>(regions: &'a [Region], a: &Region) -> Option<&'a Region> {
-    let a_end = a.start + a.length;
+    let a_end = a.end();
     regions
         .iter()
-        .filter(|b| b.id != a.id && crossfadeable(b) && b.start > a.start && b.start <= a_end && b.start + b.length > a_end)
+        .filter(|b| b.id != a.id && crossfadeable(b) && b.start > a.start && b.start <= a_end && b.end() > a_end)
         .min_by_key(|b| (b.start, b.id))
+}
+
+/// How much audio a region's files have to spare for a crossfade: before its start, and past
+/// where it stops (its loop end for a loop). A take folder has what its comp has beyond its
+/// ends, in the stretches heard there (none where the comp is silent). None when a file is
+/// missing.
+fn spare(r: &Region, clip_frames: &impl Fn(Id) -> Option<i64>) -> Option<(i64, i64)> {
+    let RegionContent::Audio { clip, offset, .. } = &r.content else { return None };
+    let last = r.passes().last().map(|p| p.1).unwrap_or(r.length);
+    let Some(f) = &r.takes else {
+        let frames = clip_frames(*clip)?;
+        return Some(((*offset).max(0), (frames - (offset + last)).max(0)));
+    };
+    // How far the comp stretch heard at take time `t` reaches before and after it.
+    let heard = |t: i64| -> Option<Option<(i64, i64)>> {
+        let Some(s) = f.comp.iter().find(|s| s.start <= t && t < s.end) else { return Some(None) };
+        clip_frames(f.takes.iter().find(|k| k.id == s.take)?.clip)?;
+        Some(Some((t - s.start, s.end - t)))
+    };
+    let before = heard(*offset)?.map(|h| h.0).unwrap_or(0);
+    let past = heard(offset + last - 1)?.map(|h| h.1 - 1).unwrap_or(0);
+    Some((before.max(0), past.max(0)))
+}
+
+/// Where a crossfade of `len` frames from region A (`a_start..a_end`, its file having `past`
+/// frames beyond that) into region B (`b_start..b_end`, `before` frames before) goes: the
+/// timeline (start, length) of A's fade-out and of B's fade-in. See [`crossfades`].
+fn zone(a: (i64, i64), b: (i64, i64), past: i64, before: i64, len: i64) -> ((i64, i64), (i64, i64)) {
+    let ((a_start, a_end), (b_start, b_end)) = (a, b);
+    let lo = a_start.max(b_start - before);
+    let hi = b_end.min(a_end + past);
+    let pivot = (b_start + a_end) / 2;
+    let room = hi - lo;
+    if room * 4 >= len {
+        let l = len.min(room);
+        let s = (pivot - l / 2).clamp(lo, hi - l);
+        ((s, l), (s, l))
+    } else {
+        let h = (len / 2).min(pivot - a_start).min(b_end - pivot).max(0);
+        ((pivot - h, h), (pivot, h))
+    }
 }
 
 /// The crossfades on a track. A region whose fade-out type is X, EqP or X S crossfades with
@@ -276,14 +321,18 @@ pub fn following<'a>(regions: &'a [Region], a: &Region) -> Option<&'a Region> {
 /// over half the length each, which avoids a click at the cost of a dip. The incoming region's
 /// own fade-in is not used meanwhile, as in Logic.
 ///
+/// Take folders crossfade like any region, with the takes heard at their ends. A loop
+/// crossfades at its loop end, from its last repetition.
+///
 /// `clip_frames` gives a clip's length (None: missing, so no crossfade).
 pub fn crossfades(regions: &[Region], clip_frames: impl Fn(Id) -> Option<i64>) -> Vec<Crossfade> {
     let mut order: Vec<&Region> = regions.iter().filter(|r| crossfadeable(r)).collect();
     order.sort_by_key(|r| (r.start, r.id));
     let mut out: Vec<Crossfade> = Vec::new();
     for a in order {
-        let RegionContent::Audio { clip, offset, fade_out, fade_shape, .. } = &a.content else { continue };
-        let len = (*fade_out).min(a.length);
+        let RegionContent::Audio { fade_out, fade_shape, .. } = &a.content else { continue };
+        let last = a.passes().last().copied().unwrap_or((a.start, a.length));
+        let len = (*fade_out).min(last.1);
         if !fade_shape.out_type.is_crossfade() || len <= 0 {
             continue;
         }
@@ -292,28 +341,26 @@ pub fn crossfades(regions: &[Region], clip_frames: impl Fn(Id) -> Option<i64>) -
         if out.iter().any(|x| x.in_region == b.id) {
             continue;
         }
-        let RegionContent::Audio { clip: b_clip, offset: b_offset, .. } = &b.content else { continue };
-        let (Some(a_frames), Some(_)) = (clip_frames(*clip), clip_frames(*b_clip)) else { continue };
-        let (a_end, b_end) = (a.start + a.length, b.start + b.length);
-        // Audio the files have past the outgoing region's end and before the incoming one's
-        // start.
-        let past = (a_frames - (offset + a.length)).max(0);
-        let before = (*b_offset).max(0);
-        let lo = a.start.max(b.start - before);
-        let hi = b_end.min(a_end + past);
-        let pivot = (b.start + a_end) / 2;
-        let room = hi - lo;
-        let (fo, fi) = if room * 4 >= len {
-            let l = len.min(room);
-            let s = (pivot - l / 2).clamp(lo, hi - l);
-            ((s, l), (s, l))
-        } else {
-            let h = (len / 2).min(pivot - a.start).min(b_end - pivot).max(0);
-            ((pivot - h, h), (pivot, h))
-        };
+        let (Some((_, past)), Some((before, _))) = (spare(a, &clip_frames), spare(b, &clip_frames)) else { continue };
+        let (fo, fi) = zone((last.0, a.end()), (b.start, b.start + b.length), past, before, len);
         out.push(Crossfade { out_region: a.id, in_region: b.id, kind: fade_shape.out_type, curve: fade_shape.out_curve, fade_out: fo, fade_in: fi });
     }
     out
+}
+
+/// The crossfades between a looping region's repetitions when it has [`FadeShape::loop_xfade`]
+/// on: for each repetition after the first, the timeline (start, length) of the fade-out of
+/// the pass before it and of its own fade-in, `len` frames centred on the seam where the file
+/// has audio to spare (as [`crossfades`] places them). Empty for anything else.
+pub fn loop_seams(r: &Region, clip_frames: impl Fn(Id) -> Option<i64>, len: i64) -> Vec<((i64, i64), (i64, i64))> {
+    let RegionContent::Audio { clip, offset, fade_shape, .. } = &r.content else { return Vec::new() };
+    if !fade_shape.loop_xfade || !r.is_looped() || r.takes.is_some() || len <= 0 {
+        return Vec::new();
+    }
+    let Some(frames) = clip_frames(*clip) else { return Vec::new() };
+    let (before, past) = ((*offset).max(0), (frames - (offset + r.length)).max(0));
+    let passes = r.passes();
+    passes.windows(2).map(|w| zone((w[0].0, w[0].0 + w[0].1), (w[1].0, w[1].0 + w[1].1), past, before, len.min(r.length))).collect()
 }
 
 #[cfg(test)]
@@ -439,8 +486,43 @@ mod tests {
     }
 
     #[test]
+    fn folders_and_loops_crossfade() {
+        use crate::model::{CompSegment, Take, TakeFolder};
+        let frames = |_| Some(100_000);
+        // A take folder whose comp has audio either side of its ends, then a plain region.
+        let mut folder = region(1, 1000, 1000, 500, 200, FadeOutType::EqP);
+        let take = Take { id: 7, name: "Take 1".into(), clip: 3, offset: 0, start: 0, end: 5000, gain_db: 0.0, notes: Vec::new(), cc: Vec::new() };
+        folder.takes = Some(TakeFolder { takes: vec![take], comp: vec![CompSegment { start: 0, end: 5000, take: 7 }], ..TakeFolder::new() });
+        let rs = vec![folder.clone(), region(2, 2000, 1000, 8000, 0, FadeOutType::Out)];
+        assert_eq!(crossfades(&rs, frames)[0].fade_out, (1900, 200));
+        // The comp ends right at the folder's end: the crossfade slides before the junction,
+        // the next region playing from earlier in its file.
+        folder.takes.as_mut().unwrap().comp[0].end = 1500;
+        let rs = vec![folder, region(2, 2000, 1000, 8000, 0, FadeOutType::Out)];
+        assert_eq!(crossfades(&rs, frames)[0].fade_out, (1800, 200));
+        // A loop crossfades at its loop end, into a region starting there.
+        let mut looped = region(1, 1000, 1000, 5000, 200, FadeOutType::X);
+        looped.loop_end = Some(3500);
+        let rs = vec![looped.clone(), region(2, 3500, 1000, 8000, 0, FadeOutType::Out)];
+        let x = crossfades(&rs, frames);
+        assert_eq!((x[0].in_region, x[0].fade_out), (2, (3400, 200)));
+        assert!(loop_seams(&looped, frames, 100).is_empty(), "seams only when asked for");
+        if let RegionContent::Audio { fade_shape, .. } = &mut looped.content {
+            fade_shape.loop_xfade = true;
+        }
+        // Two seams (at 2000 and 3000), each centred.
+        assert_eq!(loop_seams(&looped, frames, 100), vec![((1950, 100), (1950, 100)), ((2950, 100), (2950, 100))]);
+        // At the start of its file: no audio before, so the seam slides after it.
+        let mut at_zero = looped.clone();
+        if let RegionContent::Audio { offset, .. } = &mut at_zero.content {
+            *offset = 0;
+        }
+        assert_eq!(loop_seams(&at_zero, frames, 100)[0].1, (2000, 100));
+    }
+
+    #[test]
     fn reversed_shape_swaps_ends() {
-        let s = FadeShape { in_curve: 0.2, out_curve: -0.4, in_type: FadeInType::SpeedUp, out_type: FadeOutType::EqP };
+        let s = FadeShape { in_curve: 0.2, out_curve: -0.4, in_type: FadeInType::SpeedUp, out_type: FadeOutType::EqP, loop_xfade: false };
         let r = s.reversed();
         assert_eq!((r.in_curve, r.out_curve, r.in_type, r.out_type), (-0.4, 0.2, FadeInType::Fade, FadeOutType::SlowDown));
     }

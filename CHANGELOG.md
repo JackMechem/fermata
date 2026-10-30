@@ -16,6 +16,14 @@ All notable changes to Fermata are recorded here. The format follows
   pattern length, rate, swing and loop, and the playing step lit during playback. Pattern
   regions show their steps in the Tracks area, play in every render, and convert to and from
   MIDI regions.
+- **Comps and MIDI take folders:** a take folder keeps several comps (Create New Comp,
+  Duplicate Comp, Rename Comp, Delete Comp and the comp list in its menu; the name bar shows
+  the comp heard). Settings › Recording › MIDI › Create take folders makes each MIDI cycle pass
+  a take, and MIDI recordings over regions take folders; MIDI folders play whole takes. Take
+  folders crossfade with their neighbours, loops crossfade at their loop end and optionally at
+  every repetition (Crossfade Loop Repetitions), and Settings › Editing › Crossfade Time and
+  Crossfade Curve set the take folder, X-Fade and Crossfade menu crossfades (comp boundaries
+  are now 20 ms by default instead of 10 ms).
 - **VCA faders:** Mixer › Options › Create New VCA, or a strip's new **VCA** slot. A VCA strip's
   fader offsets the level of every strip assigned to it without moving their faders (an
   outlined cap on each fader shows where it really plays), its Mute mutes them, and VCAs can be

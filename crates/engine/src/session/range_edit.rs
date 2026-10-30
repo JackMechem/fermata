@@ -92,6 +92,10 @@ pub(super) fn sub_region(r: &Region, a: i64, b: i64, id: Id) -> Region {
             *cc = crate::midi::cc_from(cc, cut).into_iter().filter(|c| c.start < length).collect();
         }
     }
+    // Each piece of a MIDI take folder is a folder over its part of the takes.
+    if let (Some(f), RegionContent::Midi { .. }) = (&mut out.takes, &out.content) {
+        f.offset += cut;
+    }
     out
 }
 

@@ -46,6 +46,7 @@ CHECKS=(
   "autolanes_check tone dir"
   "pattern_check dir"
   "editing_check tone dir"
+  "comping_check dir"
 )
 # A check that hangs (a transport that never stops, say) fails instead of stalling CI.
 TIMEOUT=${HEADLESS_CHECK_TIMEOUT:-600}
