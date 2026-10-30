@@ -10,45 +10,60 @@ early and less tested (see [Platform support](#platform-support)).
 
 - **Recording:** audio from any input (mono or stereo per track) with live waveforms, latency
   compensation and a manual recording delay; MIDI with controllers, pitch bend and aftertouch;
-  count-in and pre-roll; cycle recording into take folders; Autopunch; a choice of what happens
-  to overlapped regions.
+  count-in and pre-roll; cycle recording into take folders; Autopunch; Logic's Replace mode and
+  a choice of what happens to overlapped audio and MIDI; Step Input; crash-safe takes.
 - **Take folders and comping**, after Logic's Quick Swipe Comping: swipe across take rows to
-  build a comp, with crossfaded boundaries; Flatten, Flatten and Merge, Pack and Unpack.
+  build a comp, keep several comps per folder, crossfaded boundaries; MIDI take folders;
+  Flatten, Flatten and Merge, Pack and Unpack.
 - **Tracks area:** move, trim, split, join, loop, fade, gain, reverse, colour, copy, paste,
-  repeat, nudge, Alt-drag copy and rubber-band select regions with Smart snap; fade curves,
-  Speed Up and Slow Down fades, and X, EqP and X S crossfades between adjacent or overlapping
-  regions, made automatically by edits in the X-Fade drag mode; track stacks
-  (folder and summing), groups, hidden tracks, Track Freeze, and a Marker track.
+  repeat and nudge regions with Smart snap, musically across tempo changes; Logic's tools
+  (Pointer, Pencil, Eraser, Scissors, Glue, Mute, Fade, Marquee) with a Tool menu; the
+  Overlap, No Overlap, X-Fade, Shuffle L and Shuffle R drag modes; fade curves, Speed Up and
+  Slow Down fades, and X, EqP and X S crossfades; region playback parameters (Quantize,
+  Transpose, Velocity, Dynamics, Gate Time, Delay); Logic's arranging commands (Select, Section
+  Between Locators, Trim, Move, Strip Silence, Name and Color); Snap Edits to Zero Crossings.
+- **Tracks and arrangement:** track stacks (folder and summing), groups, hidden tracks, Track
+  Freeze, track alternatives; markers with their own lengths, an Arrangement track whose
+  sections move and copy with their content, and an overview of the whole project.
 - **Editors:** a Piano Roll with eight tools, Time Quantize with strength and swing, scale
-  quantize, humanize, note-length functions and a velocity / controller lane; an Audio Track
-  Editor with range edits, normalizing, fades to selection and Split at Transients; Standard
-  MIDI File import and export.
+  quantize, humanize, note-length functions and a velocity / controller lane with curved
+  ramps; Logic's Event List; a Step Sequencer for drum patterns and riffs (pattern regions);
+  an Audio Track Editor with range edits, normalizing, fades to selection and Split at
+  Transients; Standard MIDI File import and export.
 - **Mixing:** channel strips with an eight-band Channel EQ and analyzer, eight Audio FX slots,
-  eight pre- or post-fader sends, aux buses and output routing; plug-in delay compensation on
-  every path, with a Low Latency Mode.
+  eight pre- or post-fader sends, aux buses, output routing and VCA faders; clip indicators and
+  gain-reduction meters; channel strip settings to copy, paste and save; plug-in delay
+  compensation on every path, gliding without clicks, with a Low Latency Mode.
 - **Automation:** volume, pan, mute, send levels and plug-in parameters, with Logic's Off,
-  Read, Touch, Latch and Write modes.
+  Read, Touch, Latch and Write modes, several lanes per track, curved segments, folder stack
+  and Stereo Out (Output track) automation, and automation that can move with its regions.
+- **MIDI Learn:** assign a controller's knobs, faders and buttons to mixer controls, plug-in
+  parameters and the transport (Learn Assignment, Controller Assignments window).
 - **Plug-ins:** VST3 instruments and effects, scanned out of process; Fermata Synth built in.
   Copy and paste plug-ins (VST3 state included) and Channel EQ settings between strips and
   projects; drag plug-ins to reorder them or move them to another strip (Alt copies).
 - **Built-in effects:** Compressor (five modelled circuits), Limiter, Noise Gate, De-Esser,
-  Reverb, Delay, Tuner and Loudness Meter, in any Audio FX slot with
-  Logic-style panels, factory and user presets, automatable parameters, side-chain input from
-  any track, latency reported to delay compensation, and freeze support. The Channel EQ has
-  presets too.
-- **Bounce and export:** offline bounce of the project or a section, Export All Tracks,
-  Export Region, Bounce in Place, as 16-bit (dithered), 24-bit or 32-bit float WAV.
+  Reverb, Delay, Chorus, Flanger, Phaser, Tremolo, Overdrive, Distortion, Linear Phase EQ,
+  Gain, Tuner and Loudness Meter, in any Audio FX slot with Logic-style panels (docked,
+  floating or in their own windows), factory and user presets, automatable parameters, pre- or
+  post-fader side-chain input from any track, latency reported to delay compensation, and
+  freeze support. The Channel EQ has presets too.
+- **Bounce and export:** offline bounce of the project or a section, Export All or Selected
+  Tracks, Export Region, Bounce in Place, as WAV, AIFF or FLAC at 16-bit (dithered), 24-bit or
+  32-bit float.
 - **Tempo and signature:** tempo changes and smooth ramps, time signature changes, in Tempo and
   Signature global tracks; the grid, click, quantize, plug-ins and MIDI files all follow them.
-- **Projects:** `.fermata` folders, a Project Chooser with templates, autosave and crash
-  recovery, and undo for every edit (100 steps by default).
-- **Interface:** Logic Pro 11's layout, five themes, interface scaling from 90 to 200 %, four
+- **Projects:** `.fermata` folders, a Project Chooser with built-in and your own templates,
+  project alternatives, backups with Revert to, autosave and crash recovery (interrupted
+  recordings included), and undo for every edit (100 steps by default).
+- **Interface:** Logic Pro 11's layout, the Mixer, editors and effect panels in separate
+  windows (on another monitor, say), five themes, interface scaling from 90 to 200 %, four
   waveform styles, rebindable key commands shown the way your platform writes them, Musical
   Typing, and a click in the tracks area that moves the playhead (configurable).
 - **Robustness:** plug-ins are scanned in a separate process; every plug-in's output is
   checked, so NaNs and runaway levels are silenced and the plug-in is named in a message; an
   internal engine error skips one block instead of crashing; the audio thread never waits on a
-  lock.
+  lock; saves are atomic and a damaged project falls back to its autosave or a backup.
 
 The [User Guide](docs/USER_GUIDE.md) describes all of it in detail.
 [LOGIC_FEATURES.md](LOGIC_FEATURES.md) lists every Logic Pro feature by stage and marks what
@@ -143,11 +158,11 @@ main limitations:
   is available (no ASIO).
 - The release builds are unsigned (see [Install](#install)).
 - Regions stay at fixed times when the tempo changes (Move MIDI Regions with Tempo keeps MIDI
-  on its bars); region drags in the tracks area move in samples.
-- No Marquee tool, Fade tool, or No Overlap and Shuffle drag modes yet.
-- No Step Input, Event List or Score in the Piano Roll; no MIDI learn.
+  on its bars).
+- No Score editor, Flex Time or Flex Pitch, and no control surface protocols such as Mackie
+  Control; MP3 and AAC aren't offered as bounce formats.
 
-The User Guide's [Known limitations](docs/USER_GUIDE.md#19-known-limitations) has the full list,
+The User Guide's [Known limitations](docs/USER_GUIDE.md#20-known-limitations) has the full list,
 [TODO.md](TODO.md) the staged roadmap, and [CHANGELOG.md](CHANGELOG.md) what each release
 contains.
 

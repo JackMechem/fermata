@@ -5,14 +5,13 @@ with each one checked against what Fermata has today. It is a planning document:
 far Fermata has come and what is left. It is not a promise to clone everything. Some items are
 macOS-specific and are marked as such.
 
-- **Date:** 2026-10-28
+- **Date:** 2026-10-29
 - **Source:** *Logic Pro User Guide for Mac*, covering **Logic Pro 12.3** (its "What's new" pages
   cover 12.0, 12.1 and 12.3). Page references such as "(p. 512)" point to that guide. The
   bundled instruments and effects are documented in Apple's separate *Logic Pro Instruments* and
   *Logic Pro Effects* guides, so Stage 5 summarises them by category.
 - **Fermata status** was checked against the source code of the current merged tree (`src/`,
-  `crates/engine`, `crates/vst3-host`, `src-tauri`), not only the README. Items marked "in
-  progress" are being built on branches that haven't been merged yet.
+  `crates/engine`, `crates/vst3-host`, `src-tauri`), not only the README.
 
 ## Legend
 
@@ -21,22 +20,21 @@ macOS-specific and are marked as such.
 | `[x]` | Implemented |
 | `[~]` | Partial: Fermata has a simpler version (the note says what's missing) |
 | `[ ]` | Not started |
-| `[ ] 🚧` | In progress: being built now, not merged yet |
 
 ## Summary
 
 Counted from the checkboxes below. Stage 5 summarises the bundled instruments and effects by
 category, one line each, so its count understates how much content that is.
 
-| Stage | Done | Partial | In progress | Not started | Total |
-|---|---:|---:|---:|---:|---:|
-| 1. Core | 180 | 33 | 0 | 50 | 263 |
-| 2. Professional editing and mixing | 21 | 18 | 0 | 190 | 229 |
-| 3. Advanced production | 0 | 0 | 0 | 111 | 111 |
-| 4. Studio integration | 0 | 0 | 0 | 61 | 61 |
-| 5. Content and AI | 0 | 6 | 0 | 34 | 40 |
-| 6. Platform | 5 | 3 | 0 | 18 | 26 |
-| **All** | **206** | **60** | **0** | **464** | **730** |
+| Stage | Done | Partial | Not started | Total |
+|---|---:|---:|---:|---:|
+| 1. Core | 188 | 29 | 46 | 263 |
+| 2. Professional editing and mixing | 60 | 34 | 135 | 229 |
+| 3. Advanced production | 4 | 5 | 102 | 111 |
+| 4. Studio integration | 3 | 0 | 58 | 61 |
+| 5. Content and AI | 0 | 9 | 31 | 40 |
+| 6. Platform | 5 | 4 | 17 | 26 |
+| **All** | **260** | **81** | **389** | **730** |
 
 ---
 
@@ -378,8 +376,9 @@ hosting, automation and undo. This stage is mostly done.
 
 ## Stage 2: Professional editing and mixing
 
-What's being built now, plus the near-term gaps that working engineers expect: comping, markers,
-the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart Controls.
+The near-term gaps that working engineers expect: comping, markers, the tempo map, full
+Tracks-area tools, the list editors, VCAs, presets and Smart Controls. About a quarter is done,
+most of it the everyday editing and mixing work.
 
 ### Tools (p. 54–60)
 
@@ -501,7 +500,7 @@ the tempo map, full Tracks-area tools, the list editors, VCAs, presets and Smart
 
 ### Global tracks, markers, tempo and signatures (p. 732–801)
 
-- [x] Global Tracks area; show or hide it and its tracks (p. 733–735). *Signature and Tempo tracks (G).*
+- [x] Global Tracks area; show or hide it and its tracks (p. 733–735). *Arrangement, Signature and Tempo tracks (G).*
 - [~] Configure, resize and reorder global tracks (p. 734–735). *The Tempo track resizes; no configuring or reordering.*
 - [x] Marker track (p. 737)
 - [x] Marker List (p. 737)
@@ -1083,30 +1082,33 @@ Not applicable to Fermata (listed for completeness, not counted):
 
 The ten gaps that would add the most value. PDC, freeze, markers, Autopunch, take folders and
 comping, the tempo map and signatures, plug-in presets (built-in effects and Channel EQ),
-side-chains for the built-in dynamics and the bundled effects core are done; items 4 to 6 are
-partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
+side-chains for the built-in dynamics and the bundled effects core are done; most of the ten
+are done too, and the rest are partly done, as noted. [TODO.md](TODO.md) has the staged roadmap.
 
 1. **Plug-in editor windows on Windows and macOS.** Without them, Fermata is effectively a
    Linux-only DAW for anyone using plug-ins. *macOS is done; Windows is not.*
 2. **Crossfades, fade curves and drag modes** (X-Fade and Shuffle). These are the basis of
    clean audio editing and comping. *Done: fades, crossfades and all five drag modes.*
 3. **Marquee tool and Tracks-area Tool menu** (Scissors, Glue, Fade, Pencil, Eraser): the
-   everyday editing workflow.
+   everyday editing workflow. *Done.*
 4. **Plug-in presets and channel strip settings**, with compare and copy/paste. Without them,
    any sound worth keeping has to be rebuilt by hand. *Presets for the built-in effects and the
    Channel EQ, copy and paste of any plug-in, and channel strip settings are done; Compare and
    VST3 presets are not.*
 5. **Side-chain inputs and multi-output instruments.** Ducking, gating and multi-out drum
    instruments are standard in modern mixing. *Side-chains work for the built-in Compressor,
-   Noise Gate and De-Esser; VST3 side-chains and multi-output instruments are missing.*
+   Noise Gate and De-Esser, pre- or post-fader; VST3 side-chains and multi-output instruments
+   are missing.*
 6. **A bundled effects core:** Compressor, Limiter, Noise Gate, reverb, delay and a tuner. A new
    project should be mixable without third-party plug-ins. *Done, with a De-Esser, Loudness
    Meter, modulation (Chorus, Flanger, Phaser, Tremolo), Overdrive, Distortion and Gain.*
 7. **Event List and Step Input**, for precise MIDI editing and for entering notes without
-   playing them.
+   playing them. *Done.*
 8. **Track alternatives and project alternatives/backups**, so engineers can try ideas safely.
+   *Done, except hearing an inactive track alternative.*
 9. **Region playback parameters** (non-destructive quantize, transpose, velocity, delay) and
    **MIDI controller learn / controller assignments**, which also lays the groundwork for
    control surfaces. *Both are done.*
 10. **More bounce formats** (FLAC, MP3/AAC, AIFF), **export of selected tracks**, and **VCA
-    faders**, to finish the mixing and delivery path.
+    faders**, to finish the mixing and delivery path. *Done except MP3 and AAC, and VCA
+    automation.*

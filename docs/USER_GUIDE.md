@@ -16,25 +16,97 @@ keys you reassign there.
 
 Contents:
 
-1. [Getting started](#1-getting-started)
-2. [The main window](#2-the-main-window)
-3. [Recording](#3-recording)
-4. [Software instruments and Musical Typing](#4-software-instruments-and-musical-typing)
-5. [Editing in the tracks area](#5-editing-in-the-tracks-area)
-6. [Track stacks, groups, hiding and freezing](#6-track-stacks-groups-hiding-and-freezing)
+1. [Getting started](#1-getting-started): [First launch](#first-launch) ·
+   [Choosing a driver and devices](#choosing-a-driver-and-devices) ·
+   [The input level check (Linux)](#the-input-level-check-linux) · [Monitoring](#monitoring)
+2. [The main window](#2-the-main-window): [Control bar](#control-bar) ·
+   [Tracks area](#tracks-area) · [Inspector](#inspector) ·
+   [Library and Browser](#library-and-browser) · [Status line](#status-line) ·
+   [The menu bar](#the-menu-bar) · [Separate windows](#separate-windows)
+3. [Recording](#3-recording): [Recording audio](#recording-audio) ·
+   [Count-in and pre-roll](#count-in-and-pre-roll) · [Cycle recording](#cycle-recording) ·
+   [Autopunch](#autopunch) · [Recording MIDI](#recording-midi) ·
+   [Latency compensation](#latency-compensation)
+4. [Software instruments and Musical Typing](#4-software-instruments-and-musical-typing):
+   [Musical Typing](#musical-typing) · [Step Input](#step-input)
+5. [Editing in the tracks area](#5-editing-in-the-tracks-area):
+   [Selecting regions](#selecting-regions) ·
+   [Moving, trimming and snapping](#moving-trimming-and-snapping) · [Drag modes](#drag-modes) ·
+   [Split and join](#split-and-join) · [Tools and the marquee](#tools-and-the-marquee) ·
+   [Loops](#loops) · [Fades and crossfades](#fades-and-crossfades) ·
+   [Gain and reverse (audio regions)](#gain-and-reverse-audio-regions) ·
+   [Region playback parameters](#region-playback-parameters) ·
+   [Colours, names and mute](#colours-names-and-mute) ·
+   [Copy, paste, duplicate and repeat](#copy-paste-duplicate-and-repeat) ·
+   [Other region commands](#other-region-commands) ·
+   [Arranging commands](#arranging-commands) ·
+   [Importing audio and MIDI](#importing-audio-and-midi) · [Tracks](#tracks) · [Undo](#undo)
+6. [Track stacks, groups, hiding and freezing](#6-track-stacks-groups-hiding-and-freezing):
+   [Track stacks](#track-stacks) · [Groups](#groups) · [Hiding tracks](#hiding-tracks) ·
+   [Freezing tracks](#freezing-tracks)
 7. [Take folders and comping](#7-take-folders-and-comping)
-8. [Markers](#8-markers)
-9. [Tempo and time signature](#9-tempo-and-time-signature)
-10. [The Piano Roll](#10-the-piano-roll)
-11. [The Audio Track Editor](#11-the-audio-track-editor)
-12. [Mixing](#12-mixing)
-13. [Automation](#13-automation)
-14. [Bounce and export](#14-bounce-and-export)
-15. [Projects](#15-projects)
-16. [Settings reference](#16-settings-reference)
-17. [Key command reference](#17-key-command-reference)
-18. [Troubleshooting](#18-troubleshooting)
-19. [Known limitations](#19-known-limitations)
+8. [Markers and the Arrangement track](#8-markers-and-the-arrangement-track):
+   [Markers](#markers) · [The Arrangement track](#the-arrangement-track)
+9. [Tempo and time signature](#9-tempo-and-time-signature): [Tempo track](#tempo-track) ·
+   [Signature track](#signature-track) ·
+   [What follows the tempo map](#what-follows-the-tempo-map)
+10. [The Piano Roll, Event List and Step Sequencer](#10-the-piano-roll-event-list-and-step-sequencer):
+    [View](#view) · [Tools](#tools) · [Editing notes](#editing-notes) ·
+    [Grid and Time Quantize](#grid-and-time-quantize) · [Functions menu](#functions-menu) ·
+    [Edit menu](#edit-menu) · [Velocity and controller lane](#velocity-and-controller-lane) ·
+    [Playback of MIDI regions](#playback-of-midi-regions) · [Event List](#event-list) ·
+    [Step Sequencer](#step-sequencer)
+11. [The Audio Track Editor](#11-the-audio-track-editor): [View and zoom](#view-and-zoom) ·
+    [Selecting](#selecting) · [Editing regions](#editing-regions) ·
+    [Range actions](#range-actions) · [Transients](#transients) · [Info](#info)
+12. [Mixing](#12-mixing): [The channel strip](#the-channel-strip) · [Channel EQ](#channel-eq) ·
+    [Channel strip settings](#channel-strip-settings) · [Plug-ins](#plug-ins) ·
+    [Built-in effects](#built-in-effects) · [Sends and aux buses](#sends-and-aux-buses) ·
+    [VCA faders](#vca-faders) · [Plug-in delay compensation](#plug-in-delay-compensation)
+13. [Automation](#13-automation):
+    [Showing and editing automation](#showing-and-editing-automation) ·
+    [Several lanes per track](#several-lanes-per-track) ·
+    [The Output track](#the-output-track) · [Automation modes](#automation-modes)
+14. [Controller assignments (MIDI Learn)](#14-controller-assignments-midi-learn):
+    [Learning an assignment](#learning-an-assignment) ·
+    [How assignments behave](#how-assignments-behave) ·
+    [The Controller Assignments window](#the-controller-assignments-window)
+15. [Bounce and export](#15-bounce-and-export):
+    [Bounce Project or Section](#bounce-project-or-section) ·
+    [Export All Tracks as Audio Files](#export-all-tracks-as-audio-files) ·
+    [Export Selected Tracks as Audio Files](#export-selected-tracks-as-audio-files) ·
+    [Bounce in Place](#bounce-in-place) ·
+    [Export Region as Audio File](#export-region-as-audio-file) · [MIDI files](#midi-files)
+16. [Projects](#16-projects): [The Project Chooser](#the-project-chooser) ·
+    [Open, save and close](#open-save-and-close) · [Project templates](#project-templates) ·
+    [Project alternatives](#project-alternatives) ·
+    [Backups and Revert to](#backups-and-revert-to) ·
+    [Autosave and recovery](#autosave-and-recovery) · [Project Settings](#project-settings)
+17. [Settings reference](#17-settings-reference): [General](#general) · [Audio](#audio) ·
+    [Recording](#recording) · [Metronome](#metronome) · [MIDI](#midi) · [Editing](#editing) ·
+    [Plug-ins](#plug-ins-1) · [Key Commands](#key-commands) · [Appearance](#appearance)
+18. [Key command reference](#18-key-command-reference): [Transport](#transport) ·
+    [Navigation](#navigation) · [View](#view-1) · [Tracks](#tracks-1) · [Editing](#editing-1) ·
+    [Windows](#windows) · [Control Surfaces](#control-surfaces) ·
+    [Step Input Keyboard](#step-input-keyboard) ·
+    [Menu bar shortcuts (fixed)](#menu-bar-shortcuts-fixed) ·
+    [Tracks area mouse modifiers](#tracks-area-mouse-modifiers) ·
+    [Piano Roll keys](#piano-roll-keys) · [Event List keys](#event-list-keys) ·
+    [Audio Track Editor keys](#audio-track-editor-keys) ·
+    [Automation (with Show Automation on)](#automation-with-show-automation-on) ·
+    [Musical Typing (while its window is open)](#musical-typing-while-its-window-is-open)
+19. [Troubleshooting](#19-troubleshooting):
+    [Recordings are very quiet (or silent)](#recordings-are-very-quiet-or-silent) ·
+    [Crackles, clicks or dropouts](#crackles-clicks-or-dropouts) ·
+    [Plug-in windows don't open on Wayland](#plug-in-windows-dont-open-on-wayland) ·
+    [Your computer's audio is recorded, or loops back](#your-computers-audio-is-recorded-or-loops-back) ·
+    [Recordings are early or late](#recordings-are-early-or-late) ·
+    ["System overload" and playback stops](#system-overload-and-playback-stops) ·
+    ["… put out invalid audio" and a plug-in goes quiet](#-put-out-invalid-audio-and-a-plug-in-goes-quiet) ·
+    [The playhead or meters freeze during a bounce](#the-playhead-or-meters-freeze-during-a-bounce) ·
+    [Plug-ins are missing](#plug-ins-are-missing) ·
+    [A blank window on Linux](#a-blank-window-on-linux)
+20. [Known limitations](#20-known-limitations)
 
 ---
 
@@ -119,7 +191,8 @@ From left to right:
   Stop, Play (Space), Record (R). Stop while stopped returns to the left locator when Cycle is
   on, otherwise to the start, and the Tracks area and the open editor scroll sideways to show
   it if it's off screen. Other jumps (Go to Beginning, Rewind, Forward, markers) leave the view
-  where it is; **Scroll to Playhead** (the button beside Catch, or Alt+\`) brings the playhead into view.
+  where it is; **Scroll to Playhead** (the button beside Catch, or Alt+\`) brings the playhead
+  into view.
 - **The LCD:**
   - **BAR / BEAT:** the playhead position. Drag vertically to move the playhead by bars.
   - **TEMPO:** drag vertically to change it, or double-click to type a value (Enter applies,
@@ -141,13 +214,14 @@ From left to right:
   (\`, on by default: the view follows the playhead), **Scroll to Playhead** (shows the
   playhead without moving it), the **Left-click Tool** and **Ctrl-click Tool** pop-ups (see
   [Tools and the marquee](#tools-and-the-marquee)), the **Snap** pop-up (Smart, Bar, Beat,
-  Off; Smart follows the zoom), the track height slider and the horizontal zoom slider.
+  Off; Smart follows the zoom), the **Drag** pop-up (see [Drag modes](#drag-modes)), the track
+  height slider and the horizontal zoom slider.
 - **Ruler**, from the top:
   - the **cycle strip** (yellow): drag to make a cycle range, drag it or its edges to move or
     resize it, click it to switch Cycle on and off;
   - the **bar numbers**: click or drag to move the playhead;
   - the **Autopunch strip** (red): works like the cycle strip, for the punch range;
-  - the **marker lane** (see [Markers](#8-markers)).
+  - the **marker lane** (see [Markers](#markers)).
 - **Track headers:** colour, number, icon, name, the M (Mute), S (Solo), R (Record Enable,
   audio and instrument tracks), I (Input Monitoring, audio tracks) buttons, the Freeze
   (snowflake) button, a group badge, and a volume slider whose groove is the track's level
@@ -158,9 +232,9 @@ From left to right:
   track heights. With a mouse that has only a vertical wheel, set Settings › Editing › Mouse
   Wheel Scrolls to **Horizontally (time)**: the wheel then scrolls through time and Shift+wheel
   scrolls the tracks. Over the track headers the wheel always scrolls the tracks, and over the
-  ruler and global tracks it always scrolls through time. A click without a drag, on a region or on empty
-  space, also moves the playhead there (snapped to the grid). Settings › Editing › Click Moves
-  Playhead can limit this to empty space or turn it off.
+  ruler and global tracks it always scrolls through time. A click without a drag, on a region
+  or on empty space, also moves the playhead there (snapped to the grid). Settings › Editing ›
+  Click Moves Playhead can limit this to empty space or turn it off.
 - **Overview:** the strip along the bottom, in place of a horizontal scroll bar, shows the
   whole project in miniature: a row per track (a closed stack is one row), each region as a
   bar in its colour, the cycle range and markers along the top edge, the playhead, and the end
@@ -235,18 +309,17 @@ status, the audio devices, and the number of MIDI inputs.
 | Fermata | About Fermata (shows the version), Settings…, Appearance…, Key Commands…, Control Surfaces › (Learn Assignment for Last Touched Parameter, Controller Assignments…), Quit Fermata |
 | File | New…, Open Recent…, Open…, Save, Save As…, Save as Template…, Revert to Saved, Revert to ›, Project Alternatives ›, Project Settings…, Import Audio File…, Bounce Project or Section…, Export Selected Tracks as Audio Files…, Export All Tracks as Audio Files…, Import MIDI File…, Export Selection as MIDI File… |
 | Edit | Undo, Redo, Cut / Copy / Paste Regions, Paste at Original Position, Paste Replace, Duplicate, Repeat Regions, Split Regions at Playhead, Join Regions, Join Regions per Track, Loop Regions, Convert Loops to Real Copies, Pack Take Folder, Set Locators by Regions, Snap Edits to Zero Crossings, Strip Silence…, Section Between Locators ›, Trim ›, Move ›, Name and Color ›, Select All, Select ›, Delete (see [Arranging commands](#arranging-commands)) |
-| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
+| Track | New Tracks…, New Aux, Duplicate Track, New Track with Same Settings, New Pattern Region, Bounce in Place…, Freeze Track, Unfreeze Track, Create Folder Stack, Create Summing Stack, Group Selected Tracks, Show Output Track, Hide Track, Unhide All Tracks, Delete Track, Delete Unused Tracks, Track Alternatives › |
 | Record | Play / Stop, Record, Cycle, Autopunch, Metronome, Count-in, Low Latency Mode |
 | Navigate | Create Marker, Delete Marker, Go to Previous Marker, Go to Next Marker, Open Marker List |
-| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Show Used Automation, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
+| View | Library, Inspector, Mixer, Editors, List Editors, Mixer in Separate Window, Editor in Separate Window, Event List in Separate Window, Browsers, Show Automation, Show Used Automation, Show Global Tracks, Show Overview, Musical Typing, Step Input Keyboard, Show Hidden Tracks, Zoom In, Zoom Out, Larger Interface, Smaller Interface, Actual Size, Theme › |
 
-When the Piano Roll has focus, the Edit menu's Cut, Copy, Paste, Duplicate, Delete and Select
-All act on notes. When the Audio Track Editor has focus and a range selected, Cut, Copy, Delete
-and Split act on the range.
-With the Piano Roll or the Event List focused, Edit › Select's All Following, Inside Locators,
-Muted, Same Colored, Equal and Invert Selection (and their keys) select notes and events rather
-than regions, as in Logic (see [Edit menu](#edit-menu)).
-While a bounce is rendering, menu commands are ignored.
+The Edit menu acts on what has focus. In the Piano Roll, Cut, Copy, Paste, Duplicate, Delete
+and Select All act on notes, and Edit › Select's All Following, Inside Locators, Muted, Same
+Colored, Equal and Invert Selection (and their keys) select notes, as in Logic; in the Event
+List they select events (see [Edit menu](#edit-menu)). In the Audio Track Editor with a range
+selected, Cut, Copy, Delete and Split act on the range. While a bounce is rendering, menu
+commands are ignored.
 
 **Sheets and key commands.** While a sheet is open (Strip Silence, Group Settings, a name or
 value to type, Settings, Bounce…), key commands don't reach the tracks or editors behind it,
@@ -343,7 +416,9 @@ folder** ("Take 1", "Take 2"...). A last pass stopped part-way is kept if it got
 beat in. Recording the same cycle range again adds its passes to the same folder. A single pass
 becomes a normal region. See [Take folders and comping](#7-take-folders-and-comping).
 
-MIDI recorded in cycle mode goes into one region over the passes.
+MIDI recorded in cycle mode goes into one region over the passes, unless Settings › Recording
+› Overlapping Recordings › MIDI is set to Create take folders (see
+[Recording MIDI](#recording-midi)).
 
 ### Autopunch
 
@@ -382,6 +457,9 @@ says what happens over an existing MIDI region:
   after it, so what follows plays as before. A region left empty inside the range is removed.
   In cycle mode the whole cycle (narrowed by Autopunch) is replaced. A recording in which
   nothing was played changes nothing. The **Replace** button in the control bar does the same.
+- **Create take folders:** each pass of a cycle recording becomes a take, and a recording over
+  MIDI regions packs them into a take folder with the new take (see
+  [MIDI take folders](#7-take-folders-and-comping)).
 
 ### Latency compensation
 
@@ -462,15 +540,10 @@ bar before it (which grows), or else a new one-bar region. The transport must be
 - Each step is one undo step (a chord's notes share it). Move the playhead yourself at any time
   and steps continue from there. The notes just entered are selected.
 
-Key commands (Settings › Key Commands › Step Input; they work while the window is open):
-
-| Key | Does |
-|---|---|
-| 1 – 8 | Note value 1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64, 1/128 |
-| 9 / 0 | Dotted / Triplet |
-| N | Rest |
-| Shift+Backspace | Back (delete the last step) |
-| (unassigned) | Chord, Sustain Inserted Notes, Quantize Step Input |
+While the window is open, **1** to **8** choose the note value (1/1 to 1/128), **9** Dotted,
+**0** Triplet, **N** Rest and **Shift+Backspace** Back. Chord, Sustain and Quantize have key
+commands without keys. All of them are in Settings › Key Commands › Step Input (see the
+[key reference](#step-input-keyboard)).
 
 Logic uses ⌥⌘K for the Step Input Keyboard; in Fermata that opens the Marker List, so the
 window has Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS).
@@ -485,11 +558,14 @@ window has Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS).
   deselects. Ctrl+A (Edit › Select All) selects all regions.
 - With a group whose Editing setting is on, clicking a region also selects the regions at the
   same place on the other members.
-- Right-click a region › Select › All on Track, All Following on Track, or All.
-- Edit › **Select** picks regions by criteria; see [Arranging commands](#arranging-commands).
-
 - Drag across empty lane space to draw a rubber band: every region it touches is selected.
   Shift+drag adds to the selection. A click without dragging still deselects.
+- Right-click a region › Select › All on Track, All Following on Track, or All.
+- Edit › **Select** picks regions by criteria (All Following, Inside Locators, Muted, Same
+  Colored…); see [Arranging commands](#arranging-commands).
+- Ctrl-drag (⌘-drag on macOS) draws a marquee, a time range across tracks, instead of
+  selecting whole regions, while the Ctrl-click Tool is the Marquee (the default); see
+  [Tools and the marquee](#tools-and-the-marquee).
 - Alt+drag (Option-drag on macOS) a selection to copy it: the originals stay put, the copies
   are drawn where they'll land and become the selection, and the copy is one undo step. Some
   Linux window managers use Alt+drag to move windows; if that happens, use Copy and Paste,
@@ -514,31 +590,8 @@ The pointer changes over a region's hot zones:
   bars and beats, so a region dragged from a 120 BPM section into a 90 BPM one still lands on
   its beat. Alt-drag copies do the same. With Snap off, the others keep their distance in time.
 - A moved region comes to the front, so it plays over whatever it now overlaps.
-- **Drag mode** (the **Drag** pop-up in the tracks area's bar, next to Snap) decides what
-  moves, trims, nudges, deletes, pastes and Alt-drag copies do to the other regions on the
-  track. It applies to audio and MIDI regions, each edit stays one undo step, and while you
-  drag, the regions are drawn where the drop will leave them. The mode is saved with the
-  project and isn't an undo step.
-  - **Overlap** (the default) leaves overlapping regions as they are.
-  - **No Overlap:** of two regions an edit leaves overlapping, the one that starts first is
-    shortened to end where the other starts, whichever of them you moved. A region dropped
-    into the middle of a longer one cuts the longer one off there (its tail is not kept); a
-    region dropped over the start of a shorter one is itself cut off there; a region dropped
-    exactly at another's start replaces it. Lengthening a region stops at its neighbour.
-  - **X-Fade** crossfades audio regions that an edit leaves overlapping, over the overlap
-    (type X), and removes such a crossfade when an edit pulls the two apart.
-  - **Shuffle L** keeps the regions on a track butted together. Deleting a region pulls the
-    regions after it left by its length. Trimming either edge keeps the region's start in
-    place and moves the regions after it by as much as it grew or shrank. A region dropped on
-    another goes before it if it lands on that region's first half and after it on the second
-    half, so dragging a region across its neighbour swaps the two; dropped in a gap, it snaps
-    to the end of the region before it (or stays put if there is none). Regions after it move
-    only as far as needed to make room, and the place it left closes up. Several regions
-    dragged together move as one block. Pastes and copies go in the same way.
-  - **Shuffle R** is the mirror image: deleting pulls the regions *before* the gap right, a
-    trim keeps the region's end in place, and a dropped region snaps to the start of the
-    region after it (judged by where its end lands). Where that would push regions before the
-    start of the project, the whole track's regions move right instead.
+- The **Drag mode** decides what happens to the regions an edit overlaps or leaves a gap
+  between; see [Drag modes](#drag-modes).
 - **Move Automation with Regions** (Settings › Editing): with **Always**, moving a region
   along its track (drag or nudge) takes the track's automation under it along, replacing the
   automation where it lands; the place it left is bridged with a straight line, and the curve
@@ -560,6 +613,36 @@ The pointer changes over a region's hot zones:
   take folders are cut where asked. The setting is saved with the project and isn't an undo
   step.
 - Regions on a frozen track can be selected but not changed.
+
+### Drag modes
+
+The **Drag** pop-up in the Tracks area's bar, next to Snap, sets the drag mode, as in Logic. It
+decides what moves, trims, nudges, deletes, pastes and Alt-drag copies do to the other regions
+on the track. It applies to audio and MIDI regions, each edit stays one undo step, and while
+you drag, the regions are drawn where the drop will leave them. The mode is saved with the
+project and isn't an undo step.
+
+- **Overlap** (the default) leaves overlapping regions as they are.
+- **No Overlap:** of two regions an edit leaves overlapping, the one that starts first is
+  shortened to end where the other starts, whichever of them you moved. A region dropped
+  into the middle of a longer one cuts the longer one off there (its tail is not kept); a
+  region dropped over the start of a shorter one is itself cut off there; a region dropped
+  exactly at another's start replaces it. Lengthening a region stops at its neighbour.
+- **X-Fade** crossfades audio regions that an edit leaves overlapping, over the overlap
+  (type X), or over the Crossfade Time (Settings › Editing) where they just touch, and removes
+  such a crossfade when an edit pulls the two apart.
+- **Shuffle L** keeps the regions on a track butted together. Deleting a region pulls the
+  regions after it left by its length. Trimming either edge keeps the region's start in
+  place and moves the regions after it by as much as it grew or shrank. A region dropped on
+  another goes before it if it lands on that region's first half and after it on the second
+  half, so dragging a region across its neighbour swaps the two; dropped in a gap, it snaps
+  to the end of the region before it (or stays put if there is none). Regions after it move
+  only as far as needed to make room, and the place it left closes up. Several regions
+  dragged together move as one block. Pastes and copies go in the same way.
+- **Shuffle R** is the mirror image: deleting pulls the regions *before* the gap right, a
+  trim keeps the region's end in place, and a dropped region snaps to the start of the
+  region after it (judged by where its end lands). Where that would push regions before the
+  start of the project, the whole track's regions move right instead.
 
 ### Split and join
 
@@ -647,8 +730,8 @@ As in Logic, a looping region repeats its own content from its end up to its **l
 - **Crossfades:** a crossfade type on a region whose end meets the next region on the track
   (touching or overlapping) crossfades the two over the Fade Out length, centred on the
   junction (or the middle of the overlap). Choosing a crossfade type for a region without a
-  fade-out gives it the Crossfade Time (or the overlap). The next region's own fade-in isn't used meanwhile;
-  its Fade In rows are dimmed. Followed by a gap, the type fades out like Out.
+  fade-out gives it the Crossfade Time (or the overlap). The next region's own fade-in isn't
+  used meanwhile; its Fade In rows are dimmed. Followed by a gap, the type fades out like Out.
 - Region menu › **Crossfade** (Crossfade Time, None, 10 ms, 20 ms, 50 ms, 250 ms, 1 Beat)
   crossfades each selected audio region with the one that follows it, as EqP unless it already
   has a crossfade type; None removes it. It is greyed out when no selected region is followed
@@ -742,7 +825,8 @@ From the region menu:
 - **Set Locators by Regions** (U): sets the cycle range to the selection.
 - **MIDI:** Quantize to 1/4, 1/8, 1/16 or 1/32 notes; Transpose by an octave or a semitone;
   Export as MIDI File….
-- **Bounce in Place…** and **Export as Audio File…** (see [Bounce and export](#14-bounce-and-export)).
+- **Bounce in Place…** and **Export as Audio File…** (see
+  [Bounce and export](#15-bounce-and-export)).
 - **Delete** (Backspace or Delete).
 
 Right-click **empty lane space** for Paste Here, Create MIDI Region (one bar, on instrument
@@ -773,18 +857,19 @@ key commands can be changed in Settings › Key Commands.
 **Edit › Section Between Locators** works on the whole project between the locators (the cycle
 range), or, with a marquee, between its edges on its tracks only. Regions across an edge are
 cut there; automation (Stereo Out's too), markers and Arrangement track sections move with
-their time, as when the Arrangement track moves a section. The tempo and signature tracks stay
-as they are.
+their time, as when the [Arrangement track](#the-arrangement-track) moves a section. The tempo
+and signature tracks stay as they are.
 
-- **Insert Silence Between Locators** (Ctrl+Alt+Z; ⌃⌘Z on macOS): everything from the left
-  locator on moves right by the locators' length.
-- **Cut Section Between Locators** (Ctrl+Alt+X; ⌃⌘X): the section goes and what follows moves
-  left to close the gap (Logic's Snip). The section is also copied to the clipboard.
-- **Repeat Section Between Locators** (Ctrl+Alt+R; ⌃⌘R): a copy of the section goes straight
-  after it, and what followed moves right. The copies are selected.
-- **Insert Cut Section at Left Locator** (Ctrl+Alt+V; ⌃⌘V): puts the section cut last back in at
-  the left locator (or the marquee's start), with its automation and markers, moving what
-  follows along (Logic's Splice).
+- **Insert Silence Between Locators** (Ctrl+Alt+Z, Control+⌘Z on macOS): everything from the
+  left locator on moves right by the locators' length.
+- **Cut Section Between Locators** (Ctrl+Alt+X, Control+⌘X on macOS): the section goes and what
+  follows moves left to close the gap (Logic's Snip). The section is also copied to the
+  clipboard.
+- **Repeat Section Between Locators** (Ctrl+Alt+R, Control+⌘R on macOS): a copy of the section
+  goes straight after it, and what followed moves right. The copies are selected.
+- **Insert Cut Section at Left Locator** (Ctrl+Alt+V, Control+⌘V on macOS): puts the section
+  cut last back in at the left locator (or the marquee's start), with its automation and
+  markers, moving what follows along (Logic's Splice).
 
 **Edit › Trim** (on the selected regions):
 
@@ -995,18 +1080,21 @@ Take folders follow Logic's Quick Swipe Comping.
 - A folder moves, trims, splits, loops, fades, crossfades and changes gain like any audio
   region. Every comp edit can be undone, folders are saved with the project, and bounces,
   exports and Bounce in Place render the comp.
-- **MIDI take folders.** With Settings › Recording › MIDI › **Create take folders**, each pass
-  of a MIDI cycle recording becomes a take (passes where nothing was played are left out), and
-  recording over MIDI regions packs them into a folder with the new take; recording over a
-  MIDI take folder adds takes to it. As in Logic, a MIDI folder plays one whole take: click a
-  take row or choose it in the take folder menu (there is no swipe comping and no comp list).
-  Editing the folder's notes edits that take. Flatten leaves a plain region of the take heard,
-  Unpack to New Tracks puts every take on its own muted track. The control bar's **Replace**
-  button wins: with it on, a recording replaces what it overlaps instead.
+- **MIDI take folders.** With Settings › Recording › Overlapping Recordings › MIDI set to
+  **Create take folders**, each pass of a MIDI cycle recording becomes a take (passes where
+  nothing was played are left out), and recording over MIDI regions packs them into a folder
+  with the new take; recording over a MIDI take folder adds takes to it. As in Logic, a MIDI
+  folder plays one whole take: click a take row or choose it in the take folder menu (there is
+  no swipe comping and no comp list). Editing the folder's notes edits that take. Flatten
+  leaves a plain region of the take heard, Unpack to New Tracks puts every take on its own
+  muted track. The control bar's **Replace** button wins: with it on, a recording replaces what
+  it overlaps instead.
 
 ---
 
-## 8. Markers
+## 8. Markers and the Arrangement track
+
+### Markers
 
 The marker lane at the bottom of the ruler is Logic's Marker track.
 
@@ -1031,15 +1119,11 @@ The marker lane at the bottom of the ruler is Logic's Marker track.
   marker is highlighted.
 - Markers are saved with the project, and every marker edit can be undone.
 
----
+### The Arrangement track
 
-## 9. Tempo and time signature
+The top global track, as in Logic: show it with View › Show Global Tracks (G). Its sections
+mark out the song's form and move it around.
 
-A project has a base tempo (5 to 990 BPM) and time signature, set in the control bar's LCD or in
-File › Project Settings › General. Changes along the timeline live in the **Global Tracks**.
-Show them with View › Show Global Tracks (G); they sit between the ruler and the tracks.
-
-**Arrangement track** (the top global track, as in Logic)
 - Named sections — Intro, Verse, Chorus, Bridge, Outro and so on — that follow each other
   without gaps. The **+** button in the header adds one after the last (eight bars, named
   Intro, Verse, Chorus, Bridge, Outro in turn); double-click empty lane does the same, and
@@ -1064,7 +1148,17 @@ Show them with View › Show Global Tracks (G); they sit between the ruler and t
   A section move refuses to cut a frozen track's regions; unfreeze the track first.
 - Sections, like markers, sit at fixed positions in time: changing the tempo doesn't move them.
 
-**Tempo track**
+---
+
+## 9. Tempo and time signature
+
+A project has a base tempo (5 to 990 BPM) and time signature, set in the control bar's LCD or in
+File › Project Settings › General. Changes along the timeline live in the **Global Tracks**.
+Show them with View › Show Global Tracks (G); they sit between the ruler and the tracks: the
+[Arrangement track](#the-arrangement-track) at the top, then the Signature and Tempo tracks.
+
+### Tempo track
+
 - Click empty space to add a tempo change at the snapped position, starting at the tempo in
   effect there, and drag straight away to set it.
 - Drag a point up or down to change its tempo (Shift for 0.01 BPM steps), or sideways to move
@@ -1075,12 +1169,16 @@ Show them with View › Show Global Tracks (G); they sit between the ruler and t
   jumping. Ramps are exact: beats, the click and MIDI all follow the curve.
 - Drag the lane's bottom edge to resize it.
 
-**Signature track**
+### Signature track
+
 - Double-click empty space to add a time signature change at that bar, or double-click a label
   such as "7/8" to edit it. Changes always start on a bar line.
 - Right-click a label to delete it.
 
-**What follows the tempo map:** the ruler's bar numbers, the grid and Snap, quantize, nudge,
+### What follows the tempo map
+
+These follow tempo and signature changes: the ruler's bar numbers, the grid and Snap, quantize,
+nudge,
 the metronome (including subdivisions and accents on each bar), count-in (it uses the tempo and
 signature at the punch point), the bar/beat display, markers, cycle and punch defaults, the
 Bounce dialog's bar range, the Piano Roll and the Audio Track Editor, and the tempo and position
@@ -1103,11 +1201,14 @@ the notes using the file's own timing. Export writes the project's tempo map and
 
 ---
 
-## 10. The Piano Roll
+## 10. The Piano Roll, Event List and Step Sequencer
 
 The Editors pane (E or P) follows the selection: it shows the Piano Roll for a software
-instrument track and the Audio Track Editor for an audio track. The Piano Roll is modelled on
-Logic's, with ideas from Ableton's MIDI editor, Cubase's Key Editor and FL Studio's piano roll.
+instrument track and the Audio Track Editor for an audio track. MIDI regions have two more
+editors, the [Event List](#event-list) and the [Step Sequencer](#step-sequencer) (for pattern
+regions); the tabs at the left of the editor's bar switch between the three. The Piano Roll is
+modelled on Logic's, with ideas from Ableton's MIDI editor, Cubase's Key Editor and FL
+Studio's piano roll.
 
 ### View
 
@@ -1173,11 +1274,11 @@ Ctrl+click with the Pointer (or Line) works as the Pencil, like Logic's secondar
 - **Grid:** 1/1, 1/2, 1/4, 1/8, 1/16 (default), 1/32, 1/64 and the triplets 1/2T to 1/32T. It
   sets the snap and the Pencil's note length. Snapping counts from each bar line, so odd meters
   line up. The **Snap** button turns snapping off.
-- **Time Quantize:** the Quantize pop-up in the local bar opens a panel with the value, **Strength**
-  (0 to 100%, default 100), **Swing** (0 to 100%, default 0; it delays every second grid step) and
-  **Quantize note ends** (off by default). **Q** (or the Q button, or Functions › Quantize)
-  quantizes the selected notes, or all of them when none are selected. Functions › **Quantize
-  to** › picks a value and quantizes at once.
+- **Time Quantize:** the Quantize pop-up in the local bar opens a panel with the value,
+  **Strength** (0 to 100%, default 100), **Swing** (0 to 100%, default 0; it delays every
+  second grid step) and **Quantize note ends** (off by default). **Q** (or the Q button, or
+  Functions › Quantize) quantizes the selected notes, or all of them when none are selected.
+  Functions › **Quantize to** › picks a value and quantizes at once.
 
 ### Functions menu
 
@@ -1263,8 +1364,7 @@ The lane below the notes shows velocity or a controller. Drag the bar above it t
 - A region's playback parameters (Quantize, Transpose and the rest; see
   [Region playback parameters](#region-playback-parameters)) apply as it plays. The Piano Roll
   shows the notes as stored; region menu › Apply Region Parameters writes them in.
-- Notes can be entered one step at a time with the [Step Input Keyboard](#step-input). The
-  Piano Roll has no Score yet, and controller points have no curve shapes.
+- Notes can be entered one step at a time with the [Step Input Keyboard](#step-input).
 
 ### Event List
 
@@ -1568,10 +1668,10 @@ in the slot menu and the Library.
     divider above to make the section taller; graphs and meters grow with it. Showing the Mixer
     or an Editor hides the panels but keeps them open: click a slot again to bring them back.
     Closing the last tab gives the section back to what it showed before.
-  - **Floating** (the default): the float button at the right of the dock's bar takes a panel out into a
-    window of its own (and the dock button in a window's header puts it back). Drag a window by
-    its title; drag its sides or bottom corners to resize it. A window can't be made smaller
-    than its controls; Fermata remembers the last size for each kind of effect.
+  - **Floating** (the default): the float button at the right of the dock's bar takes a panel
+    out into a window of its own (and the dock button in a window's header puts it back). Drag
+    a window by its title; drag its sides or bottom corners to resize it. A window can't be
+    made smaller than its controls; Fermata remembers the last size for each kind of effect.
   - **Separate windows:** each panel opens in an OS window of its own, which you can move to
     another monitor (see [Separate windows](#separate-windows)). Clicking the slot again closes
     it; the pop-in button in its bar puts it in the main window, floating.
@@ -1587,17 +1687,18 @@ in the slot menu and the Library.
   compensation](#plug-in-delay-compensation), so the track stays in time; the slot's tooltip
   shows it.
 - **Freeze** renders built-in effects like any plug-in; their settings come back on unfreeze.
-- **Side Chain:** pick a track in the Side Chain pop-up and its post-fader output, instead of
-  the effect's own input, drives the detector: a kick opening a gate on a bass, a vocal ducking
-  a pad. Pick **None** to go back. The source plays before the effect's track, loops are refused,
-  and muting the source (or pulling its fader down) silences the key, as in Logic.
-  **Pre / Post** beside the pop-up picks where the key leaves the source: **Post** (the
-  default) after its fader and pan, **Pre** before them, so a trigger track with its fader all
+- **Side Chain:** pick a track in the Side Chain pop-up and its output, instead of the
+  effect's own input, drives the detector: a kick opening a gate on a bass, a vocal ducking a
+  pad. Pick **None** to go back. The source plays before the effect's track, and loops are
+  refused. **Pre / Post** beside the pop-up picks where the key leaves the source: **Post**
+  (the default) after its fader and pan, so muting the source or pulling its fader down
+  silences the key, as in Logic; **Pre** before them, so a trigger track with its fader all
   the way down still keys the effect. A pre-fader key still goes silent when the source is
-  muted (or soloed out), like a pre-fader send. Delay compensation is the same either way. Bounces and
-  freezes of the effect's track play the source along, unheard, so the key is right. The key is
-  taken as the source leaves its plug-ins; if the source's own plug-ins add latency, the key
-  arrives that much late. The Compressor, Noise Gate and De-Esser have a side-chain.
+  muted (or soloed out), like a pre-fader send. Delay compensation is the same either way.
+  Bounces and freezes of the effect's track play the source along, unheard, so the key is
+  right. The key is taken as the source leaves its plug-ins; if the source's own plug-ins add
+  latency, the key arrives that much late. The Compressor, Noise Gate and De-Esser have a
+  side-chain.
 - **Copy and paste** and **dragging between slots** work as for any plug-in (see
   [Plug-ins](#plug-ins)).
 
@@ -1853,8 +1954,8 @@ untouched; put it last on Stereo Out to measure the mix.
 #### Presets
 
 Every built-in effect has a preset pop-up in its panel's header, and the Channel EQ has one in
-its toolbar. It shows the preset loaded last, with "(edited)" once something changed ("Default" or "Manual" before
-any preset). The arrows step to the previous and next preset.
+its toolbar. It shows the preset loaded last, with "(edited)" once something changed ("Default"
+or "Manual" before any preset). The arrows step to the previous and next preset.
 
 - **Factory** presets come with Fermata (the Channel EQ has Flat, Low Cut 80 Hz, Vocal
   Presence, Vocal Air, Kick Punch, Snare Crack, Bass Clarity, Acoustic Guitar, Telephone and
@@ -1944,65 +2045,6 @@ tracks and on monitored audio tracks, and those tracks skip their compensation d
 audio track that is recording always skips its own compensation delay. Bounces and exports
 ignore Low Latency Mode.
 
-### Controller assignments (MIDI Learn)
-
-A knob, fader or button on a MIDI controller can drive a mixer control, a plug-in parameter or
-a transport button, as with Logic's Control Surfaces › Learn Assignment.
-
-**Learning an assignment:**
-
-1. Move the control in Fermata: a fader, pan knob, send knob, Mute, Solo or Record button, a
-   Channel EQ setting, a built-in effect's knob, or a parameter in a plug-in's own window.
-2. Press **Ctrl+L** (Fermata › Control Surfaces › Learn Assignment for Last Touched
-   Parameter). A banner says "Move a controller to assign it to …".
-3. Move a knob or fader (or press a button) on your controller. The banner closes and a message
-   names the assignment. **Cancel** or Esc stops learning without assigning anything; Ctrl+L
-   again does too.
-
-Or right-click the control and choose **Learn MIDI Assignment**. That works on the channel
-strip's fader, pan knob and send knobs (for Mute, Solo and Record, click the button and press
-Ctrl+L), on the Channel EQ
-editor's band buttons, frequency, gain, Q and Output fields, and on every control of a
-built-in effect. For a VST3 plug-in, show the parameter on an automation lane and right-click
-the lane's parameter pop-up in the track header, or move it in the plug-in's window and press
-Ctrl+L.
-
-Control changes (CC 0–119) and pitch bend can be learned, on any MIDI input and channel. A
-controller drives one parameter: learning it again moves it to the new one.
-
-**How assignments behave:**
-
-- A controller moves its parameter as the mouse would. Levels follow the fader's taper, so the
-  controller's travel matches the fader's. Each move is an undo step (consecutive moves of one
-  control make one step), except VST3 parameters, whose own edits aren't undo steps either.
-- While playing in Touch, Latch or Write, controller moves are written as automation. The
-  controller holds the parameter while it moves and lets go half a second after it stops,
-  which ends a Touch pass.
-- Mute, Solo, Record Enable, a Channel EQ band's on/off and the transport buttons are
-  **buttons**: a press (a value above 63) toggles them and the release does nothing, so
-  momentary buttons work.
-- Messages from an assigned controller are taken: they don't also play the selected instrument
-  or get recorded, as in Logic. They still show in Settings › MIDI › Monitor.
-- Assignments are global settings, kept when you quit and used in every project. They refer to
-  tracks and plug-ins by their position in the project's numbering, so an assignment learned
-  in one project acts on the same-numbered track in another.
-
-**The Controller Assignments window** (Fermata › Control Surfaces › Controller Assignments…,
-Ctrl+Shift+L) lists every assignment: the controller (CC number or Pitch Bend, channel and
-input port) and the parameter. For each one:
-
-- **Mode**: **Jump** (default) moves the parameter to the controller's value at once.
-  **Pickup** ignores the controller until it reaches or passes the parameter's current value,
-  so the value doesn't jump; once caught, it follows. Moving the parameter some other way
-  (the mouse, automation, undo) lets go of it again.
-- **Min %** and **Max %**: the stretch of the parameter's travel the controller sweeps. Min
-  above Max turns the controller round.
-- **Delete** removes it; that controller plays the instrument again.
-
-An assignment whose track or plug-in isn't in the open project is greyed and does nothing.
-**Learn Transport Button…** assigns a button to Play / Stop, Record or Cycle. Learn Assignment
-(Ctrl+L) and the transport keys work while the window is open; editing keys don't.
-
 ---
 
 ## 13. Automation
@@ -2017,10 +2059,10 @@ track.
 **Show Automation** (A, or either View menu) draws each track's automation over its dimmed
 regions. Region editing is off while it is shown.
 
-- The track header gets a **parameter pop-up** (Volume, Pan, Mute, each used send as
-  "Send N → bus", and a submenu per plug-in with its parameters; lanes holding points are marked
-  ●) and the **mode pop-up**. On a one-line (short) header the mode pop-up stays and the
-  parameters are in the **⋯** menu. The pop-up also has Delete *parameter* Automation and Delete All
+- The track header gets a **parameter pop-up** (Volume, Pan, Mute, each used send as "Send N →
+  bus", and a submenu per plug-in with its parameters; lanes holding points are marked ●) and
+  the **mode pop-up**. On a one-line (short) header the mode pop-up stays and the parameters
+  are in the **⋯** menu. The pop-up also has Delete *parameter* Automation and Delete All
   Automation on Track.
 - **Add a point:** click empty lane space (snapped in time; the value is where you click).
 - **Select:** click a point (Shift adds or removes); drag on empty lane space for a rubber band.
@@ -2053,10 +2095,10 @@ regions. Region editing is off while it is shown.
 
 ### The Output track
 
-**Track › Show Output Track** (also in the Tracks area's Track menu) adds a **Stereo Out** track
-at the bottom of the Tracks area. It has no regions: its header has Stereo Out's volume and,
-with automation shown, the automation controls. Its lanes take Volume and the parameters of
-Stereo Out's plug-ins, and work like a track's (extra lanes, curves, modes, writing from the
+**Track › Show Output Track** (also in the Tracks area's Functions menu) adds a **Stereo Out**
+track at the bottom of the Tracks area. It has no regions: its header has Stereo Out's volume
+and, with automation shown, the automation controls. Its lanes take Volume and the parameters
+of Stereo Out's plug-ins, and work like a track's (extra lanes, curves, modes, writing from the
 Stereo Out fader or plug-in panels). The mode pop-up is also on the Stereo Out channel strip,
 and its fader follows the lane while playing. Whether the Output track is shown is remembered
 per project, like track heights.
@@ -2082,7 +2124,8 @@ strip.
 - Lanes are evaluated every audio block. Volume keeps the fader's smoothing, and plug-in
   parameters are ramped across each block. With plug-in delay compensation, automation follows the
   delayed audio.
-- Lanes don't move with regions.
+- Lanes stay put when regions move, unless Settings › Editing › Move Automation with Regions
+  says otherwise (see [Moving, trimming and snapping](#moving-trimming-and-snapping)).
 - **Lanes follow their plug-in.** Moving a plug-in within its strip keeps its lanes; dragging it
   to another track's strip moves its lanes to that track, with their points, so they keep
   driving the same parameters there (the track showing one of them shows it on the new track).
@@ -2096,7 +2139,69 @@ strip.
 
 ---
 
-## 14. Bounce and export
+## 14. Controller assignments (MIDI Learn)
+
+A knob, fader or button on a MIDI controller can drive a mixer control, a plug-in parameter or
+a transport button, as with Logic's Control Surfaces › Learn Assignment.
+
+### Learning an assignment
+
+1. Move the control in Fermata: a fader, pan knob, send knob, Mute, Solo or Record button, a
+   Channel EQ setting, a built-in effect's knob, or a parameter in a plug-in's own window.
+2. Press **Ctrl+L** (Fermata › Control Surfaces › Learn Assignment for Last Touched
+   Parameter). A banner says "Move a controller to assign it to …".
+3. Move a knob or fader (or press a button) on your controller. The banner closes and a message
+   names the assignment. **Cancel** or Esc stops learning without assigning anything; Ctrl+L
+   again does too.
+
+Or right-click the control and choose **Learn MIDI Assignment**. That works on the channel
+strip's fader, pan knob and send knobs (for Mute, Solo and Record, click the button and press
+Ctrl+L), on the Channel EQ editor's band buttons, frequency, gain, Q and Output fields, and on
+every control of a built-in effect. For a VST3 plug-in, show the parameter on an automation
+lane and right-click the lane's parameter pop-up in the track header, or move it in the
+plug-in's window and press Ctrl+L.
+
+Control changes (CC 0–119) and pitch bend can be learned, on any MIDI input and channel. A
+controller drives one parameter: learning it again moves it to the new one.
+
+### How assignments behave
+
+- A controller moves its parameter as the mouse would. Levels follow the fader's taper, so the
+  controller's travel matches the fader's. Each move is an undo step (consecutive moves of one
+  control make one step), except VST3 parameters, whose own edits aren't undo steps either.
+- While playing in Touch, Latch or Write, controller moves are written as automation. The
+  controller holds the parameter while it moves and lets go half a second after it stops,
+  which ends a Touch pass.
+- Mute, Solo, Record Enable, a Channel EQ band's on/off and the transport buttons are
+  **buttons**: a press (a value above 63) toggles them and the release does nothing, so
+  momentary buttons work.
+- Messages from an assigned controller are taken: they don't also play the selected instrument
+  or get recorded, as in Logic. They still show in Settings › MIDI › Monitor.
+- Assignments are global settings, kept when you quit and used in every project. They refer to
+  tracks and plug-ins by their position in the project's numbering, so an assignment learned
+  in one project acts on the same-numbered track in another.
+
+### The Controller Assignments window
+
+**Fermata › Control Surfaces › Controller Assignments…** (Ctrl+Shift+L) lists every assignment:
+the controller (CC number or Pitch Bend, channel and input port) and the parameter. For each
+one:
+
+- **Mode**: **Jump** (default) moves the parameter to the controller's value at once.
+  **Pickup** ignores the controller until it reaches or passes the parameter's current value,
+  so the value doesn't jump; once caught, it follows. Moving the parameter some other way
+  (the mouse, automation, undo) lets go of it again.
+- **Min %** and **Max %**: the stretch of the parameter's travel the controller sweeps. Min
+  above Max turns the controller round.
+- **Delete** removes it; that controller plays the instrument again.
+
+An assignment whose track or plug-in isn't in the open project is greyed and does nothing.
+**Learn Transport Button…** assigns a button to Play / Stop, Record or Cycle. Learn Assignment
+(Ctrl+L) and the transport keys work while the window is open; editing keys don't.
+
+---
+
+## 15. Bounce and export
 
 Everything renders **offline**: the real mix runs faster than real time, so plug-ins, stacks
 and channel strips sound exactly as they play. Playback is silent until the render finishes.
@@ -2182,7 +2287,7 @@ track's Channel EQ and plug-ins, before the fader. It uses the same format optio
 
 ---
 
-## 15. Projects
+## 16. Projects
 
 A project is a folder ending in `.fermata`, holding `project.json` and an `Audio Files/` folder
 (and `Freeze Files/` once a track is frozen, `Alternatives/` once it has project alternatives,
@@ -2202,11 +2307,8 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 
   Set the name, location (default `~/Music/Fermata`, or Settings › General › Project Folder),
   tempo (20 to 400 BPM), time signature and key. Double-click a template to create it at once.
-- **My Templates:** the templates you saved with **File › Save as Template…**, below the
-  built-in ones. A project made from one has its tracks, routing, plug-ins with their
-  settings, tempo, time signature, key and project settings, without regions. Right-click one
-  to **Rename…** or **Delete** it. Templates are kept in the `templates` folder of the
-  settings folder (`~/.config/fermata/templates` on Linux and macOS).
+- **My Templates:** the templates you saved, below the built-in ones (see
+  [Project templates](#project-templates)). Right-click one to **Rename…** or **Delete** it.
 - **Recent:** the last 20 projects you saved or opened, with track count, tempo and how long
   ago each was saved. Missing projects are marked and can be removed from the list (×).
 - **Open…:** choose any `.fermata` folder.
@@ -2225,9 +2327,19 @@ Opens at launch (by default) and from **File › New…** (Ctrl+N) and **File �
 - You can open a project from the command line: `fermata path/to/Song.fermata`.
 - **File › Revert to Saved** goes back to the last saved version, after asking (the changes
   since, and their autosave, are dropped).
-- **File › Save as Template…** saves the project's tracks, routing, plug-ins and settings,
-  without regions or audio, as a template in the Project Chooser's My Templates. Saving under
-  an existing template's name asks before replacing it.
+
+### Project templates
+
+**File › Save as Template…** saves the project as a template of your own, as in Logic: its
+tracks, routing, plug-ins with their settings, tempo, time signature, key and project
+settings, without regions or audio. Saving under an existing template's name asks before
+replacing it.
+
+Your templates appear under **My Templates** in the [Project Chooser](#the-project-chooser),
+where a project made from one starts with all of that and no regions. Right-click a template
+there to **Rename…** or **Delete** it. Templates are files in the `templates` folder of the
+settings folder (`~/.config/fermata/templates` on Linux and macOS,
+`%APPDATA%\fermata\templates` on Windows), one `<name>.json` each.
 
 ### Project alternatives
 
@@ -2302,7 +2414,7 @@ rate change is applied to the audio device and is not an undo step.
 
 ---
 
-## 16. Settings reference
+## 17. Settings reference
 
 Open Settings with **Fermata › Settings…** (Ctrl+,), which opens on the Audio tab;
 Fermata › Appearance… and Fermata › Key Commands… (Alt+K) open those tabs. Most changes apply
@@ -2351,7 +2463,7 @@ compensation rows needs **Apply Changes**.
 | Count-in | On (this project's switch, the same as Shift+K) and 1 to 4 bars | Off, 1 bar |
 | Pre-roll | 0 to 30 seconds, used when Count-in is off | 0 |
 | Overlapping Recordings › Audio | Put the new take on top; Create a new track; Replace what's underneath | On top |
-| Overlapping Recordings › MIDI | Create a new region; Merge into the existing region; Replace in the recorded range | New region |
+| Overlapping Recordings › MIDI | Create a new region; Merge into the existing region; Replace in the recorded range; Create take folders (see [Recording MIDI](#recording-midi)) | New region |
 
 With a Recording Folder outside the project, Save As does not copy those recordings into the
 new project folder; the project refers to them where they are.
@@ -2396,6 +2508,8 @@ The velocity curve applies to MIDI inputs, not to Musical Typing.
 | Click Moves Playhead | Anywhere in the tracks; Empty space only; Never (a click without a drag moves the playhead there, snapped to the grid) | Anywhere |
 | Anti-click Fades | 0 to 100 ms, for new recordings and imports | 0 |
 | Move Automation with Regions | Never; Always; Ask (whether moving a region along its track takes its automation along) | Never |
+| Crossfade Time | 0 to 1000 ms: take folder comp boundaries, X-Fade crossfades between regions that touch, and the Crossfade menu's first entry | 20 ms |
+| Crossfade Curve | -100 to 100, the shape of those crossfades (0 is a straight line, 50 a quarter sine) | 50 |
 | Mouse Wheel Scrolls | Vertically (tracks); Horizontally (time), for a mouse with one wheel: the wheel scrolls through time in the Tracks area and Piano Roll, and Shift+wheel scrolls vertically | Vertically |
 
 ### Plug-ins
@@ -2409,7 +2523,7 @@ out, no plug-ins); **Rescan Plug-ins**.
 ### Key Commands
 
 Every window shortcut, searchable by name or key, in the groups Transport, Navigation, View,
-Tracks, Editing and Windows.
+Tracks, Editing, Windows, Control Surfaces and Step Input.
 
 - Click **+** and press a key to add a shortcut; Esc cancels. **×** removes one.
 - Taking a key from another command moves it (a message says so). Keys that belong to the menu
@@ -2432,7 +2546,7 @@ sharp.
 
 ---
 
-## 17. Key command reference
+## 18. Key command reference
 
 Ctrl means ⌘ and Alt means ⌥ on macOS, except where a separate macOS key is given. The
 commands in the first tables can be reassigned in Settings › Key Commands; the defaults are
@@ -2476,6 +2590,7 @@ shown.
 | F | Show/Hide Browsers |
 | A | Show/Hide Automation |
 | Shift+A | Show Used Automation |
+| G | Show/Hide Global Tracks |
 | H | Show Hidden Tracks |
 | Ctrl+Right / Ctrl+Left | Zoom in / out horizontally |
 | Ctrl+Down / Ctrl+Up | Zoom in / out vertically (taller / shorter tracks) |
@@ -2489,19 +2604,39 @@ shown.
 | Ctrl+R (Control+R on macOS) | Record-enable the selected track |
 | Up / Down | Select previous / next track |
 | Ctrl+H (Control+H on macOS) | Hide the current track and select the next |
+| (none) | Reset All Clip Indicators |
 
 ### Editing
 
 | Key | Command |
 |---|---|
-| Ctrl+C / Ctrl+X / Ctrl+V | Copy / Cut / Paste regions |
+| Ctrl+C / Ctrl+X / Ctrl+V | Copy / Cut / Paste regions (or the marquee's contents) |
+| Ctrl+Shift+V | Paste Replace |
 | Ctrl+M (Control+M on macOS) | Mute regions |
-| Backspace, Delete | Delete regions (or selected automation points) |
+| Backspace, Delete | Delete regions (or selected automation points, a marker, a tempo change) |
 | L | Loop regions |
 | U | Set Locators by Regions |
 | Alt+Left / Alt+Right | Nudge regions left / right |
 | Ctrl+F (Control+⌘F on macOS) | Pack Take Folder |
 | T | Show Tool Menu (then a tool's letter: T Pointer, P Pencil, E Eraser, I Scissors, G Glue, M Mute, A Fade, R Marquee; Esc Pointer) |
+| Shift+F | Select All Following |
+| Shift+L | Select Inside Locators |
+| Shift+M | Select Muted Regions |
+| Shift+C | Select Same Colored Regions |
+| Shift+E | Select Equal Regions |
+| Shift+S | Select Similar Regions |
+| Shift+I | Invert Selection |
+| Ctrl+Alt+Z (Control+⌘Z on macOS) | Insert Silence Between Locators |
+| Ctrl+Alt+X (Control+⌘X on macOS) | Cut Section Between Locators |
+| Ctrl+Alt+R (Control+⌘R on macOS) | Repeat Section Between Locators |
+| Ctrl+Alt+V (Control+⌘V on macOS) | Insert Cut Section at Left Locator |
+| Alt+[ / Alt+] | Trim Region Start / End to Playhead |
+| ; | Move Region to Playhead |
+| Alt+Shift+C | Color Regions by Track |
+| (none) | Snap Edits to Zero Crossings, Select All Following of Same Track, Select Overlapped Regions, Trim Region End to Next Region, Fill Within Locators, Remove Overlaps, Resize to Same Length, Crop Regions Outside Locators or Marquee, Remove Gaps, Paste at Original Position, Delete and Shuffle, Join Regions per Track, Strip Silence…, Name Regions by Track, Name Tracks by Region, Color Tracks by Region |
+
+With the Piano Roll or the Event List focused, the Select keys act on notes or events (see
+[Edit menu](#edit-menu)).
 
 ### Windows
 
@@ -2519,10 +2654,18 @@ shown.
 
 ### Step Input Keyboard
 
+The keys other than the first work while the Step Input Keyboard is open (see
+[Step Input](#step-input)).
+
 | Key | Command |
 |---|---|
 | Ctrl+Alt+Shift+K (⌥⇧⌘K on macOS) | Show/Hide Step Input Keyboard |
-| 1 – 8, 9, 0, N, Shift+Backspace | Note values, Dotted, Triplet, Rest, Back, while the window is open (see [Step Input](#step-input)) |
+| 1 – 8 | Note Value 1/1, 1/2, 1/4, 1/8, 1/16, 1/32, 1/64, 1/128 |
+| 9 | Dotted Note |
+| 0 | Triplet |
+| N | Rest |
+| Shift+Backspace | Back (Delete Last Step) |
+| (none) | Chord, Sustain Inserted Notes, Quantize Step Input |
 
 ### Menu bar shortcuts (fixed)
 
@@ -2552,9 +2695,6 @@ shown.
 | Ctrl+K | View › Musical Typing |
 | Ctrl+= / Ctrl+- / Ctrl+0 | View › Larger Interface / Smaller Interface / Actual Size |
 
-The Settings › Key Commands list shows Bounce in Place as ⌥⌘B; the real shortcut on macOS is
-Control+B.
-
 ### Tracks area mouse modifiers
 
 | Gesture | Action |
@@ -2564,6 +2704,7 @@ Control+B.
 | Ctrl+wheel | Zoom horizontally around the pointer |
 | Alt+wheel | Change track heights |
 | Shift+click a region | Add it to or remove it from the selection |
+| Alt-drag regions | Copy them |
 | Ctrl+click or Ctrl+drag (⌘ on macOS) | Use the Ctrl-click Tool (the Marquee by default) |
 | Ctrl+click a track header | Add or remove the track |
 | Shift+click a track header | Select a range of tracks |
@@ -2646,6 +2787,8 @@ These apply after you click in the editor; most need a range selection.
 | Click empty lane | Add a point |
 | Double-click or Alt+click a point | Delete it |
 | Shift while dragging points | Keep them in time |
+| Ctrl+Shift-drag a line (Control-Shift on macOS; Alt+Shift works too) | Bend it into a curve |
+| Double-click a curve | Straighten it |
 | Backspace, Delete | Delete the selected points |
 
 ### Musical Typing (while its window is open)
@@ -2655,7 +2798,7 @@ octave, C / V the velocity, Tab is the sustain pedal.
 
 ---
 
-## 18. Troubleshooting
+## 19. Troubleshooting
 
 ### Recordings are very quiet (or silent)
 
@@ -2684,9 +2827,8 @@ at 40% lowers everything you record by about 24 dB, and a muted source records s
 Plug-in editors are X11 windows, and GLX-based plug-in GUIs fail when GTK runs natively on
 Wayland in the same process. Fermata therefore runs its interface through XWayland on Linux
 by default (it sets `GDK_BACKEND=x11` unless you set it). If you set `GDK_BACKEND=wayland`
-yourself, plug-in GUIs may fail to open; unset it. On Windows and macOS plug-in editor
-windows are not implemented yet; plug-ins still load and play, and their parameters can be
-automated.
+yourself, plug-in GUIs may fail to open; unset it. On Windows plug-in editor windows are not
+implemented yet; plug-ins still load and play, and their parameters can be automated.
 
 ### Your computer's audio is recorded, or loops back
 
@@ -2754,7 +2896,7 @@ blank, because WebKit then draws on the CPU.
 
 ---
 
-## 19. Known limitations
+## 20. Known limitations
 
 - **Platforms:** plug-in editor windows open on Linux (X11) and macOS; Windows (HWND)
   embedding is planned. On macOS, keys a plug-in's window doesn't use itself (Space, R, other
@@ -2767,48 +2909,57 @@ blank, because WebKit then draws on the CPU.
   its start follows the bars and beats). Move MIDI Regions with Tempo doesn't move automation
   or markers, isn't applied to base-tempo edits in Project Settings, and isn't remembered
   between sessions.
+- **Arrangement track and section edits:** moving, copying or deleting a section, and the
+  Section Between Locators commands, leave the tempo and signature tracks as they are, and
+  refuse to cut a frozen track's regions.
 - **Editing:** region gain bottoms out at -96 dB (shown as −∞), not true silence. Snap Edits
   to Zero Crossings doesn't apply to fades or to take folders. The Shuffle and No Overlap
   modes don't apply to range edits in the Audio Track Editor, Repeat, or Move to New Track.
-  Apply Last Fade, fade marquee selections and the Crossfade Time and Curve settings aren't
-  implemented.
-- **Crossfades** are only between plain audio regions: not take folders, looping regions or
-  muted regions (those fade out as Out). A crossfade's handle can't be grabbed where the
-  incoming region is drawn over it (an overlap with the newer region on top); use the
-  Inspector. The Inspector's fade rows edit the one selected region.
+  Apply Last Fade and fading a marquee selection aren't implemented. Strip Silence leaves take
+  folders alone.
+- **Crossfades:** muted regions don't crossfade (they fade out as Out). A crossfade's handle
+  can't be grabbed where the incoming region is drawn over it (an overlap with the newer region
+  on top); use the Inspector. The Inspector's fade rows edit the one selected region.
+- **Take folders:** an audio recording without Cycle over a folder doesn't add a take to it,
+  and recording a cycle adds to a folder only when it covers exactly the same range. A
+  folder's own fades shape only its first and last comp stretch. With Autopunch inside the
+  cycle, a punch-out closer to the cycle end than the recording latency makes each take that
+  much shorter. MIDI take folders play one whole take, as in Logic (no swipe comping).
 - **Plug-in delay compensation:** the mix plays behind the playhead by the total latency rather
   than reading regions early, so live input on a monitored track that isn't recording is delayed
   with everything else (Low Latency Mode avoids that). Low Latency Mode only switches off
   plug-ins on the live track itself, not on the auxes or stacks it plays through. Fader
-  automation written live is stored at the playhead, not compensated. Delay changes while
-  playing (bypass, a plug-in reporting new latency) can click.
+  automation written live is stored at the playhead, not compensated.
+- **Mixer:** VCA levels can't be automated. A side-chain key is taken as the source leaves its
+  plug-ins, so latency on the source's own plug-ins makes the key arrive that much late.
+- **Built-in effects:** bounces keep the tail length set in the Bounce dialog whatever an
+  effect's own tail; Freeze stretches its tail to the longest one. VST3 user presets aren't
+  saved by Fermata (use the plug-in's own). The Linear Phase EQ follows automation in steps of
+  about 25 ms.
 - **Separate windows:** the analyzer follows one strip, so a Channel EQ in a separate window
   and another strip's Channel EQ in the main window take turns showing it. On Linux under
   native Wayland (not the default), the compositor decides where windows open.
-- **Built-in effects:** the side-chain key is always post-fader (no pre-fader option yet).
-  Changing a Lookahead while playing can click as the delay compensation moves. Bounces keep
-  the tail length set in the Bounce dialog whatever an effect's own tail; Freeze stretches its
-  tail to the longest one. VST3 user presets aren't saved by Fermata (use the plug-in's own).
 - **Freeze** renders from the track's first region to its last plus up to 4 s of tail. A frozen
   track's plug-in automation lanes stay editable but do nothing until it is unfrozen.
 - **Imports:** a raw AAC stream (`.aac`, not in an M4A/MP4 file) and CAF files aren't trimmed
   of their encoder delay; M4A/MP4 and MP3 are.
-- **Take folders** have one comp (Logic keeps several). Recording without Cycle over a folder
-  doesn't add a take to it. A folder's own fades shape only its first and last comp stretch.
-  With Autopunch inside the cycle, a punch-out closer to the cycle end than the recording
-  latency makes each take that much shorter.
-- **Markers** have no length editing (a marker reaches the next one); there is no Arrangement
-  track.
+- **Bounce:** WAV, AIFF and FLAC only; MP3 and AAC aren't offered.
 - **Automation:** Move Automation with Regions works along a track, not for regions moved onto
   another track or copied; where it cuts a curved segment, the cut part is approximated.
   Automation curves are power curves only (no S-curves). A folder's automation follows the
   folder's own timing, not each subtrack's delay compensation. Stereo Out's lanes play at the
   output's delay; with latency on Stereo Out's own plug-ins, their parameters change slightly
   early.
+- **Controller assignments:** control changes 0–119 and pitch bend only (no notes, NRPN or
+  aftertouch), and no control surface protocols such as Mackie Control. Assignments are
+  global and refer to tracks and plug-ins by number, not per project.
 - **Piano Roll:** no Score. Controller curves are drawn as ramps of points; a curve between
   two points isn't kept as a shape that can be bent later.
 - **Event List:** lists MIDI regions only (not the regions of the project, or audio), on one
   track at a time. Fermata stores no MIDI channel, program changes, polyphonic aftertouch,
   release velocity or SysEx, so the Ch column always reads 1 and those types have no filter.
+- **Step Sequencer and Step Input:** the Piano Roll and the Event List don't show a pattern
+  region's notes (convert it to a MIDI region to edit them there). Step Input works only while
+  the transport is stopped.
 - **Undo:** the metronome and count-in switches and the project sample rate are not undoable,
   and switching the metronome doesn't mark the project as edited.

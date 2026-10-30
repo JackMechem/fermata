@@ -22,7 +22,8 @@ Contents:
 11. [The frontend](#11-the-frontend)
 12. [Tempo map](#12-tempo-map)
 13. [Built-in effects and presets](#13-built-in-effects-and-presets)
-14. [Module map](#14-module-map)
+14. [Cross-cutting patterns](#14-cross-cutting-patterns)
+15. [Module map](#15-module-map)
 
 ## 1. Overview
 
@@ -281,12 +282,14 @@ VCA levels can't be automated: automation lanes belong to tracks, and a VCA has 
 
 ### Regions
 
-`Region { id, name, start, length, muted, color, content, loop_end, takes, params }`. Times are in
-samples at the project rate.
+`Region { id, name, start, length, muted, color, content, loop_end, takes, params, pattern }`.
+Times are in samples at the project rate.
 
-- `content` is `Audio { clip, offset, gain_db, fade_in, fade_out }` or
+- `content` is `Audio { clip, offset, gain_db, fade_in, fade_out, fade_shape }` or
   `Midi { notes, cc }`. `offset` is the clip frame at the region's start; fades are frame
-  lengths; region gain is clamped to -96..+30 dB.
+  lengths (their curves and types are in `fade_shape`, see
+  [Fades and crossfades](#6-the-engine-graph-block-by-block)); region gain is clamped to
+  -96..+30 dB.
 - **Loops**: `loop_end` is the timeline sample where a looping region stops repeating; the
   region's own `start..start+length` is what repeats. `Region::end()` clamps it (at most
   `MAX_LOOP_PASSES` = 4096 repetitions), `passes()` lists every pass, and `move_to` takes the
@@ -320,8 +323,8 @@ samples at the project rate.
 
 ### Take folders and comps
 
-`TakeFolder { takes, comp }` (types in `model.rs`, logic in `takes.rs`, session edits in
-`session/takes.rs`):
+`TakeFolder { takes, comp, comps, current, offset }` (types in `model.rs`, logic in
+`takes.rs`, session edits in `session/takes.rs`; the folder menu's labels in `src/comps.ts`):
 
 - Everything inside a folder is in **take time**: frames from the start of the recorded
   passes. The folder region's `content` is still `Audio`, but its `offset` is the take time at
@@ -332,8 +335,22 @@ samples at the project rate.
 - `comp` is a sorted, non-overlapping list of `CompSegment { start, end, take }`. Gaps are
   silent. `default_comp` starts with the newest take, older ones filling in where it has no
   audio.
-- Playback expands the comp into `CompPiece`s (`pass_pieces`), with 10 ms equal-power
-  crossfades (`COMP_XFADE_MS`) centred on each boundary.
+- **Several comps**: `comps` holds every `Comp { name, comp }` and `current` the one heard;
+  `comp` is the one being heard and edited, and `store_comp` copies it back into
+  `comps[current]` after every edit, so playback and the swipe edits only touch `comp`. An empty `comps` is the single "Comp 1", so
+  older projects load unchanged. `create_comp`, `duplicate_comp`, `switch_comp`,
+  `rename_comp` and `delete_comp` are the menu's commands.
+- Playback expands the comp into `CompPiece`s (`pass_pieces_edged`), crossfading over
+  Settings › Editing › Crossfade Time (`EditingPrefs::crossfade_ms`, 20 ms by default) with
+  the Crossfade Curve, centred on each boundary. A folder crossfades with its neighbours like
+  any audio region (`PassEdges` carries the crossfades at its ends into the pieces).
+- **MIDI take folders**: a folder on a MIDI region. Each `Take` keeps its own `notes` and `cc`
+  in take time, and `offset` is the take time at the region's start. A MIDI folder plays one
+  whole take (`midi_take`), and the region's `content` always holds that take's notes inside
+  the region (`load_midi_take`; edits are written back with `save_midi_take` before anything
+  reads the takes), so the playback list, the Piano Roll and every render treat it as a plain
+  MIDI region. `MidiOverlap::TakeFolders` (Settings › Recording) makes MIDI cycle passes into
+  takes, split at the `PASS_MARK`s the engine puts in the recorded stream (`midi_passes`).
 - Recording: `RecPlan` (`takes.rs`) describes how a cycle or Autopunch recording is cut into
   takes; `Session::record_plan` builds it before recording, and `shape_take` applies it to each
   finished file.
@@ -391,18 +408,14 @@ samples at the project rate.
   length, color }` sections, sorted and tiling the timeline (each starts where the one before
   ends), in samples like markers (they don't follow tempo changes). `arrangement.rs` holds the
   pure arithmetic: tiling, resize (ripples the later sections only), and the plans for moving,
-  copying and deleting a section with its content. A plan is a time map, a list of `Piece {
-  start, end, dst, copy }` saying where each stretch of the old timeline lands (time before the
-  arrangement stays; time after it shifts by the change in length); neighbouring pieces that
-  stay together are merged, so content is only cut where it comes apart. `remap_points` maps
-  an automation lane through it, adding the old curve's value at each piece's first and last
-  sample (and pruning those the curve doesn't need, as `auto_move` does).
-  `session/arrangement.rs` applies a plan in one step: each track's regions are rebuilt (a
-  region inside one piece moves whole, loop and all; one across a piece edge is cut with
-  `range_edit::sub_region`, a loop first becoming real copies; the first piece keeps the id),
-  lanes are remapped, markers go with their time (copies of those in a copied section), and
-  tempo and signatures stay put. It refuses (changing nothing) when a frozen track's regions
-  would change.
+  copying and deleting a section with its content. A plan is a time map (see
+  [Time maps for section edits](#time-maps-for-section-edits)): time before the arrangement
+  stays, time after it shifts by the change in length, and neighbouring pieces that stay
+  together are merged, so content is only cut where it comes apart. `remap_points` adds the old
+  curve's value at each piece's first and last sample (pruning those the curve doesn't need, as
+  `auto_move` does). `session/arrangement.rs` applies a plan in one step: a looping region cut
+  at a piece edge first becomes real copies, the first piece of a cut region keeps its id, and
+  markers in a copied section are copied too.
 - `Project::punch: Punch { enabled, start, end }` is the Autopunch range. While recording,
   `Cmd::Autopunch` tells the engine where armed tracks stay silent and where input is
   captured.
@@ -501,7 +514,14 @@ Details of each stage:
   pairs a region whose fade-out type crossfades with the `following` region on the track
   (touching or overlapping) and places the crossfade where both files have audio (sliding and
   shortening it, or falling back to butt fades). `regions_dsp` then stretches both regions over
-  the crossfade and lays them without cutting each other (`keep`), so both sound there.
+  the crossfade and lays them without cutting each other (`keep`), so both sound there. A take
+  folder takes part like a plain audio region (the comp pieces at its ends carry the
+  crossfade), and a looping region crossfades from its last repetition at its loop end. With
+  `FadeShape::loop_xfade` (Crossfade Loop Repetitions) `fades::loop_seams` also crossfades each
+  repetition into the next. Settings › Editing › Crossfade Time and Curve
+  (`EditingPrefs::crossfade_ms`, `crossfade_curve`) set those seams, the comp boundaries, the
+  X-Fade mode's crossfades between regions that only touch, and the Crossfade menu's first
+  entry; changing them rebuilds the playback lists (`set_prefs`).
   Speed fades carry a table of how far the read position lags (`speed_table`), which
   `play_audio` reads with linear interpolation; no allocation on the audio thread. Every render
   (playback, bounce, export, freeze, bounce in place) goes through `play_audio`, and Join mixes
@@ -745,11 +765,15 @@ Interface-only state lives in the webview's `localStorage`:
 | `fermata.uiScale` | `uiScale.ts` | Interface scale, 0.9 to 2 (a copy of `ui.ui_scale`). |
 | `fermata.waveStyle` | `waveform.ts` | Waveform drawing style (a copy of `ui.wave_style`). |
 | `fermata.paneSizes` | `components/Splitter.tsx` | Library, Inspector, Browser, Mixer, Editor and header sizes. |
-| `fermata.trackHeights:<project path>` | `layout.ts` | `{ base, heights }` for one project. |
-| `fermata.bounce` | `components/Bounce.tsx` | Tail, resolution, sample rate and normalize of the bounce and export dialogs. |
+| `fermata.trackHeights:<project path>` | `layout.ts` | `{ base, heights, output }` for one project (`output`: the Output track shown). |
+| `fermata.bounce` | `components/Bounce.tsx` | Tail, format, resolution, sample rate and normalize of the bounce and export dialogs. |
 | `fermata.bounce-in-place` | `components/Bounce.tsx` | Bounce in Place options. |
 | `fermata.pianoRoll` | `components/PianoRoll.tsx` | Piano Roll view and Time Quantize settings. |
 | `fermata.eventList` | `components/EventList.tsx` | Event List filters, the type + adds, Catch and MIDI Out. |
+| `fermata.stripSilence` | `components/StripSilence.tsx` | The Strip Silence sheet's last settings. |
+| `fermata.showOverview` | `components/Overview.tsx` | Whether the overview strip replaces the scroll bar. |
+| `fermata.fxPanelSizes` | `fxDockState.ts` | The last size of each effect type's floating panel. |
+| `fermata.detachedPanels` | `detach.ts` | Which panels were detached at quit, and each kind's window geometry. |
 
 Appearance settings (theme, size, waveforms) are saved in `settings.json` by `appearance.ts`;
 the `localStorage` copies only let the window open in the right theme and size before the
@@ -1000,7 +1024,10 @@ allows, which the headless examples rely on.
 - The snapshot is replaced wholesale on every edit (`act`) and on the `project` event. Treat it
   as read-only; never mutate it in place.
 - Components select narrowly (`useStore((s) => s.snap?.project.tracks)`) so they re-render only
-  when what they show changes. `App` only subscribes to layout-level flags.
+  when what they show changes. `App` only subscribes to layout-level flags. A selector must
+  return the same value while nothing changed: one that builds a new array or object on each
+  call re-renders forever and blanks the window (`tests/storeSelectors.test.ts` catches it).
+  Use a shared empty constant, or select the parts separately.
 
 ### Ticks and the frame loop
 
@@ -1055,11 +1082,17 @@ drawings. The common pattern:
   Control key on macOS (folded into `Mod` elsewhere by `normalizeKey`), then `Alt`, `Shift`.
   `eventKey` names the physical letter or punctuation for Alt/⌘ chords, since macOS Option
   changes the character.
-- `App.tsx` installs one `keydown` listener (`onKey`). It ignores events in inputs and while a
-  dialog is open, looks the key up with `commandForEvent` (which honours the overrides in
-  `settings.json` › `ui.keymap`) and runs the matching entry in `KEY_ACTIONS`.
-- Editors with their own keys (Piano Roll, Audio Track Editor, Musical Typing, automation
-  selection) handle them in their own listeners when they have focus.
+- `App.tsx` installs one `keydown` listener (`onKey`). It ignores events in inputs, while a
+  dialog is open and while an open sheet holds the command back (`sheetBlocks`, see
+  [Sheets and key commands](#sheets-and-key-commands)), looks the key up with `commandForEvent`
+  (which honours the overrides in `settings.json` › `ui.keymap`) and runs the matching entry in
+  `KEY_ACTIONS`.
+- Editors with their own keys (Piano Roll, Event List, Step Sequencer, Audio Track Editor,
+  Musical Typing, Step Input, automation selection) handle them in their own listeners when
+  they have focus. Edit › Select's key commands act on notes and events while the Piano Roll or
+  the Event List has focus (`src/noteSelect.ts`).
+- `tests/commands.test.ts` reads `keymap.ts`, `App.tsx` and `menu.rs` and fails when a key
+  command or menu id has no handler, or two commands share a default key.
 
 ### Menus and dialogs
 
@@ -1072,16 +1105,21 @@ drawings. The common pattern:
   `components/Menu.tsx` (`MenuHost`); `src/ops.ts` builds the track, region and lane menus.
 - Dialogs are chosen by `state.dialog` (`new-tracks`, `settings`, `chooser`, `bounce`,
   `bounce-in-place`, `project-settings`, `recovery`, `alternatives`), plus separately flagged
-  sheets (group settings, Marker List, Channel EQ, Musical Typing, Controller Assignments).
-- `askName` (`components/NameSheet.tsx`) asks for a name in a small sheet above everything
-  else, the Project Chooser included, and resolves with it or null.
+  sheets (group settings, Marker List, Channel EQ, Musical Typing, Controller Assignments,
+  Strip Silence).
+- `askName` (`components/NameSheet.tsx`) asks for a name or a value in a small sheet above
+  everything else, the Project Chooser included, and resolves with it or null. Never use
+  `window.prompt`, `confirm` or `alert`: macOS's web view doesn't implement them (prompt
+  returns null), and `tests/browserDialogs.test.ts` fails if they appear in `src/`. Detached
+  windows show the name sheet too.
 - Native file dialogs and confirmations use `@tauri-apps/plugin-dialog` (`src/files.ts`).
 
 ### Detached windows
 
-A detachable panel (the Mixer, the Editors, a Channel EQ, a built-in effect panel) can be shown
-in an OS window of its own, labelled `panel-<key>` (keys: `mixer`, `editor`, `eq:<track>`,
-`fx:<uid>`, the last two shared with `fxDock.ts`). Every window loads the same frontend;
+A detachable panel (the Mixer, the Editors, the Event List, the Step Sequencer, a Channel EQ, a
+built-in effect panel) can be shown in an OS window of its own, labelled `panel-<key>` (keys:
+`mixer`, `editor`, `list`, `steps`, `eq:<track>`, `fx:<uid>`, the last two shared with
+`fxDock.ts`). Every window loads the same frontend;
 `main.tsx` renders `DetachedWindow` instead of `App` when the label is a panel's.
 
 - **Authority.** The main window decides what is detached (`state.detached`), remembers it with
@@ -1092,13 +1130,16 @@ in an OS window of its own, labelled `panel-<key>` (keys: `mixer`, `editor`, `eq
   window's `KEY_ACTIONS`.
 - **Kinds.** `src/panelKinds.tsx` registers each kind with `src/detach.ts`: its title, what its
   window renders, whether a window's state shows it, and the state changes that hide and show
-  it (`bottom` for the Mixer and Editors, `fxDock` for effect panels). Each window hides a
+  it (`bottom` for the Mixer, Editors, Event List and Step Sequencer, `fxDock` for effect
+  panels). Each window hides a
   detached panel its own state tries to show (X, a slot click) and brings that panel's window
   to the front instead, so a panel is never shown twice. The main window closes the windows of
   panels whose track or effect has gone.
 - **Sync.** Each window keeps its own store. The fields in `detachModel.ts` `SYNCED_FIELDS`
-  (selection, clipboard, snap, theme, interface size, the plug-in lists, `detached`) go to the
-  other windows as `ui-sync` patches, settings as `ui-settings`. Snapshots don't travel through
+  (the region, track and note selection, focus, the region, channel strip, plug-in and Channel
+  EQ clipboards, snap, Catch, hide mode, open take folders, the automation lane shown, theme,
+  interface size, waveform style, the plug-in lists, `detached`) go to the other windows as
+  `ui-sync` patches (`syncPatch` compares by identity), settings as `ui-settings`. Snapshots don't travel through
   the frontend: after a window's `act()` changes its `snap`, it calls `broadcast_snapshot`
   (throttled to one every 30 ms), and Rust sends the session's snapshot to every other window as
   `project-sync`. The engine's `tick` and `project` events reach every window anyway. Applying
@@ -1188,7 +1229,7 @@ events, converting ticks through the file's own map. The UI is
 
 To add an effect: write `fx/<name>.rs` with `pub fn info() -> EffectInfo` and
 `pub const PRESETS`, list it in `registry()` and `factory_presets()`, and optionally add a panel
-in `src/components/fx/` registered in `FX_PANELS` (`src/fx.ts`); without one, `FxWindow.tsx`
+in `src/components/fx/` registered in `FX_PANELS` (`src/fx.ts`); without one, `FxPanel.tsx`
 shows a generic panel. `fx_check` covers new registry entries without changes.
 
 ### In the engine
@@ -1261,7 +1302,10 @@ it like any plug-in.
   reinstantiating.
 - **Moving to another strip** (`move_plugin`) goes through copy, `make_room` (shifts the target
   slot's plug-in to the nearest free slot) and paste, then removes the original unless copying.
-  The new instance has a new uid, so automation lanes keyed to the old uid stay behind.
+  The new instance has a new uid, so `carry_automation` re-keys the plug-in's automation lanes
+  to it and moves them to the target strip (`automation::take_plugin_lanes`; Stereo Out
+  included); a copy starts without lanes. `src/laneFollow.ts` keeps the lane the UI shows on
+  the moved plug-in.
 - The UI side is `src/slotDrag.ts`: a drag from a slot's name, Alt to copy, Esc to cancel, and
   the `move_plugin` command on drop.
 
@@ -1283,7 +1327,88 @@ it like any plug-in.
   `save_strip_setting`, `load_strip_setting`, `delete_strip_setting`, and, for the clip
   indicators, `reset_clip_indicators`.
 
-## 14. Module map
+## 14. Cross-cutting patterns
+
+A few patterns recur across features. Follow them when adding one.
+
+### Playback-list transforms
+
+The project stores what the user edited; what plays is derived from it when the session
+builds a track's playback list (`Session::regions_dsp`), never on the audio thread. The engine
+only ever sees plain `RegionDsp::Audio` segments and `RegionDsp::Midi` regions, so a feature
+built this way needs no new `Cmd` and plays the same in every render. `regions_dsp` applies,
+in order:
+
+1. **Freeze** (`freeze_dsp`): a frozen track plays only its freeze file.
+2. **Region playback parameters** (`params_map`, `delay_audio` in `session/region_params.rs`;
+   the transforms in `region_params.rs`): an audio region's delay moves it, and a MIDI region
+   with parameters becomes one transformed `RegionDsp::Midi` per pass (`region_params::pass`).
+3. **Pattern regions** (`realize_patterns` in `session/patterns.rs`, `pattern::realize`): each
+   becomes the plain MIDI region its pattern plays.
+4. **Comps and crossfades**: take folders expand into comp pieces
+   (`takes::pass_pieces_edged`), and `fades::crossfades` and `fades::loop_seams` place the
+   crossfades between neighbours and loop repetitions.
+
+MIDI take folders need no step of their own: the region's content always holds the notes of
+the take it plays (see [Take folders and comps](#take-folders-and-comps)). Code that reads
+regions directly instead of the playback list (Join, MIDI file export, render ranges) calls
+`region_params::bake` (which realizes a pattern first) or `region_params::bounds`. Transforms
+that read the tempo map are rebuilt on tempo edits by `push_tempo_regions`, and the snapshot's
+`played` list (`played_notes`) gives the Tracks area the notes as they play, while the Piano
+Roll and Event List edit the stored ones. A new transform goes into `regions_dsp` and `bake`,
+and into `push_tempo_regions` if it follows the tempo.
+
+### Time maps for section edits
+
+Edits that move whole stretches of the timeline, the Arrangement track's moves, copies and
+deletes and Edit › Section Between Locators, are described as a **time map**: a list of
+`arrangement::Piece { start, end, dst, copy }` saying where each stretch of the old timeline
+lands. The pure side builds it (`arrangement::move_section`, `copy_section` and
+`delete_section` return a `Plan` of pieces plus the new sections; `arrange_cmds::section_pieces`
+for Insert Silence, Cut and Repeat Section), and one apply step maps everything through it:
+regions with `session/arrangement.rs` `remap_regions` (a region inside one piece moves whole,
+one across a piece edge is cut with `range_edit::sub_region`), automation lanes with
+`arrangement::remap_points`, markers with `arrangement::map_pos`, and, for the section edits,
+the arrangement sections with `arrange_cmds::remap_sections`. The
+tempo and signature tracks never move. With a marquee, the section edits map only its tracks
+(`session/arrange_cmds.rs` `section_edit` takes a `scope`). Every apply refuses, changing
+nothing, when a frozen track's regions would change.
+
+### Sheets and key commands
+
+Sheets (anything modal drawn over the window: `Sheet` in `Dialogs.tsx`, the Settings frame,
+the name sheet, the Project Chooser) register with `useSheetKeys` (`src/sheetKeys.ts`).
+`installSheetKeys`, called in `main.tsx` before any other listener, applies one rule
+(`sheetKeysModel.ts`, `heldBack` and `outsideKey`): keys typed in a sheet's fields stay there
+(`sheetKey` in `Form.tsx` stops them); keys pressed with the focus outside it never reach the
+app, except that Esc closes the top sheet, Return presses its default button and Tab moves the
+focus. A `"non-modal"` sheet (Controller Assignments, a window in Logic) lets the transport and
+Control Surfaces commands through (`NON_MODAL_COMMANDS`) and holds back the rest. `onKey` and
+keys passed on from panel windows ask `sheetBlocks(id)`. A new sheet should use `Sheet` or call
+`useSheetKeys`; `tests/sheetKeys.test.ts` checks that every sheet does.
+
+### State shared between windows
+
+Each window has its own store, and [detached windows](#detached-windows) agree only on what is
+listed in `SYNCED_FIELDS` (`detachModel.ts`), sent as `ui-sync` patches, plus the settings
+(`ui-settings`) and the session's snapshot (`project-sync`). Anything a user would expect to
+be the same everywhere, such as a selection or a clipboard, belongs in the store as a synced
+field rather than in a module variable: the region, channel strip, plug-in and Channel EQ
+clipboards (`clipboard`, `stripClip`, `pluginClip`, `eqClip`) are store fields for that reason.
+Synced values are compared by identity, so replace them, never mutate them. View state that is
+per window (which bottom pane shows, zoom, scroll) stays out.
+
+### Guard tests
+
+Some rules are enforced by tests that read the sources rather than import them:
+`tests/storeSelectors.test.ts` (a `useStore` selector must not build a new array or object,
+or React re-renders forever and the window goes blank), `tests/commands.test.ts` (every key
+command and menu id is handled, no two default keys clash), `tests/tauriCommands.test.ts`
+(every command the frontend calls is registered, with its required arguments in camelCase),
+`tests/browserDialogs.test.ts` (no `window.prompt`, `confirm` or `alert`) and
+`tests/sheetKeys.test.ts`.
+
+## 15. Module map
 
 ### `crates/engine/src`
 
@@ -1295,12 +1420,14 @@ it like any plug-in.
 | `dsp/offline.rs` | `Engine::render` and `Isolate`: offline rendering of the full mix or one track. |
 | `dsp/pdc.rs` | `DelayLine` (power-of-two ring with read taps), `PdcParams`, `PdcGlobal`. |
 | `dsp/builtin.rs` | `BuiltinDsp` (a built-in effect in an insert slot), `FxShared`, parameter normalization. |
+| `dsp/auto.rs` | Automation past a track's own strip: folder stacks' volume and mute (`FoldState`) and Stereo Out's lanes. |
 | `fx/mod.rs` | The `Effect` trait, `EffectInfo`, `ParamSpec`, the registry and factory presets. |
 | `fx/compressor.rs`, `limiter.rs`, `gate.rs`, `deesser.rs` | Compressor (five circuits), Limiter, Noise Gate, De-Esser. |
 | `fx/reverb.rs`, `delay.rs` | Reverb (Dattorro plate and a 16-line FDN) and Delay (Stereo, Ping-Pong, Tape, Digital). |
 | `fx/tuner.rs`, `loudness.rs` | Tuner (McLeod pitch method) and Loudness Meter (BS.1770 / EBU R128). |
 | `fx/chorus.rs`, `flanger.rs`, `phaser.rs`, `tremolo.rs` | Modulation: Chorus and Flanger (one swept delay, `ModDelay`, in `chorus.rs`), Phaser (all-pass chain), Tremolo (synced to the song position). |
 | `fx/overdrive.rs`, `distortion.rs`, `gain.rs` | Overdrive and Distortion (`DriveCore` in `distortion.rs`: 4× oversampled waveshaper, compensated drive, tone, mix), Gain (a smoothed 2×2 channel matrix). |
+| `fx/linear_phase_eq.rs`, `fir.rs` | Linear Phase EQ (the Channel EQ's bands as one linear-phase FIR, designed on a worker thread); FIR design and partitioned FFT convolution. |
 | `fx/lfo.rs`, `oversample.rs` | LFO and smoothing for the modulation effects; half-band FIR oversampling. |
 | `fx/biquad.rs`, `dyn_common.rs` | Shared filter and dynamics building blocks. |
 | `presets.rs` | Factory presets of the Channel EQ, user preset files. |
@@ -1308,6 +1435,10 @@ it like any plug-in.
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |
 | `session.rs` | `Session`: engine plumbing, `track_params`, `regions_dsp`, building tracks, undo (`checkpoint`, `undo`, `redo`, `restore`), transport and recording, track and region edits, import, plug-in slots, `idle`, `tick`, new/save/open. |
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
+| `session/crossfades.rs` | Fade shapes and types from the inspector, the Crossfade command, the X-Fade drag mode (`auto_crossfade`), Crossfade Time (`crossfade_frames`). |
+| `session/drag_modes.rs` | Region edits as the Tracks area makes them: `drag_move_regions`, `drag_nudge_regions`, `drag_resize_region`, `drag_delete_regions`, `drag_paste_regions`, in the drag mode and with Move Automation with Regions. |
+| `session/auto_lanes.rs` | Stereo Out's lanes (`strip_lanes`), folder stacks' volume and mute automation, the extra lanes shown under a track (`set_auto_lanes`). |
+| `session/recovery.rs` | Crash safety: atomic project writes (`write_atomic`), recording journals, recovering interrupted takes, the fallback from a damaged project.json. |
 | `session/bounce.rs` | Bounce, Export All (or Selected) Tracks, Export Region, Bounce in Place (render and place), normalize. |
 | `session/range_edit.rs` | Audio Track Editor range edits (`RangeEdit`) and multi-point splits; clip info. |
 | `session/marquee.rs` | The Tracks area's marquee: split, delete (in the drag mode) and copy the parts of regions in a time range across tracks. |
@@ -1342,7 +1473,10 @@ it like any plug-in.
 | `arrangement.rs` | The Arrangement track's arithmetic: tiling sections and the time maps (`Piece`, `Plan`) for moving, copying and deleting them; automation through a time map. Pure. |
 | `arrange_cmds.rs` | The arranging commands' arithmetic: section edits as time maps, edges and sections through them, Remove Gaps and Remove Overlaps on a lane. Pure. |
 | `strip_silence.rs` | Strip Silence: the parts of a stretch of audio above a threshold, with minimum silence, pre-attack and post-release. Pure. |
-| `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, `splice`, `thin`, plug-in id remapping. |
+| `automation.rs` | `AutoTarget`, `LaneDsp`, `value_at`, curves (`shape`), `splice`, `thin`, plug-in id remapping and `take_plugin_lanes`. |
+| `auto_move.rs` | Move Automation with Regions on one lane: carrying a region's stretch of automation to where it lands. Pure. |
+| `drag_modes.rs` | The No Overlap, Shuffle L and Shuffle R drag modes on one track's lane of spans. Pure. |
+| `fades.rs` | Fade curves, Speed Up and Slow Down tables, the crossfade types, where crossfades go (`crossfades`, `loop_seams`). |
 | `midi.rs` | Pure MIDI content helpers: split, trim, join with controller chasing; the notes held over a position (note chase); clearing a range (Record in Replace mode). |
 | `region_params.rs` | Region playback parameters: the transforms (quantize with swing, gate, delay, transpose, dynamics, velocity), playback windows, `bake` for Apply. |
 | `pattern.rs` | Step Sequencer patterns: the model, the notes a pattern plays (swing, ties, gates, per-row rates and lengths), `realize` and `from_notes`. |
@@ -1357,12 +1491,14 @@ it like any plug-in.
 | `controllers.rs` | Controller assignments, the pure part: targets, reading CC and pitch bend, port names without ALSA's numbers, the fader taper, ranges, Jump and Pickup. |
 | `decode.rs` | Decoding audio files in any supported format, resampling, WAV writing. |
 | `decode/gapless.rs` | MP4/M4A encoder delay and padding (`iTunSMPB` tag or edit list), trimmed after decoding. |
-| `audio_file.rs` (+ `audio_file/`) | Writing bounces: `AudioFormat` (WAV, AIFF, FLAC via `flacenc`), `BitDepth`, the shared dithering `Quantizer`. |
+| `audio_file.rs` | Writing bounces: `AudioFormat`, `BitDepth`, the shared dithering `Quantizer`. |
+| `audio_file/wav.rs`, `aiff.rs`, `flac.rs` | The writers: WAV through hound, AIFF and AIFF-C by hand, FLAC through `flacenc`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
 | `synth.rs` | Fermata Synth, the built-in polyphonic instrument. |
 | `transients.rs` | Onset detection for transient markers and Split at Transients. |
 | `vca.rs` | VCA faders: the offset and mute a strip gets from its VCA chain, loop checks. |
 | `sysvol.rs` | Linux only: the sound server's input volume for the recording device (input level check). |
+| `wav_repair.rs` | Repairing the headers of WAV files a crash left mid-recording. |
 
 ### `crates/vst3-host/src`
 
@@ -1378,7 +1514,8 @@ it like any plug-in.
 | `editor_linux.rs` | X11 editor windows and the IRunLoop bridge. |
 | `editor_macos.rs` | macOS editor windows (NSWindow, its delegate, main-queue hops). |
 | `editor_other.rs` | Placeholder editor for Windows. |
-| `macos.rs` | CFBundle handling for loading bundles on macOS. |
+| `macos.rs` | CFBundle handling for loading bundles on macOS, and dyld error messages. |
+| `keys.rs` | Keys a plug-in editor doesn't use, passed on to the app (`set_key_forwarder`; macOS key codes to KeyboardEvent names). |
 | `util.rs` | String helpers. |
 
 ### `src-tauri/src`
@@ -1392,12 +1529,13 @@ it like any plug-in.
 | `recent.rs` | `recent.json` and the Project Chooser's recent list. |
 | `glib_loop.rs` | Linux: runs plug-in editor file descriptors and timers on GTK's main loop. |
 | `windows.rs` | Detached panel windows: opening, focusing and closing them, `broadcast_snapshot`, menu routing to the focused window. |
+| `crash.rs` | A last autosave when the app panics on the main thread. |
 
 ### `src` (frontend)
 
 | File | Contents |
 |---|---|
-| `main.tsx` | React entry; applies the saved theme before the first render. |
+| `main.tsx` | React entry: installs the sheet key listener first, applies the saved theme and size before the first render, renders `App` or a panel's `DetachedWindow`. |
 | `App.tsx` | Layout, `handleMenu`, `KEY_ACTIONS`, `onKey`, status line, toasts, event listeners, startup. |
 | `api.ts` | TypeScript mirror of the model and snapshot; `act`, `actMade`, `call`, `api`. |
 | `store.ts` | The global UI store and the tick channel (`pushTick`, `onTick`, `meterLevels`, `liveTakes`). |
@@ -1407,6 +1545,9 @@ it like any plug-in.
 | `time.ts` | Samples to bars/beats and back. |
 | `transport.ts` | Cycle, Autopunch and locate helpers. |
 | `keymap.ts` | `KEY_COMMANDS`, `MENU_SHORTCUTS`, key normalisation. |
+| `sheetKeys.ts`, `sheetKeysModel.ts` | Key commands while a sheet is open (`useSheetKeys`, `installSheetKeys`, `sheetBlocks`); the rule itself, pure and tested. See [Sheets and key commands](#sheets-and-key-commands). |
+| `pluginKeys.ts` | Keys a plug-in's editor window passes on (macOS), dispatched as if pressed in the main window; pure, tested. |
+| `wheel.ts` | What the mouse wheel scrolls in the time views (Settings › Editing › Mouse Wheel Scrolls). |
 | `controllers.ts` | Controller assignment types and labels, strip and lane targets; pure, tested. |
 | `learn.ts` | MIDI Learn: Learn Assignment, the right-click Learn menus, `FxLearnContext` for effect panels. |
 | `keyFormat.ts` | Shortcuts written the way each platform does ("Ctrl+Shift+Z", "⇧⌘Z"); pure, tested. |
@@ -1417,8 +1558,17 @@ it like any plug-in.
 | `dnd.ts` | Dropping files from the desktop or the Browser into the tracks area. |
 | `routing.ts` | Send and output menus, New Aux. |
 | `automation.ts` | Automation lanes in the tracks area: values, scales, drawing, editing, point selection. |
+| `autoLanes.ts` | The extra lanes under a track, the Output track's lanes and automation curves (mirrors `automation::shape`); pure, tested. |
+| `laneFollow.ts` | The shown automation lane following a plug-in moved to another track; pure, tested. |
+| `moveAutomation.ts` | Move Automation with Regions: the Ask setting's question before a move. |
 | `loops.ts` | Looping regions in the tracks area. |
 | `takes.ts` | Take folders in the tracks area: take rows, comp drawing, swipes, the take folder menu. |
+| `comps.ts` | Comp names, MIDI take folders and the folder's name bar label; pure, tested. |
+| `fades.ts` | Fade curves and crossfades for drawing (mirrors `fades.rs`), the inspector's fade types, the handles' places; pure, tested. |
+| `dragModes.ts` | The drag modes' rules for drawing a drag's outcome (mirrors `drag_modes.rs`); pure, tested. |
+| `regionBar.ts` | A region's name bar and body at a given track height; pure, tested. |
+| `trackHeader.ts` | Track header layouts by height and the volume slider's meter scale; pure, tested. |
+| `regionParams.ts` | The Region inspector's playback parameter values and how they show; pure, tested. |
 | `tools.ts`, `marquee.ts` | Tracks-area tools (list, Tool menu keys, Scissors and Fade tool geometry) and the marquee's geometry; pure. |
 | `trackTools.ts` | The tools at work: the Tool menu (T), presses with each tool, the marquee's commands, tool cursors and overlay drawing. |
 | `arrangeCmds.ts`, `regionSelect.ts` | The arranging commands (Edit › Select, Section Between Locators, Trim, Move, Paste Replace…) by menu and key-command id, and their menus; `regionSelect.ts` holds the selection criteria (pure). `components/StripSilence.tsx` is the Strip Silence sheet. |
@@ -1426,6 +1576,10 @@ it like any plug-in.
 | `arrangement.ts` | The Arrangement track's names, colours, drop slots and resize preview; pure. `components/ArrangementTrack.tsx` draws the lane (in `GlobalTracks`) and handles its menus and drags. |
 | `freeze.ts` | Freeze and Unfreeze from the UI. |
 | `bounce.ts` | Bounce and export option types; opening the dialogs. |
+| `bounceFormat.ts` | Bounce formats and resolutions each offers, and the file names; pure, tested. |
+| `projectFiles.ts` | File › Project Alternatives, Revert to Saved, Revert to and Save as Template, and rebuilding their native menus (`set_project_menus`). |
+| `alternativesModel.ts` | Backup labels, name checks (mirroring `check_name`) and free names, track alternatives' names; pure, tested. |
+| `trackAlternatives.ts` | Track › Track Alternatives commands and the header pop-up's menu. |
 | `midiEdit.ts` | The Piano Roll's editing functions, pure and unit-tested. |
 | `ccCurves.ts` | Controller lane curves: curve shapes, ramps, Create Ramp, Thin Out; pure, tested. |
 | `musicalMove.ts` | Region moves and nudges in bars and beats through the tempo map; pure, tested. |
@@ -1433,6 +1587,7 @@ it like any plug-in.
 | `zeroCrossings.ts` | The Snap Edits to Zero Crossings toggle and its menu item. |
 | `pianoRollDraw.ts` | Piano Roll canvas drawing. |
 | `eventList.ts` | The Event List's positions, lengths, typed values and edits; pure, tested. |
+| `noteSelect.ts` | Edit › Select on notes and events while the Piano Roll or the Event List has focus; pure, tested. |
 | `stepInput.ts` | Step Input: step lengths through the tempo map, the chord/advance state machine (Rest, Back, Chord, Sustain, Quantize) and the region edits it makes; pure, tested. Also the hook Musical Typing reports its notes through. |
 | `stepSeq.ts` | The Step Sequencer's pattern edits, edit modes, General MIDI drum names, the playing step of each row and the Tracks-area miniature; pure, tested. |
 | `midiFiles.ts` | MIDI file import and export entry points. |
@@ -1441,8 +1596,11 @@ it like any plug-in.
 | `overview.ts` | The Tracks area overview strip's mapping: time and tracks to strip pixels, the visible-area box, edge-drag zoom; pure, tested. |
 | `fx.ts` | Built-in effect descriptions (`FxInfo`, `FxParamSpec`) and `FX_PANELS`. |
 | `fxFormat.ts` | Built-in effect value formatting and control mapping; pure, tested. |
-| `fxHost.ts` | Built-in effect registry and panel windows, the plug-in and Channel EQ clipboard, the slot right-click menu. |
-| `stripSettings.ts` | The channel strip Setting menu: the strip clipboard, Reset, saving and loading; resetting clip indicators. |
+| `fxHost.ts` | Built-in effect registry and panel windows, the plug-in and Channel EQ clipboards (store fields, shared between windows), the slot right-click menu. |
+| `fxDock.ts`, `fxDockState.ts` | Plug-in panels docked, floating or in separate windows: the pure transitions (tested), and applying them to the store with the floating panels' saved sizes. |
+| `fxShapes.ts` | The curves the modulation, distortion and Gain panels draw, mirroring the engine; pure, tested. |
+| `linearPhaseEq.ts` | The Linear Phase EQ's parameters as Channel EQ settings, so its panel reuses the EQ editor; pure, tested. |
+| `stripSettings.ts` | The channel strip Setting menu: the strip clipboard (a store field), Reset, saving and loading; resetting clip indicators. |
 | `stripMeters.ts` | The clip indicator's readout and the gain-reduction meter's scale and fall; pure, tested. |
 | `vca.ts` | VCA offsets and loop checks for drawing the Mixer (mirrors `vca.rs`); pure, tested. |
 | `slotDrag.ts` | Dragging plug-ins between Audio FX slots. |
@@ -1457,7 +1615,7 @@ it like any plug-in.
 | `styles.css` | All styles, using the theme variables. |
 | `detach.ts` | Detached panel windows: the panel kind registry, sharing UI state and snapshots between windows, detaching and attaching, remembered geometry. |
 | `detachModel.ts` | Panel keys and window labels, the shared fields, fitting windows to monitors; pure, tested. |
-| `panelKinds.tsx` | The detachable panel kinds: Mixer, Editors, Channel EQ, effect panels. |
+| `panelKinds.tsx` | The detachable panel kinds: Mixer, Editors, Event List, Step Sequencer, Channel EQ, effect panels. |
 
 ### `src/components`
 
@@ -1467,9 +1625,13 @@ it like any plug-in.
 | `TracksArea.tsx` | Tracks area frame: local menu bar (Edit, Functions, View), snap, zoom, height slider; `editMenu`. |
 | `Ruler.tsx` | Ruler: cycle strip, bar numbers, Autopunch strip, marker lane. |
 | `TrackHeaders.tsx` | Track headers: buttons, names, volume, reordering, resizing. |
+| `LevelSlider.tsx` | A track header's volume slider with the level meter as its groove. |
+| `TrackAlternatives.tsx` | The Track Alternatives pop-up in a track header. |
+| `AutoLaneHeaders.tsx` | The headers of a track's extra automation lanes. |
 | `Arrange.tsx` | The tracks-area canvas: regions, fades, loops, take rows, automation, drag and drop. |
 | `TrackTools.tsx` | The Left-click and Command-click Tool pop-ups and the tools' icons. |
 | `Panels.tsx` | Inspector, Mixer, Library, Browser. |
+| `FadeRows.tsx`, `RegionParamRows.tsx` | The Region inspector's fade rows and playback parameter rows. |
 | `ChannelStrip.tsx` | A mixer channel strip. |
 | `Sends.tsx` | The channel strip's Sends section and Output slot. |
 | `Vca.tsx` | The Mixer's VCA strips and the channel strip's VCA slot. |
@@ -1492,13 +1654,20 @@ it like any plug-in.
 | `ProjectChooser.tsx` | Project Chooser. |
 | `Bounce.tsx` | Bounce, Export and Bounce in Place dialogs. |
 | `MarkerList.tsx` | Marker List. |
+| `NameSheet.tsx` | The name sheet: `askName` and `NameSheetHost`, in place of `window.prompt`. |
+| `AlternativesSheet.tsx` | File › Project Alternatives › Edit Alternatives…. |
+| `StripSilence.tsx` | The Strip Silence sheet with its preview. |
 | `ControllerAssignments.tsx` | The Controller Assignments window and the learn banner. |
-| `GlobalTracks.tsx` | The Tempo and Signature global tracks. |
+| `GlobalTracks.tsx` | The global tracks: the Arrangement, Tempo and Signature lanes. |
+| `ArrangementTrack.tsx` | The Arrangement track's lane: sections, the name pop-up, menus, move, copy and resize drags. |
 | `Overview.tsx` | The overview strip under the tracks (in place of the horizontal scroll bar): cached region layer, visible-area box, playhead, scroll and zoom drags. |
-| `fx/FxWindow.tsx` | Floating panel windows for built-in effects; the generic panel. |
+| `fx/FxPanel.tsx` | A plug-in panel's content and header controls, wherever it shows; the generic panel for effects without their own. |
+| `fx/FxDock.tsx` | The bottom section's docked panels, a tab each. |
+| `fx/FxWindow.tsx` | Floating panel windows for built-in effects and the Channel EQ. |
 | `fx/common.tsx` | Shared panel controls: knobs, toggles, choices, meters, the side-chain pop-up. |
 | `fx/Presets.tsx` | The preset pop-up (built-in effects and Channel EQ). |
-| `fx/Compressor.tsx`, `Limiter.tsx`, `Gate.tsx`, `DeEsser.tsx`, `Reverb.tsx`, `Delay.tsx`, `Tuner.tsx`, `Loudness.tsx` | Each effect's panel. |
+| `fx/Compressor.tsx`, `Limiter.tsx`, `Gate.tsx`, `DeEsser.tsx`, `Reverb.tsx`, `Delay.tsx`, `Tuner.tsx`, `Loudness.tsx`, `Gain.tsx`, `LinearPhaseEq.tsx` | Each effect's panel. |
+| `fx/Modulation.tsx`, `Distortion.tsx` | The Chorus, Flanger, Phaser and Tremolo panels; the Distortion and Overdrive panels. |
 | `DetachedWindow.tsx` | The root of a detached panel's window. |
 | `DetachButton.tsx` | The Open in Separate Window / Attach to Main Window button. |
 
@@ -1506,7 +1675,7 @@ it like any plug-in.
 
 | Path | Contents |
 |---|---|
-| `tests/*.test.ts` | `node:test` tests for the pure frontend modules: `midiEdit.ts`, `eventList.ts`, `stepInput.ts`, `stepSeq.ts`, `audioRange.ts`, `fxFormat.ts`, `keyFormat.ts`, `tempo.ts`, `stripMeters.ts`. |
+| `tests/*.test.ts` | `node:test` tests for the pure frontend modules (those marked "tested" above) and the guard tests that read the sources; listed in [DEVELOPING.md](DEVELOPING.md#frontend-tests). |
 | `crates/engine/examples/*.rs` | Headless checks against a running engine; see [DEVELOPING.md](DEVELOPING.md#headless-examples). |
 | `scripts/headless-checks.sh` | Builds and runs the headless checks that need no plug-ins, as CI does. |
 | `crates/vst3-host/examples/probe.rs`, `editor.rs` | Plug-in scanning and editor debugging tools. |

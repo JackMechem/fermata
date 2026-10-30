@@ -93,7 +93,7 @@ cargo build -p daw                       # the whole app, including the Tauri cr
 cargo test -p daw-engine --lib           # engine unit tests
 cargo test -p daw                        # Tauri crate tests (settings parsing)
 cargo run -q -p daw-engine --example <name> -- <args>   # headless checks, below
-cargo clippy --workspace
+cargo clippy --workspace --all-targets
 npx tsc --noEmit -p .                    # type-check the frontend
 ```
 
@@ -121,7 +121,13 @@ strip settings (copy and paste through JSON, onto audio and instrument tracks, m
 Reset, setting files: `strip_settings.rs`, `session/strip_settings.rs`); the clip indicators'
 peak holds (`session/strip_meters.rs`); and each built-in effect's DSP (`fx/*.rs`: the
 Limiter's ceiling and latency, the Reverb's stability, the Tuner's accuracy, the Loudness
-Meter's BS.1770 weighting and true peak, and more).
+Meter's BS.1770 weighting and true peak, the Linear Phase EQ's kernels, and more). The
+modules added since cover their own pure parts too: region playback parameters
+(`region_params.rs`), patterns (`pattern.rs`), comps and MIDI take folders (`takes.rs`), the
+drag modes and Move Automation with Regions (`drag_modes.rs`, `auto_move.rs`), the
+Arrangement track's and the arranging commands' time maps (`arrangement.rs`,
+`arrange_cmds.rs`), Strip Silence, VCAs (`vca.rs`), controller assignments
+(`controllers.rs`), and the session modules that apply them (`session/*.rs`).
 
 `cargo test -p daw` runs the Tauri crate's tests (old and partly malformed `settings.json`
 files load with defaults).
@@ -132,7 +138,8 @@ files load with defaults).
 `null` output device (silent, no clock, so it runs as fast as it can). The `*_check` examples
 print one `PASS <what>` or `FAIL <what>` line per check, and all of them except `tempo_check`
 exit with status 1 when a check fails; for `tempo_check`, look for `FAIL` in the output
-(`... | grep -c FAIL`). `undo_check` prints the project state after each step for you to read.
+(`... | grep -c FAIL`). `undo_check` and `import_check` print what they did for you to read
+instead.
 
 Most take an audio file and a scratch directory, which must be an absolute path and is used as
 the project folder (never point it at your real projects):
@@ -142,8 +149,9 @@ cargo run -q -p daw-engine --example stack_check -- /path/to/tone.wav /tmp/ferma
 ```
 
 `scripts/headless-checks.sh` builds the examples once and runs every check that needs no
-third-party plug-ins, each in its own folder under a scratch directory, with a test tone from
-the `test_tone` example. It's what CI runs, so run it the same way before sending an engine
+third-party plug-ins (its `CHECKS` list; register a new check there), each in its own folder
+under a scratch directory, with a test tone from the `test_tone` example. A check that runs
+longer than `HEADLESS_CHECK_TIMEOUT` seconds (600 by default) fails instead of stalling. It's what CI runs, so run it the same way before sending an engine
 change. It also runs on macOS: where there is no ALSA, the engine runs on a silent stand-in
 device at the configured rate and buffer size instead of ALSA's `null` output:
 
@@ -157,8 +165,9 @@ It runs the checks as on a fresh CI runner: `HOME` and the `XDG_*` folders point
 scratch folder, and the PipeWire, PulseAudio, JACK and D-Bus session variables are cleared,
 so the checks find no audio server, no settings and no plug-in cache, and never touch yours.
 That makes the plug-in parts of `fx_check`, `automation_check` and `bounce_check` print `SKIP`;
-`pdc_check` and `freeze_check` need a real plug-in and aren't in the script, so run those (and
-the plug-in parts) by hand. A check counts as failed when it exits non-zero or prints a line
+`pdc_check` and `freeze_check` need a real plug-in, and `undo_check` and `import_check` only
+print what they did for you to read, so those four aren't in the script; run them (and the
+plug-in parts) by hand. Every other `*_check` in the table below is. A check counts as failed when it exits non-zero or prints a line
 starting with `FAIL`; each one's output is in `<scratch>/<check>/output.log`, and the scratch
 folder is kept when anything failed.
 
@@ -168,18 +177,22 @@ folder is kept when anything failed.
 | `fx_play_check` | audio file, scratch dir | The modulation, distortion and Gain effects: each plays live, renders sanely, and a bounce of its frozen track matches the live bounce; a synced Tremolo locks to the song position; the Distortion's oversampling latency is compensated (at 0 % mix it is the dry signal, in time); Gain's invert and mono switches null a centred source. |
 | `insert_order_check` | audio file, scratch dir | Reordering Audio FX inserts: the engine runs the new order, instances keep running (same ids, nothing reloaded), undo and redo restore it, moving or copying to another strip makes room there. |
 | `stack_check` | audio file, scratch dir | Track stacks (folder and summing), groups and region edits, by the levels the meters report. |
+| `vca_check` | audio file, scratch dir | VCA faders and pre-fader side-chain keys in offline renders: two tracks on a VCA at -6 dB render 6 dB lower, muting the VCA silences them, undo restores the level, automated member volume combines with the VCA, a frozen track and Bounce follow it; a compressor keyed pre-fader from a track with its fader at -∞ still compresses. |
 | `loop_check` | audio file, scratch dir | Looping regions (playback, trim, move, convert, split, join) and hidden tracks. |
 | `sends_check` | audio file, scratch dir | Sends pre and post fader, aux buses, output routing, solo through routing, loop refusal. |
 | `send_auto_check` | audio file, scratch dir | A send-level automation lane changes what reaches the aux. |
 | `bounce_check` | audio file, scratch dir | Bounce, Export All Tracks, Export Region and Bounce in Place: ranges, tails, formats, normalize, placement. |
 | `strip_check` | audio file, scratch dir | Channel strip settings: a saved setting loads onto two tracks (new instances, same values, the EQ) as one undo step; the gain-reduction meter of compressed strips reaches the tick; a clipping track's clip indicator holds a peak over 0 dBFS through quiet playback until it (or every one) is reset, and a bounce leaves them alone. Saved settings go to the scratch folder. |
 | `export_check` | audio file, scratch dir | AIFF and FLAC bounces decode to the same samples as the WAV bounce (and within quantization of a float one); FLAC refuses float; Export Selected Tracks writes just the selection, folder stacks standing for their subtracks. |
+| `dragmode_check` | audio file, scratch dir | The No Overlap, Shuffle L and Shuffle R drag modes and Move Automation with Regions through the session calls the Tracks area makes: where regions end up, that moved automation is what plays, and that each edit is one undo step. |
 | `crossfade_check` | audio file, scratch dir | Fade curves, Speed Up and Slow Down, and X, EqP and X S crossfades, measured in offline renders of synthetic files (X sums to unity, EqP to constant power); butt fades and gaps; the X-Fade drag mode with undo and redo; and that playback, Bounce, Export, Bounce in Place, Freeze, Join and save/reopen all sound the same. |
 | `range_edit_check` | audio file, scratch dir | Audio Track Editor range edits and Split at Transients: what plays after each edit, and that one undo reverts it. |
 | `automation_check` | audio file, scratch dir, optional plug-in name and parameter name | Reading volume and pan lanes, Off mode, writing in Write and Touch, undo; with a plug-in from the cache, one of its parameters too (`SKIP` when it isn't in the cache). |
+| `autolanes_check` | audio file, scratch dir | Automation curves, Stereo Out automation and stack automation in offline renders: a curved volume ramp follows its curve sample by sample, a straight one is unchanged by curves existing, Stereo Out's volume lane shapes the bounce, summing and folder stacks' lanes shape their subtracks, and each edit undoes. |
 | `pdc_check` | audio file, scratch dir | Plug-in delay compensation with a real latent plug-in, measured by cross-correlating offline renders. Needs **ZaMaximX2** (zam-plugins) in the plug-in cache. |
 | `freeze_check` | audio file, scratch dir | Freeze: a frozen instrument track with a latent plug-in sounds as it did live, plug-ins are unloaded, edits are refused, undo, redo, unfreeze and reopening restore the right state. Needs **ZaMaximX2**. |
 | `takes_check` | audio file, scratch dir | Take folders, comping, cycle and Autopunch recording layout (the null device has no input, so takes are silent), and markers. |
+| `comping_check` | scratch dir | Several comps per folder (create, switch, rename, delete, with undo; each renders as it should); a MIDI cycle recording with "Create take folders" makes a take per pass, and choosing a take changes what plays; a take folder crossfaded with the next region, and a loop with Crossfade Loop Repetitions, render without a click; Crossfade Time sets the X-Fade mode's crossfades and the comp boundaries. |
 | `recovery_check` | audio file (unused), scratch dir | Crash recovery: a child process records (24-bit plain with two tracks, then 32-bit cycle) and is killed with SIGKILL mid-take; reopening offers and restores the takes at the right position and length (a take folder for the cycle), repairs the WAVs and clears the journal. A normal stop autosaves at once without touching project.json. |
 | `countin_check` | scratch dir | Recording with a count-in from bar 1, where the transport runs at negative positions, three times without an engine error. |
 | `tempo_check` | scratch dir | The tempo map and signature changes: the click across changes, plug-in transport positions, bar numbering, Move MIDI Regions with Tempo, quantize, a MIDI file round trip, undo, and that a project without changes keeps the old timing exactly. |
@@ -190,6 +203,7 @@ folder is kept when anything failed.
 | `region_params_check` | audio file, scratch dir | Region playback parameters in offline renders of the built-in synth and the tone: quantize, transpose, velocity, dynamics and gate play exactly the notes worked out by hand; delays in ms and ticks (across a tempo change, and before a region's start); quantize after a tempo change; an audio region's delay; Apply Region Parameters plays the same and undoes in one step; coalesced undo; saving. |
 | `projects_check` | audio file, scratch dir | Track alternatives (new, duplicate, switch, rename, undo and redo, what plays, save and reopen); backups kept on save and pruned, Revert to and undoing it; project alternatives (new, switch saving first, reopen, rename, delete, backups per alternative); a user template round trip. |
 | `arrangement_check` | scratch dir | The Arrangement track: three sections with regions on two tracks (one across two section edges) and volume automation. Moving section 3 before section 2, copying section 1 and deleting section 2 with its content cut and move the regions and automation as expected; offline renders play the old audio in the new order (sample for sample without automation, within 0.5 dB with it); one undo restores each. |
+| `arrange_cmds_check` | scratch dir | The arranging commands with the locators at 1–1.5 s over regions and volume automation on two tracks: Insert Silence, Cut Section and Repeat Section move the content in time and the render plays the old audio with a gap, without the section or with it twice; Insert Cut Section after a cut restores the project; Remove Gaps, Remove Overlaps and Paste Replace lay regions out as Logic does; Strip Silence splits a tone with gaps into one region per note, playing as before; one undo reverts each. |
 | `pattern_check` | scratch dir | Pattern regions (Step Sequencer) in offline renders of the built-in synth: straight, swung, polymetric and other-rate rows, ties, a looped region and a tempo change play exactly the notes worked out by hand; a painted run of steps undoes in one step; Convert to MIDI Region and back render identically; saving. |
 | `editing_check` | audio file, scratch dir | Snap Edits to Zero Crossings (a split off and on lands within 5 ms on a near-zero sample; a range split at both ends), a region gain drag sent as the Tracks area does (heard at -12 dB, one undo step), and a nudge in bars and beats across a 120 to 90 BPM change. |
 | `pdc_glide_check` | scratch dir | Delay compensation changes while playing: a sine plays on one track while the Overdrive (38 frames), then the Linear Phase EQ (2047), are inserted on another and then removed, mid-render with the transport running (`Session::render_with_edit`), and a pre-fader send into an aux changes delay the same way. No step may exceed the sine's own (the output reports what an instant jump would have stepped), and after the 15 ms glide the output is the sine exactly as far moved as the delay. |
@@ -221,15 +235,52 @@ npm test                  # node --test tests/*.test.ts
 npx tsc --noEmit -p .     # type check (strict, no unused locals or parameters)
 ```
 
-The tests use the built-in `node:test` runner on the pure frontend modules:
-`tests/midiEdit.test.ts` (the Piano Roll functions in `src/midiEdit.ts`: grid lengths, snapping,
-quantize with strength, swing and ends, and the rest), `eventList.test.ts` (the Event List's
-positions across tempo and signature changes, typed values and edits), `audioEdit.test.ts`
-(`src/audioRange.ts`), `fxFormat.test.ts` (built-in effect readouts and control mapping),
-`keyFormat.test.ts`
-(shortcuts on each platform), `tempo.test.ts` (`src/tempo.ts`) and `stripMeters.test.ts` (the
-clip indicator readout and the gain-reduction meter). Node 23.6 or newer runs
-TypeScript directly; on Node 22 add `--experimental-strip-types`.
+The tests use the built-in `node:test` runner. Node 23.6 or newer runs TypeScript directly;
+on Node 22 add `--experimental-strip-types`. Most test a pure frontend module (one with no
+Tauri or React imports, so Node can load it); the guard tests at the end read the sources
+instead and enforce rules that would otherwise only fail in the running app.
+
+| Test | What it covers |
+|---|---|
+| `midiEdit.test.ts` | The Piano Roll functions in `src/midiEdit.ts`: grid lengths, snapping, quantize with strength, swing and ends, and the rest. |
+| `ccCurves.test.ts` | Controller lane curves (`src/ccCurves.ts`): curve shapes, ramps, Create Ramp, Thin Out. |
+| `eventList.test.ts` | The Event List's positions across tempo and signature changes, typed values and edits. |
+| `noteSelect.test.ts` | Edit › Select on notes and events in the Piano Roll and the Event List. |
+| `stepInput.test.ts` | Step Input: step lengths through the tempo map, the chord and advance state machine, the region edits. |
+| `stepSeq.test.ts` | The Step Sequencer: step edits, rows, paint values for each edit mode, names, the playing step of each row. |
+| `tempo.test.ts` | `src/tempo.ts`, the mirror of the engine's tempo map. |
+| `musicalMove.test.ts` | Region moves and nudges in bars and beats through the tempo map. |
+| `audioEdit.test.ts` | The Audio Track Editor's range arithmetic (`src/audioRange.ts`). |
+| `regionSelect.test.ts` | Edit › Select's region criteria (`src/regionSelect.ts`). |
+| `regionParams.test.ts` | The Region inspector's playback parameter values. |
+| `regionGain.test.ts` | The region gain handle's geometry and arithmetic. |
+| `fades.test.ts` | Fade curves and crossfades for drawing, mirroring `fades.rs`. |
+| `dragModes.test.ts` | The drag preview's copy of `drag_modes.rs`, with the Rust module's cases. |
+| `comps.test.ts` | Take folder comp names and the folder's name bar label. |
+| `arrangement.test.ts` | The Arrangement track's drawing and drag helpers. |
+| `tools.test.ts` | The Tracks area's tools (`src/tools.ts`) and the marquee (`src/marquee.ts`). |
+| `overview.test.ts` | The overview strip's mapping: time, track rows, the visible-area box, scroll and zoom drags. |
+| `scrolling.test.ts` | Mouse Wheel Scrolls (`src/wheel.ts`) and bringing the playhead into view (`revealLeft` in `src/view.ts`). |
+| `trackHeader.test.ts` | Track header layouts by height, the volume slider's meter scale, and region name bars (`src/regionBar.ts`). |
+| `autoLanes.test.ts` | Automation curves, Show Used Automation, the extra lanes and their boxes. |
+| `laneFollow.test.ts` | The shown lane following a plug-in moved to another track. |
+| `alternatives.test.ts` | Backup labels, alternative names and track alternatives (`src/alternativesModel.ts`). |
+| `bounceFormat.test.ts` | The Bounce dialog's formats, resolutions and file names. |
+| `fxFormat.test.ts` | Built-in effect readouts and control mapping. |
+| `fxShapes.test.ts` | The curves the modulation, distortion and Gain panels draw, against the engine's values. |
+| `fxDock.test.ts` | Plug-in panels docked or floating: the slot toggle, closing back, one Channel EQ at a time, Esc, pruning, resize maths and saved sizes. |
+| `linearPhaseEq.test.ts` | The Linear Phase EQ's parameters as Channel EQ settings. |
+| `stripMeters.test.ts` | The clip indicator readout and the gain-reduction meter. |
+| `vca.test.ts` | VCA offsets and loop checks in the Mixer. |
+| `controllers.test.ts` | Controller assignment types and labels (MIDI Learn). |
+| `keyFormat.test.ts` | Shortcuts written as each platform writes them. |
+| `pluginKeys.test.ts` | Keys forwarded from a plug-in's editor window become the KeyboardEvent the main window would see. |
+| `detach.test.ts` | Detached windows (`src/detachModel.ts`): panel keys and labels, the shared UI state, fitting windows onto the monitors. |
+| `sheetKeys.test.ts` | Which keys reach the app while sheets are open (`src/sheetKeysModel.ts`), and that every sheet registers with `sheetKeys.ts`. |
+| `storeSelectors.test.ts` | Guard: no `useStore`, `useEd` or `useSettings` selector builds a new array or object on each call (which re-renders forever and blanks the window). |
+| `commands.test.ts` | Guard: every key command and native menu item is handled, and no two key commands share a default key. |
+| `tauriCommands.test.ts` | Guard: every Tauri command the frontend calls is registered, and each call passes its required arguments in camelCase and nothing else. |
+| `browserDialogs.test.ts` | Guard: no `window.prompt`, `confirm` or `alert` in `src/` (macOS's web view doesn't implement them; use `askName` or the dialog plug-in). |
 
 ### What to run before sending a change
 
@@ -237,7 +288,8 @@ TypeScript directly; on Node 22 add `--experimental-strip-types`.
 - every headless example that touches your area (for engine changes,
   `scripts/headless-checks.sh` and the plug-in checks `pdc_check` and `freeze_check`); for a
   built-in effect, `fx_check` and `fx_bench`
-- `npm test` and `npx tsc --noEmit -p .`
+- `npm test`, `npx tsc --noEmit -p .` and `npm run build` (the Vite bundle and CSS)
+- `cargo clippy --workspace --all-targets`
 - a visual check in the running app for UI changes
 
 ## Debugging
@@ -288,8 +340,14 @@ These keep the code maintainable and the merges clean.
 - **Model compatibility.** Every new field in `model.rs` or `prefs.rs` gets `#[serde(default)]`
   (or a struct-level `#[serde(default)]`), and optional fields usually also
   `skip_serializing_if = "Option::is_none"`, so older projects and settings files still load.
-- **Struct literals.** Every `Region { .. }` literal needs `loop_end`, `takes` and `params`, and every
-  `Note` literal needs `muted`. Tests and examples build these by hand.
+- **Struct literals.** Every `Region { .. }` literal needs `loop_end`, `takes`, `params` and
+  `pattern`, every `RegionContent::Audio { .. }` needs `fade_shape`, every `RegionDsp::Audio`
+  needs `laws`, and every `Note` needs `muted`. Tests and examples build these by hand, so
+  `Default::default()` (or `None`) is usually what they want.
+- **Every platform.** `cargo clippy --workspace --all-targets` is clean on Linux, Windows and
+  macOS; keep it that way, and keep platform-specific code behind `cfg`. VST3 enum casts stay
+  explicit: the C enums are `i32` in the MSVC bindings, so a cast that clippy calls a no-op on
+  Linux is needed on Windows.
 - **Undo.** Every user edit goes through a checkpointed command (`edit`, `try_edit`,
   `edit_made`). Performance switches (mute, solo, arm, monitor) and transport are not undoable.
   Anything you send to the engine must also be handled in `restore()`, `build_track()` and
@@ -382,7 +440,8 @@ Example: a per-project "Notes" field (it exists as `Project::notes`).
 2. `src/App.tsx`: add the action to `KEY_ACTIONS` under the same id. If a menu item does the
    same thing, call `handleMenu("<menu id>")` so both stay in step.
 3. Settings › Key Commands lists the new command automatically, and user overrides work
-   through `settings.json` › `ui.keymap`.
+   through `settings.json` › `ui.keymap`. `npm test` (`tests/commands.test.ts`) fails if the id
+   has no action or its default key is already taken.
 4. If an editor (Piano Roll, Audio Track Editor) should handle the key differently while it
    has focus, handle it in that editor's own key listener and stop propagation there.
 
@@ -396,6 +455,8 @@ Example: a per-project "Notes" field (it exists as `Project::notes`).
    › Key Commands shows it and refuses conflicting keys.
 4. If the command should also run from a key that the user can change, add a key command
    (above) whose action calls `handleMenu("my-id")`.
+5. List it in the menu bar table in `docs/USER_GUIDE.md`. `tests/commands.test.ts` checks that
+   `handleMenu` handles the id.
 
 ### Add a setting
 
