@@ -26,7 +26,22 @@ function editorTrack(project: Project | undefined, selectedRegions: number[], se
   return t?.kind === "instrument" ? t : null;
 }
 
-const midiRegions = (t: Track) => t.regions.filter((r) => r.content.type === "midi");
+const midiRegions = (t: Track) => t.regions.filter((r) => r.content.type === "midi" && !r.pattern);
+
+/** The open panel's key commands (null while it is closed). */
+let openCommands: { current: Record<string, () => void> } | null = null;
+
+/**
+ * Runs a Step Input key command while the panel is open; false for other commands, or when it
+ * is closed. Held keys repeat only Rest and Back. Also for keys pressed in a detached panel's
+ * window (a Piano Roll of its own), which the main window is passed (App.tsx).
+ */
+export function runStepInputCommand(id: string, repeat: boolean): boolean {
+  const run = openCommands?.current[id];
+  if (!run) return false;
+  if (!repeat || id === "step-rest" || id === "step-back") run();
+  return true;
+}
 
 export function StepInput() {
   const project = useStore((s) => s.snap?.project);
@@ -152,14 +167,14 @@ export function StepInput() {
       if (tgt && ["INPUT", "SELECT", "TEXTAREA"].includes(tgt.tagName)) return;
       if (getState().dialog) return;
       const id = commandForEvent(e);
-      const run = id ? cmds.current[id] : undefined;
-      if (!run) return;
-      if (!e.repeat || id === "step-rest" || id === "step-back") run();
+      if (!id || !runStepInputCommand(id, e.repeat)) return;
       e.preventDefault();
       e.stopPropagation();
     };
+    openCommands = cmds;
     window.addEventListener("keydown", key, true);
     return () => {
+      if (openCommands === cmds) openCommands = null;
       offTick();
       offLocal();
       window.removeEventListener("keydown", key, true);

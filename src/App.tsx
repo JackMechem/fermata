@@ -22,11 +22,11 @@ import { FxWindows } from "./components/fx/FxWindow";
 import { FxDock } from "./components/fx/FxDock";
 import { loadFxList } from "./fxHost";
 import { MusicalTyping } from "./components/MusicalTyping";
-import { StepInput } from "./components/StepInput";
+import { runStepInputCommand, StepInput } from "./components/StepInput";
 import { MenuHost } from "./components/Menu";
 import { loadPaneSizes, Splitter } from "./components/Splitter";
 import { Browser, Inspector, Library, Mixer } from "./components/Panels";
-import { TracksArea, editMenu } from "./components/TracksArea";
+import { TracksArea } from "./components/TracksArea";
 import { toggleOverview } from "./components/Overview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { confirmDiscard, importAudioDialog, openProjectDialog, saveProject, undoRedo } from "./files";
@@ -270,7 +270,8 @@ function handleMenu(id: string) {
       ops.selectAllRegions();
       break;
     case "delete":
-      editMenu().find((m) => m.label === "Delete")?.onClick?.();
+      // As the Delete key: selected automation points, a tempo change or a marker go first.
+      KEY_ACTIONS["delete-regions"]();
       break;
     case "record":
       act("record");
@@ -591,8 +592,8 @@ export default function App() {
     const offDrop = installNativeDrop();
     // Detached panel windows: their key commands run here, as if pressed in this window.
     const offDetach = installDetach({
-      key: (id) => {
-        if (!getState().dialog) KEY_ACTIONS[id]?.();
+      key: (id, repeat) => {
+        if (!getState().dialog && !runStepInputCommand(id, repeat)) KEY_ACTIONS[id]?.();
       },
     });
     const ctx = (e: MouseEvent) => e.preventDefault();

@@ -71,7 +71,8 @@ const usePrefs = () =>
 
 // ---- what is listed -------------------------------------------------------------------------
 
-const isMidi = (r: Region) => r.content.type === "midi";
+// A pattern region plays its steps, not its notes: the Step Sequencer edits it.
+const isMidi = (r: Region) => r.content.type === "midi" && !r.pattern;
 
 interface Scope {
   track: Track;

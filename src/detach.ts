@@ -135,7 +135,7 @@ let lastBottom: BottomPane = getState().bottom;
 let booted = false;
 let broadcastTimer = 0;
 let lastBroadcast = 0;
-let keyAction: (id: string) => void = () => {};
+let keyAction: (id: string, repeat: boolean) => void = () => {};
 
 /** Whether there are other windows to tell. */
 const hasPeers = (s: State) => !isMain || s.detached.length > 0;
@@ -178,7 +178,8 @@ function onStateChange() {
     if (s.snap !== was.snap) broadcastSoon();
   }
   // A sheet opened from a panel window (its menu bar, a key command) opens here: show it.
-  if (isMain && s.dialog && s.dialog !== was.dialog && s.detached.length) getCurrentWindow().setFocus().catch(() => {});
+  const sheet = (s.dialog && s.dialog !== was.dialog) || (s.showControllerAssignments && !was.showControllerAssignments);
+  if (isMain && sheet && s.detached.length) getCurrentWindow().setFocus().catch(() => {});
   // A track or effect went away: so does its window.
   if (isMain && s.snap && s.snap !== was.snap) {
     for (const key of s.detached) {
@@ -249,7 +250,7 @@ function applySettings({ from, settings }: { from: string; settings: AppSettings
 type PanelMsg =
   | { type: "hello" }
   | { type: "attach" | "detach" | "close"; key: string }
-  | { type: "key"; id: string }
+  | { type: "key"; id: string; repeat?: boolean }
   | { type: "geometry"; key: string; rect: Rect };
 
 function send(m: PanelMsg): Promise<void> {
@@ -272,7 +273,7 @@ function onPanelMsg(m: PanelMsg & { from: string }) {
       closeDetached(m.key);
       break;
     case "key":
-      keyAction(m.id);
+      keyAction(m.id, !!m.repeat);
       break;
     case "geometry":
       memory.geometry[memoryKey(m.key)] = m.rect;
@@ -401,6 +402,16 @@ export function toggleDetached(key: string) {
   else detachPanel(key);
 }
 
+/**
+ * In a panel's window, runs key command `id` in the main window instead and returns true: for
+ * what opens a sheet there (Controller Assignments). False in the main window.
+ */
+export function runInMain(id: string): boolean {
+  if (isMain) return false;
+  send({ type: "key", id });
+  return true;
+}
+
 export function useDetached(key: string): boolean {
   return useStore((s) => s.detached.includes(key));
 }
@@ -421,7 +432,7 @@ let restored = false;
  * The main window's part (App, once): it hears the panels, and reopens the panels that were
  * detached when Fermata quit. `key` runs a key command a panel window passed on.
  */
-export function installDetach(opts: { key: (id: string) => void }): () => void {
+export function installDetach(opts: { key: (id: string, repeat: boolean) => void }): () => void {
   keyAction = opts.key;
   prev = getState();
   const offs = [subscribeState(onStateChange), onSettingsChange(onSettings)];
@@ -509,7 +520,7 @@ export function installPanelWindow(opts: { menu: (id: string) => boolean }): () 
     const id = commandForEvent(e);
     if (!id) return;
     e.preventDefault();
-    send({ type: "key", id });
+    send({ type: "key", id, repeat: e.repeat });
   };
   window.addEventListener("keydown", onKey);
   if (k) remotely(() => setState(k.show(arg, getState())));

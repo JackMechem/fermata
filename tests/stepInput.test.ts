@@ -224,6 +224,10 @@ test("the region a step goes into", () => {
   assert.equal(si.regionFor([audio], 3 * bar + Q, flat), null);
   // Overlapping regions: the newest.
   assert.equal(si.regionFor([a, region(4, 0, bar)], Q, flat)?.id, 4);
+  // A pattern region plays its steps, so notes never go into it.
+  const pattern: Region = { ...region(5, 0, bar), pattern: { rows: [] } as unknown as Region["pattern"] };
+  assert.equal(si.regionFor([a, pattern], Q, flat)?.id, 1);
+  assert.equal(si.regionFor([pattern], Q, flat), null);
   assert.deepEqual(si.newRegionSpan(flat, bar + Q), [bar, bar]);
 });
 

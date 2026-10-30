@@ -219,6 +219,17 @@ All notable changes to Fermata are recorded here. The format follows
 - Play or Record right after moving the playhead could start from the old position.
 - M4A/MP4 imports started about 40 ms late: the encoder delay and padding are now trimmed
   exactly, from the iTunes gapless tag or the file's edit list.
+- With Musical Typing on, Shift with a note key played the note instead of running its key
+  command (Shift+F, Shift+S and the other Select commands, Shift+A, Shift+K, Shift+R).
+- Step Input's keys (note values, Rest, Back…) did nothing in a detached Piano Roll's window.
+- Controller Assignments… in a detached Mixer's or effect panel's right-click menu did nothing;
+  the sheet now opens in the main window.
+- Step Input, the Piano Roll and the Event List put notes into pattern regions, which play their
+  steps instead, so the notes were never heard; they now leave pattern regions alone.
+- Clicking the current project alternative in File › Project Alternatives, or cancelling a
+  switch, left the menu's tick on the wrong alternative.
+- Edit › Delete removed the selected regions even when automation points, a tempo change or a
+  marker were selected; it now deletes those first, as the Delete key does.
 
 ## [0.1.0-alpha.1] - 2026-10-29
 

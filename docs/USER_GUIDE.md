@@ -417,8 +417,8 @@ position, so it works on any keyboard layout:
 - The four-octave on-screen piano can be clicked or swept; clicking lower on a key plays
   louder. The **Sustain** button latches the pedal.
 - While the window is open these keys play notes instead of running their usual commands.
-  Combinations with Ctrl, Alt (and ⌘ on macOS) still work, and typing in text fields is not
-  affected.
+  Combinations with Shift, Ctrl, Alt (and ⌘ on macOS) still work, so Shift+S still selects
+  similar regions, and typing in text fields is not affected.
 - Notes played this way are recorded like notes from a MIDI keyboard. The MIDI velocity curve
   doesn't apply to them.
 - With the Step Input Keyboard open, they are entered as steps too (see below).

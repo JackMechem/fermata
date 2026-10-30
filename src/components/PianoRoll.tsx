@@ -272,7 +272,8 @@ interface Work {
   selCc: Set<string>;
 }
 
-const midiRegions = (t: Track) => t.regions.filter((r) => r.content.type === "midi");
+// A pattern region plays its steps, not its notes: the Step Sequencer edits it.
+const midiRegions = (t: Track) => t.regions.filter((r) => r.content.type === "midi" && !r.pattern);
 
 /** Piano Roll for a software instrument track; `region` is the one selected in the tracks area. */
 export function PianoRoll({ track, region }: { track: Track; region: Region | null }) {

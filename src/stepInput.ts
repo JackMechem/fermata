@@ -225,9 +225,10 @@ export function reduce(s: StepState, ev: StepEvent, map: TempoMap, playhead: num
 // ---- where the notes go -------------------------------------------------------------------
 
 /** The MIDI region on a track a step at `at` goes into: the newest one holding `at`, else the
- *  latest one ending at most a bar before it (which then grows). Null when one must be made. */
+ *  latest one ending at most a bar before it (which then grows). Null when one must be made.
+ *  Not a take folder, nor a pattern region (which plays its steps, not its notes). */
 export function regionFor(regions: Region[], at: number, map: TempoMap): Region | null {
-  const midi = regions.filter((r) => r.content.type === "midi" && !r.takes);
+  const midi = regions.filter((r) => r.content.type === "midi" && !r.takes && !r.pattern);
   const covering = midi.filter((r) => at >= r.start && at < r.start + r.length);
   if (covering.length) return covering[covering.length - 1];
   const before = midi.filter((r) => r.start + r.length <= at && at - (r.start + r.length) <= map.samplesPerBarAt(at));

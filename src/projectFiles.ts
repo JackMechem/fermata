@@ -66,14 +66,22 @@ export async function newAlternative() {
 
 /** Switches to another alternative. Unsaved changes are saved first, after asking. */
 export async function switchAlternative(name: string) {
+  // The menu ticks the item it sends on its own: a click that doesn't switch (the current
+  // alternative, Cancel, a failure) puts the ticks back.
+  if (!(await switchTo(name))) refreshProjectMenus();
+}
+
+async function switchTo(name: string): Promise<boolean> {
   const snap = getState().snap;
-  if (!snap || name === snap.project.alternative) return;
+  if (!snap || name === snap.project.alternative) return false;
   if (snap.dirty && getSettings().ui.confirm_unsaved) {
     const cur = snap.project.alternative || snap.project.name;
     const ok = await ask(`“${cur}” has unsaved changes. Save them before switching to “${name}”?`, { title: "Project Alternatives", kind: "warning", okLabel: "Save", cancelLabel: "Cancel" });
-    if (!ok) return;
+    if (!ok) return false;
   }
-  if (await act("switch_alternative", { name })) replaced();
+  if (!(await act("switch_alternative", { name }))) return false;
+  replaced();
+  return true;
 }
 
 export async function renameAlternative(name: string, taken: string[]) {

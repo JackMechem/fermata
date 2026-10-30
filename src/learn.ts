@@ -6,6 +6,7 @@
 import { createContext, useContext } from "react";
 import { call, type Id } from "./api";
 import { stripTarget, type CtlTarget } from "./controllers";
+import { runInMain } from "./detach";
 import { openMenu, type MenuItem } from "./components/Menu";
 import { currentTick, setState } from "./store";
 
@@ -25,6 +26,8 @@ export function learnLastTouched() {
 }
 
 export function openControllerAssignments() {
+  // A panel's window doesn't show the sheet (and may be too small for it): the main window does.
+  if (runInMain("controller-assignments")) return;
   setState({ showControllerAssignments: true });
 }
 

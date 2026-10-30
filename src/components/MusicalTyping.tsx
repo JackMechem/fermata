@@ -67,9 +67,10 @@ export function MusicalTyping() {
 
   useEffect(() => {
     const isField = (t: EventTarget | null) => t instanceof HTMLElement && ["INPUT", "SELECT", "TEXTAREA"].includes(t.tagName);
-    // Capture phase: these keys play notes instead of reaching the app's shortcuts.
+    // Capture phase: these keys play notes instead of reaching the app's shortcuts. With a
+    // modifier, Shift included, they stay key commands (Shift+S Select Similar Regions…).
     const down = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || isField(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || isField(e.target)) return;
       const { base, velocity } = live.current;
       if (e.code in NOTE_KEYS) {
         if (!e.repeat && !heldKeys.current.has(e.code)) {
