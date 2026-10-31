@@ -28,6 +28,12 @@ use crate::presets::{self, Preset};
 
 /// The project's folder for a sampler's files.
 pub const SAMPLES_DIR: &str = "Samples";
+
+/// A path inside the project as the project file keeps it: with forward slashes on every system, so a
+/// project made on Windows finds its samples elsewhere, and a path the file already holds still joins.
+fn project_relative(path: &Path) -> String {
+    path.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
+}
 /// Slices start on this key (C1, where a drum map starts).
 const SLICE_FIRST_KEY: u8 = 36;
 /// The key an audio region's sample plays at its own pitch on after converting (C3).
@@ -124,7 +130,7 @@ pub struct PreparedFile {
 /// number. Returns its path relative to the project.
 fn adopt_file(dir: &Path, sub: &Path, path: &Path) -> Result<String> {
     if let Ok(rel) = path.strip_prefix(dir) {
-        return Ok(rel.to_string_lossy().to_string());
+        return Ok(project_relative(rel));
     }
     if !path.is_file() {
         return Err(anyhow!("{} isn't there", path.display()));
@@ -138,10 +144,10 @@ fn adopt_file(dir: &Path, sub: &Path, path: &Path) -> Result<String> {
         let dest = folder.join(&name);
         if !dest.exists() {
             std::fs::copy(path, &dest).with_context(|| format!("copying {}", path.display()))?;
-            return Ok(dest.strip_prefix(dir).unwrap_or(&dest).to_string_lossy().to_string());
+            return Ok(project_relative(dest.strip_prefix(dir).unwrap_or(&dest)));
         }
         if same_bytes(path, &dest) {
-            return Ok(dest.strip_prefix(dir).unwrap_or(&dest).to_string_lossy().to_string());
+            return Ok(project_relative(dest.strip_prefix(dir).unwrap_or(&dest)));
         }
     }
     unreachable!()
@@ -533,7 +539,7 @@ impl Session {
         let rate = self.sample_rate() as u32;
         self.sampler.pool.insert(&take.path, rate, &channels).map_err(|e| anyhow!("The recording is {}", e.text()))?;
         let mut state = self.sampler_state(take.track)?;
-        let rel = take.path.strip_prefix(&self.dir).unwrap_or(&take.path).to_string_lossy().to_string();
+        let rel = project_relative(take.path.strip_prefix(&self.dir).unwrap_or(&take.path));
         let name = take.path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Recording".into());
         let mut z = Zone::new(state.alloc_id(), name, rel, CONVERT_ROOT);
         if let Some(k) = at_key {
@@ -743,5 +749,16 @@ impl Session {
         let frames = input.len() / channels.max(1);
         let mut out = vec![0.0f32; frames * 2];
         self.engine.lock().process(input, channels, &mut out, 2);
+    }
+}
+
+#[cfg(test)]
+mod path_tests {
+    use super::*;
+
+    #[test]
+    fn project_paths_use_forward_slashes_on_every_system() {
+        let p = Path::new(SAMPLES_DIR).join("Take 1").join("a b.wav");
+        assert_eq!(project_relative(&p), "Samples/Take 1/a b.wav");
     }
 }

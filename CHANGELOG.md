@@ -6,6 +6,11 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- A project with a sampler saved on Windows now finds its samples on Linux and macOS: sample paths
+  are kept with forward slashes.
+
 ## [0.1.0-alpha.4] - 2026-10-31
 
 ### Added
