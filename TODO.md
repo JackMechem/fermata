@@ -18,10 +18,6 @@ The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instru
 - A 2-pole state-variable filter and a diode ladder aren't written; `ZdfFilter` is where they go.
 - Fermata Synth's renders aren't repeatable with its mod wheel up (its LFO runs free, and `silence` keeps
   its controllers). Left alone, as old projects depend on it; a new default could drop it.
-- `parallel_check` fails now and then, on the code before this round too (1 run in 18 with three running at once,
-  against 2 in 18 with it): a live run differs from the serial one at its very first sample (0 against 0.0897),
-  at varying buffer sizes and thread counts. Not looked into. Likely the start of a run (the first
-  block's click or a region), not the instruments.
 - A wave or range switch moved under a held note steps at once, as a real switch does; it could click a little at
   an extreme setting.
 
@@ -71,7 +67,7 @@ aux's name and Input slot, and TONE3000's editor opening on a copy of a real pro
   a new instance or reopening the project brings it back. Measured with two samples and our plug-in
   host only, no engine: 1 load in 300 at audio-device pace, 9 in 300 calling `process` flat-out. It
   hasn't been tried in another host, so whether the fault is LSP's or in how we call it is unknown.
-  `multiout_check` retries past it and prints a line when it happens.
+  `multiout_check` and `parallel_check` retry past it and print a line when it happens.
 - `controller_check` failed once in a full run, counting two MIDI messages too many ("other messages
   still play the instrument (2 -> 6)"), and passed 15 of 15 alone. Cause unknown.
 - An undo that turns a latent track back on during a take can shift where the take lands.

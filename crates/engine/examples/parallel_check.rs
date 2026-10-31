@@ -36,6 +36,7 @@ fn check(name: &str, ok: bool) {
 
 /// What the live runs change as they go.
 struct Extras {
+    sampler: Option<Id>,
     world: World,
     aux: Id,
     bus: Id,
@@ -147,6 +148,7 @@ fn build(s: &mut Session, scratch: &Path) -> Extras {
     s.freeze_tracks(&[frozen], &mut |_| {}).unwrap();
 
     let mut vst = Vec::new();
+    let mut sampler = None;
     let find = |n: &str| lsp_plugins().into_iter().find(|d| d.name == n);
     if let Some(d) = find("Sidechain Compressor Stereo") {
         let t = s.add_track(TrackKind::Audio, InputSel::None, None, None).unwrap();
@@ -173,13 +175,14 @@ fn build(s: &mut Session, scratch: &Path) -> Extras {
         let notes = (0..8).map(|i| Note { start: i * BAR / 4, length: 6000, pitch: 57, velocity: 127, muted: false }).collect();
         s.set_midi_content(vec![MidiContent { region: r, notes, cc: Vec::new(), start: None, length: None }]);
         s.add_output_aux(inst).unwrap();
+        sampler = Some(inst);
         vst.push(d.name);
         // It loads its sample on a thread of its own, which timing mustn't enter into.
         std::thread::sleep(std::time::Duration::from_millis(800));
     }
     s.set_metronome(true);
     s.idle();
-    Extras { world: w, aux, bus, off, monitored, muted, vst }
+    Extras { world: w, aux, bus, off, monitored, muted, vst, sampler }
 }
 
 fn same(a: &[Vec<f32>], b: &[Vec<f32>]) -> bool {
@@ -301,16 +304,30 @@ fn main() {
 
     // `Engine::process` itself, through fresh sessions, as the state playing leaves behind counts.
     let live = |buffer: usize, threads: u32, name: &str| -> (Vec<f32>, u64, u64) {
-        let mut s = session(&scratch);
-        let e = build(&mut s, &scratch.join(name));
-        // The Linear Phase EQ designs its filters on a thread of its own, and playing live takes them
-        // when they're ready (a render waits for them): the same latency from a compressor's
-        // lookahead instead.
-        s.remove_plugin(e.world.drums, 0);
-        s.set_plugin(e.world.drums, 0, "builtin:compressor").unwrap();
-        s.set_builtin_param(e.world.drums, 0, daw_engine::fx::compressor::param::LOOKAHEAD, 5.0).unwrap();
-        s.set_threads_for_checks(threads, if threads > 1 { PATIENT } else { ParallelTest::default() });
-        play_live(&mut s, &e, buffer, frames)
+        for attempt in 0.. {
+            let mut s = session(&scratch);
+            let e = build(&mut s, &scratch.join(name));
+            // LSP's Multi-Sampler now and then loses its sample for good while loading (see TODO.md),
+            // which would read as a difference between two runs: a fresh instance brings it back.
+            if let Some(id) = e.sampler {
+                let solo = daw_engine::dsp::Isolate { tracks: vec![(id, true)], tap: id, fader: true, effects: true, keys: Vec::new() };
+                let heard = s.render(0, BAR / 4, 0, Some(solo), &mut |_| {}).unwrap();
+                if peak(&heard[0]) == 0.0 {
+                    assert!(attempt < 4, "the Multi-Sampler lost its sample five times running");
+                    println!("     the plug-in lost a sample while loading");
+                    continue;
+                }
+            }
+            // The Linear Phase EQ designs its filters on a thread of its own, and playing live takes them
+            // when they're ready (a render waits for them): the same latency from a compressor's
+            // lookahead instead.
+            s.remove_plugin(e.world.drums, 0);
+            s.set_plugin(e.world.drums, 0, "builtin:compressor").unwrap();
+            s.set_builtin_param(e.world.drums, 0, daw_engine::fx::compressor::param::LOOKAHEAD, 5.0).unwrap();
+            s.set_threads_for_checks(threads, if threads > 1 { PATIENT } else { ParallelTest::default() });
+            return play_live(&mut s, &e, buffer, frames);
+        }
+        unreachable!()
     };
     for buffer in [64usize, 128, 512, 1500] {
         let (base, pooled, _) = live(buffer, 1, "serial");
