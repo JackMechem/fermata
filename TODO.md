@@ -6,12 +6,14 @@ of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
 ## Open items (multi-core processing, 2026-10-30)
 
-Everything was measured by driving the engine by hand on the null device. Nothing has been heard yet.
+Checked in the app on a copy of a real project (5 TONE3000, 512 samples) through PipeWire to an
+M-Track 2X2, with Stereo Out at -∞: 56% average, 72% peak at 1 thread; 13-14%, about 20% at
+Automatic (6), stopped and playing. No late blocks, workers real time, and switching the setting
+during playback changed thread count without restarting audio.
 
-- **Check on a real device:** the tooltip's thread count on the 5-TONE3000 project, the meter against
-  the same project at 1 thread, listening for dropouts, and that the log shows no "stays at normal
-  priority" (rtkit can refuse: it did during rapid restarts here, and then workers run at normal
-  priority).
+- **Not heard yet:** every check above was silent. Listen for dropouts and clicks, also when
+  switching Processing Threads and editing routes (a send, an output, a side-chain) during playback.
+  128 samples was only measured on the null device.
 - Workers at normal priority beside a real-time callback are safe but can be late under system load.
   Nothing yet falls back to one thread when promotion is refused.
 - A plug-in that never returns while on a worker still meets the kernel's 200 ms limit, as on the
