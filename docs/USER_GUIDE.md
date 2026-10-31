@@ -28,7 +28,7 @@ Contents:
    [Autopunch](#autopunch) · [Recording MIDI](#recording-midi) ·
    [Latency compensation](#latency-compensation)
 4. [Software instruments and Musical Typing](#4-software-instruments-and-musical-typing):
-   [Fermata Tre](#fermata-tre) · [Fermata Sampler](#fermata-sampler) · [Musical Typing](#musical-typing) · [Step Input](#step-input)
+   [Fermata Tre](#fermata-tre) · [The other synth models](#the-other-synth-models) · [Fermata Sampler](#fermata-sampler) · [Musical Typing](#musical-typing) · [Step Input](#step-input)
 5. [Editing in the tracks area](#5-editing-in-the-tracks-area):
    [Selecting regions](#selecting-regions) ·
    [Moving, trimming and snapping](#moving-trimming-and-snapping) · [Drag modes](#drag-modes) ·
@@ -490,7 +490,7 @@ adjust Recording Delay.
 - Create an instrument track (New Tracks › **Software Instrument**). Its **Instrument** slot
   holds Fermata Synth by default, a built-in polyphonic synthesizer that responds to pitch bend,
   sustain, modulation (vibrato) and expression. Choose another built-in instrument (see
-  [Fermata Tre](#fermata-tre)) or a VST3 instrument in the New Tracks dialog, the Library, or the
+  [Fermata Tre](#fermata-tre) and [the other synth models](#the-other-synth-models)) or a VST3 instrument in the New Tracks dialog, the Library, or the
   strip's Instrument slot.
 - **MIDI input:** every connected MIDI input is routed to the selected instrument track (if
   the selected track isn't an instrument track, to the first armed one). Devices plugged in
@@ -585,6 +585,47 @@ Everything on it is saved in the project, can be automated in a lane, and undoes
 
 **Presets:** the pop-up in the panel's header lists factory presets and yours. **Save As** keeps the current sound as your
 own preset, in every project.
+
+### The other synth models
+
+Four more models of old instruments are under **Vintage Synths**, and a wavetable synth is under **Modern Synths**. Each works
+like Tre: a panel, presets, automation, MIDI learn, undo and saving. None of them has been compared with what it's modelled on (and Fermata isn't
+affiliated with any of those makers); each has factory presets to start from.
+
+**Fermata Sei** (modelled on the Roland Juno-106 family): six voices of one oscillator each, with a saw, a pulse and a sub an octave down.
+
+- One envelope drives the filter and the **VCA** (set the VCA to **Gate** for an organ-like note). One **LFO** moves everything together, with a **Delay** from the first key down.
+- **HPF:** position 0 lifts the bass, 1 is flat, 2 and 3 thin it.
+- **Chorus:** the stereo chorus is half of its sound. **I** and **II** are slow and deep, **I+II** fast and shallow. **Chorus Noise** is its hiss, which comes with the notes.
+- **Assign:** **Poly 1** moves on to the next voice, so released notes ring on, **Poly 2** takes the lowest free one, and **Unison** plays all six on one note (they don't beat unless you add **Unison Detune**).
+
+**Fermata Cinque** (modelled on the Sequential Prophet-5): five voices of two oscillators each.
+
+- **Poly Mod** is what to try first: **Filter Env** and **Osc B** are its sources, and **Freq A**, **PW A** and **Filter** say where they go, separately in each voice. Osc B still runs with its mixer knob down, so it can be only a modulator. With **Sync** on Osc A and Filter Env into Freq A you get the sweeping sync lead this kind of synth is known for.
+- **Wheel Mod:** the mod wheel (or **Mod Amount**, where it rests) brings in the LFO, or noise, by **LFO / Noise**, at whichever of the five switches are on.
+- **Filter Chip** chooses between two filter characters. **Slop** is how much each voice wanders and differs.
+
+**Fermata Uno** (modelled on the Roland TB-303): one voice, one oscillator, and few knobs, made for a bass line played from a MIDI region.
+
+- **Overlapping notes slide:** make a note end just after the next begins. Neither the filter nor the volume restarts. With any gap between them, the next is a fresh note.
+- **High velocity accents:** a note at or above **Accent at Velocity** (110) is louder and snappier, whatever Decay says. How far is **Accent**. With **Resonance** up, accents close together climb: that's the instrument's trick.
+- The filter doesn't follow the keyboard, and a held note fades away by itself after a few seconds, as on the original.
+
+**Fermata Sedici** (modelled on the Yamaha DX7): sixteen voices of six-operator FM.
+
+- **Algorithm** chooses which of the 32 ways the operators connect, numbered as on the original's panel. An operator that goes to the output is heard; others change its tone, more as their **Level** goes up.
+- Each operator has its own envelope of four **Rates** and **Levels**: it runs to Level 1, then 2, then 3 and holds, and to Level 4 on key up. **Scaling** makes it louder, softer or faster across the keyboard.
+- **Coarse** and **Fine** give a ratio to the note's pitch. **Feedback** makes an operator gritter or buzzier.
+- **Converter Grit** turns the original's low-resolution sine and converter on or off. It runs at the original's own sample rate whatever your project's is, so high FM sounds fold just as they do there.
+- **Level 4** above zero keeps a note sounding after key up, as on the original, until the transport stops.
+
+**Fermata Onda** (a modern wavetable synth): two oscillators reading tables made into it, with position, unison, and modulation you route yourself.
+
+- **Table** chooses the sound, and **Position** moves through it. Each oscillator has up to 7 detuned **Unison** copies, spread in stereo by **Width**.
+- **Type** chooses the filter. **Env 1** is the volume.
+- **Env 2, Env 3, LFO 1** and **LFO 2** do nothing until a **Slot** routes them: choose a source, a destination and an amount. Slots can also take velocity, the key, the wheel and aftertouch. Positions and cutoff are the usual places to start.
+- An LFO's **Sync** locks it to the tempo. **Key Retrigger** gives each voice its own, starting at the key.
+- High settings are heavy: sixteen voices with seven copies in each oscillator is about a third of a core.
 
 ### Musical Typing
 

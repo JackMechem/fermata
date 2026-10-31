@@ -216,6 +216,7 @@ fn scenario(scratch: &Path, threads: u32) {
     let tre = add_tre(&mut s);
     // A sampler with loops, layers, reversed audio and round robin, stealing its voices.
     let sampler = add_sampler(&mut s, scratch);
+    let models: Vec<daw_engine::model::Id> = MODELS.iter().map(|(plugin, preset)| add_model(&mut s, plugin, preset)).collect();
     s.idle();
     println!("audio: {:?}", s.audio_status.running);
     let test = daw_engine::dsp::ParallelTest { always: threads > 1, renders: false, patient: true };
@@ -342,6 +343,20 @@ fn scenario(scratch: &Path, threads: u32) {
     run(&mut guard, 20, true);
     s.update_track(sampler, TrackPatch { off: Some(false), ..Default::default() });
     run(&mut guard, 20, true);
+    // The same for each of the other models: a parameter from their spec, a preset, off and on.
+    for (&(plugin, _), &t) in MODELS.iter().zip(&models) {
+        let info = daw_engine::instrument::find(plugin).unwrap();
+        for p in info.params.iter().step_by(3) {
+            s.set_builtin_param(t, usize::MAX, p.id, 0.5 * (p.min + p.max)).unwrap();
+        }
+        run(&mut guard, 30, true);
+        s.load_preset(t, usize::MAX, plugin, info.presets[info.presets.len() / 2].name, true).unwrap();
+        run(&mut guard, 30, true);
+        s.update_track(t, TrackPatch { off: Some(true), ..Default::default() });
+        run(&mut guard, 30, true);
+        s.update_track(t, TrackPatch { off: Some(false), ..Default::default() });
+        run(&mut guard, 30, true);
+    }
     let extra = s.add_track(TrackKind::Instrument, daw_engine::model::InputSel::None, Some(daw_engine::session::BUILTIN_SYNTH.into()), None).unwrap();
     run(&mut guard, 50, true);
     s.delete_track(extra);

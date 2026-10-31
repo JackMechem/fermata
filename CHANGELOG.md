@@ -24,6 +24,13 @@ All notable changes to Fermata are recorded here. The format follows
   modulators, plus Unison and Poly. Modelled on the Minimoog Model D's documented behaviour (no affiliation), with
   19 factory presets; it hasn't been compared with the hardware. Fermata Synth stays the default for new instrument
   tracks, and its projects render exactly as before.
+- **Five more synth models:** under Vintage Synths, **Fermata Sei** (six voices of one DCO with saw, pulse and sub, a 24 dB
+  filter, one envelope with VCA gate, a four-position high-pass and a stereo bucket-brigade chorus with modes I, II and I+II;
+  modelled on the Juno-106 family), **Fermata Cinque** (five voices of two oscillators with Poly Mod from the filter envelope and Osc B to
+  Osc A's pitch and width and the filter; modelled on the Prophet-5), **Fermata Uno** (one oscillator, a diode ladder, accent with its sweep, and slide; from a MIDI region overlapping notes slide and high velocity accents;
+  modelled on the TB-303) and **Fermata Sedici** (six-operator FM with the 32 algorithms, four-rate envelopes, keyboard scaling, 16 voices, at the original's 49.096 kHz with an optional converter character; modelled on the DX7). Under
+  Modern Synths, **Fermata Onda**: two wavetable oscillators with position scan, band-limited tables generated in code, unison, seven filters, three envelopes,
+  two LFOs and eight modulation slots. 14 to 16 factory presets each. Fermata isn't affiliated with any of those makers, and none has been compared with the hardware or heard yet.
 - **Multi-core track processing:** independent tracks play at the same time on a small pool of
   real-time threads, with the audio thread working too, so a heavy project finishes each buffer
   sooner. Settings › Audio › Processing Threads chooses Automatic (the default) or a number; 1 keeps

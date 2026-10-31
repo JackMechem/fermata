@@ -20,6 +20,18 @@ of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 - No input monitoring while recording into it. Ping-pong loops, per-zone filters, a zone's own LFO and zone groups aren't there.
 - Copying a large library into the project takes the disk space of the library, with no link option yet.
 
+## Open items (synth models, 2026-10-30)
+
+Sei, Cinque, Uno, Sedici and Onda: unit tests, `instrument_check`, `rt_alloc_check` and `parallel_check` all pass.
+
+- **Nobody has listened yet, and none has been compared with the hardware.** Every preset wants hearing, and every constant marked as a guess in
+  [ARCHITECTURE](docs/ARCHITECTURE.md#built-in-instruments) wants tuning by ear. The published figures in the Sei, Uno and Sedici sections came from memory of those sources: worth a check against them.
+- **The panels haven't been looked at.** Sedici has 18 operator sections plus 4: long, even in the docked row. A custom panel for it (a tab per operator, the algorithm's diagram) would serve it far better. Onda's Slots would benefit from one too.
+- Sedici: the velocity curve, pitch envelope and LFO delay are fits to the published shapes, not the tables. Its detune and keyboard scaling's exact break point are approximate.
+- Onda has no effects section and no way to load a table: it's a code-generated set for now. Its table bank is 12 MB in memory once a first instance loads.
+- Sei's envelope doesn't run at the original's control rate, and its DCO isn't quantized to the original's clock divisions.
+- A filter type or oscillator table switched under a held note steps at once (Onda), as do Sei's and Cinque's range switches.
+
 ## Open items (built-in instruments, 2026-10-30)
 
 The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instrument_check`,
@@ -30,8 +42,7 @@ The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instru
   in [ARCHITECTURE](docs/ARCHITECTURE.md#fermata-tre) is there to be tuned by ear.
 - **Not compared with the hardware:** its likeness to the Model D is from documented behaviour only.
 - New instrument tracks still default to Fermata Synth: to decide after listening.
-- Next: more models; a custom panel for Tre.
-- A 2-pole state-variable filter and a diode ladder aren't written; `ZdfFilter` is where they go.
+- Next: a custom panel for Tre.
 - Fermata Synth's renders aren't repeatable with its mod wheel up (its LFO runs free, and `silence` keeps
   its controllers). Left alone, as old projects depend on it; a new default could drop it.
 - A wave or range switch moved under a held note steps at once, as a real switch does; it could click a little at

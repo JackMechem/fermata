@@ -56,6 +56,32 @@ pub fn write_bursts(path: &Path) {
     w.finalize().unwrap();
 }
 
+/// Every built-in model added after Tre, by id, with the preset that works it hardest.
+#[allow(dead_code)]
+pub const MODELS: [(&str, &str); 5] = [
+    ("builtin:sei", "Unison Rave Stack"),
+    ("builtin:cinque", "Poly Mod Pad"),
+    ("builtin:uno", "Squelch Line"),
+    ("builtin:sedici", "Long Tubular Chime"),
+    ("builtin:onda", "Seven Saw Anthem"),
+];
+
+/// A track with one of those models and a part of chords and overlapping notes, for the real-time checks.
+#[allow(dead_code)]
+pub fn add_model(s: &mut Session, plugin: &str, preset: &str) -> Id {
+    let t = s.add_track(TrackKind::Instrument, InputSel::None, Some(plugin.into()), None).unwrap();
+    let r = s.create_midi_region(t, 0, 8 * BAR).unwrap();
+    let mut notes = Vec::new();
+    for i in 0..32i64 {
+        for k in 0..4i64 {
+            notes.push(note(i * BAR / 4, BAR / 3, (40 + (i * 5 % 24) + k * 4) as u8, if i % 3 == 0 { 120 } else { 90 }));
+        }
+    }
+    s.set_midi_content(vec![MidiContent { region: r, notes, cc: Vec::new(), start: None, length: None }]);
+    s.load_preset(t, usize::MAX, plugin, preset, true).unwrap();
+    t
+}
+
 /// A Fermata Tre track with a part and a lane moving its cutoff, for the real-time checks: a built-in
 /// instrument with drift on, and audio-rate modulation so its costliest path runs.
 #[allow(dead_code)]

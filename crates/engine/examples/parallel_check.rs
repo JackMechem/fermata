@@ -139,6 +139,10 @@ fn build(s: &mut Session, scratch: &Path) -> Extras {
     let tre = add_tre(s);
     s.set_send(tre, 0, send(aux, -9.0, false)).unwrap();
     add_tre(s);
+    // Every other model too, its own seed the only source of its differences.
+    for (plugin, preset) in MODELS {
+        add_model(s, plugin, preset);
+    }
 
     // A sampler with loops, an LFO and round robin: its turns and random LFO come from itself.
     let sampler = s.add_track(TrackKind::Instrument, InputSel::None, Some(daw_engine::instrument::sampler::ID.into()), None).unwrap();

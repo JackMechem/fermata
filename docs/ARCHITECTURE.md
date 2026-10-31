@@ -1615,10 +1615,13 @@ Measured by the tests in each file, at 48 kHz unless it says otherwise.
 |---|---|---|
 | `osc::Osc` | Saw, reverse saw, pulse with PWM, triangle of any symmetry, sine; hard sync. A naive wave with 4-point B-spline polyBLEP and polyBLAMP residuals over a 2-sample delay, so an event the oscillator couldn't foresee (sync, PWM) corrects the same way. f64 phase. | Aliasing in the audio band, against the fundamental, run at 2x through `resample`: saw -87 dB at 1 kHz, -83 at 2 kHz, -82 at 4 kHz, -87 at 8 kHz. Pulse -90, -87, -82, -105. Triangle -124, -115, -107, -119. A naive saw at 4 kHz is -17 dB; polyBLEP at 1x is -41 dB. Hard sync at 1 kHz, ratio 2.37: -75 dB. Tuning: under 0.001 cents in every test (a note-to-Hz accuracy of 0.002 cents). |
 | `osc::Noise` | White, and pink by Paul Kellet's filter, from a seed. | |
-| `filter::Ladder` | A 4-pole transistor ladder, ZDF, Mystran's linearized tanh per stage, per-stage tolerances, behind the `ZdfFilter` trait a 2-pole state-variable or a diode ladder would implement. Trimmed so self-oscillation stays in tune as it saturates, by a fit to measurements here. | Self-oscillation at k = 5, 2x: within 3.4 cents from note 24 to 96 (after the trim; it would be 70 cents flat). 24 dB/octave, -12 dB at the cutoff, flat below. No NaN or runaway at any setting, at 1000 times full scale with the cutoff modulated at the audio rate. |
+| `filter::Ladder` | A 4-pole transistor ladder, ZDF, Mystran's linearized tanh per stage, per-stage tolerances, behind the `ZdfFilter` trait. Trimmed so self-oscillation stays in tune as it saturates, by a fit to measurements here. | Self-oscillation at k = 5, 2x: within 3.4 cents from note 24 to 96 (after the trim; it would be 70 cents flat). 24 dB/octave, -12 dB at the cutoff, flat below. No NaN or runaway at any setting, at 1000 times full scale with the cutoff modulated at the audio rate. |
+| `filter::OtaCascade` | Four OTA integrators and one feedback path (the IR3109, CEM3320 and SSM2040 family): each stage bends on the difference across it, not its level. Two character constants: `slew` and `bass`. Used by Sei and Cinque. | Self-oscillation at k = 4.3, 2x: within 27 cents from note 36 to 96 (untrimmed, worst at the top). 24 dB/octave, flat below. |
+| `filter::DiodeLadder` | Four coupled rungs, first capacitor 0.545 of the others, a high-pass in the feedback. Solved as a tridiagonal system within the sample. Resonance 1 is the linear circuit's instability (k = 21.56, at 1.421 / RC, from its polynomial, worked out in a script). Used by Uno, and in Onda's list. | An octave above the cutoff -13.6 dB, the next -18.2, far above -24.1: the "18 dB" feel is real in this model. The pass band sags from a decade below the cutoff. Self-oscillates at 1.05, 59 to 90 cents flat of the cutoff (no trim: nothing here tracks a keyboard). |
+| `filter::Svf` | A 2-pole state-variable (Simper's trapezoidal form) with low, band and high outputs, and damping that grows with the band-pass level. Used by Onda. | 12 dB/octave, unity pass bands, a notch at the cutoff. |
 | `env::Envelope`, `EnvShape` | RC curves: attack charging toward 1.3 and stopping at 1, decay and release exponential, times to 95 %. Retrigger from the current level. | Times within 2 to 3 % from 1 ms to 10 s. |
 | `lfo::Lfo` | Sine, triangle, saw, square, sample-and-hold. Hz, or per beat locked to the song position while playing. | Locks on the beat, same values for any block size at a steady tempo. |
-| `alloc::VoiceAllocator` | Poly with stealing (free, then the same note ringing, then longest released, then oldest held). Mono with low, last or high priority, single or multi trigger. Unison in whole groups. The sustain pedal. | State-machine tests, in the file. |
+| `alloc::VoiceAllocator` | Poly with stealing (free, then the same note ringing, then longest released, then oldest held). Mono with low, last or high priority, single or multi trigger. Unison in whole groups. The sustain pedal. `set_rotate` takes free voices in turn, as analog polys' assigners do. | State-machine tests, in the file. |
 | `analog` | `Rng`, `Drift` (a slow random walk), `Tolerance` (one voice's fixed differences), `sub_seed`. All from seeds: no global, no clock. | The same seed gives the same stream. |
 | `resample::Decimator2x` | An 8-coefficient polyphase allpass half-band, no latency to report (about 2.6 output samples at low frequencies with the oscillator's delay, 54 µs at 48 kHz). | Flat to 0.225 of the high rate within 0.05 dB, stop band -86.7 dB. |
 | `smooth` | `Smoothed` (a one-pole lag that lands exactly on its target), `Glide`. | |
@@ -1770,6 +1773,135 @@ edit to an instrument of 2000 zones 2.1 ms.
 - **Real time:** `rt_alloc_check` plays one stealing voices, through zones and samples replaced under held notes, a parameter change and Track Off, at 1 and 4 threads: 0 allocations or frees.
   `parallel_check` plays one with round robin, loops and the Random LFO, serial against 2, 3, 4 and 8 threads.
 
+#### Fermata Sei
+
+`instrument/sei/`: modelled on the Roland Juno-106 family. Fermata isn't affiliated with Roland. **Not compared
+with the hardware, nor heard: what follows is from documentation and measured on its own terms.**
+
+From what's documented: one DCO per voice whose saw, pulse and sub square come from one clock, so they stay
+phase-locked and don't drift (their phases are locked here, with no drift at all); PWM from the one LFO or by hand;
+16', 8' and 4'; six voices; noise; a 24 dB OTA filter with resonance to self-oscillation, envelope polarity, LFO and
+keyboard; one ADSR, the VCA on it or on the gate; the four-position high-pass after the voices; one triangle LFO with a
+delay; Poly 1 (the next voice, so tails ring), Poly 2 (the lowest free) and Unison with no detune. Above all the chorus
+(`chorus.rs`): two bucket-brigade lines swept in opposite directions, the dry signal to both sides, and the modes
+I, II and I+II at 0.513 Hz and 0.863 Hz over 1.66 to 5.35 ms and 9.75 Hz over 3.28 to 3.82 ms. Those figures are the
+ones widely repeated for the earlier sibling's board; they come from memory of those sources, weren't measured here,
+and the 106's own board may differ a little.
+
+Guesses, as named constants: the filter's chip constants; the high-pass corners (240 Hz and 720 Hz, and a shelf for
+position 0); the knob reaches (vibrato ±3 semitones, filter LFO ±30, envelope 7 octaves); the envelope's linear attack
+and exponential decay (the usual reading of its CPU-made envelope, not at its real control rate); the widest pulse
+(5 %); the chorus's filters (9 kHz) and saturation; the hiss level (-65 dBFS peak at Chorus Noise 100 %); the size of
+Voice Variation. High-pass after the voices is from memory of the block diagram.
+
+**Differences on purpose:** the hiss comes with the voices and fades 0.25 s after the last, so a silent track stays
+silent and costs nothing; the hardware hisses always. Clock bleed isn't modelled, being above the audio band. Added:
+Unison Detune, Velocity, Voice Variation, Chorus Noise; off or modest by default.
+
+#### Fermata Cinque
+
+`instrument/cinque/`: modelled on the Sequential Prophet-5. Fermata isn't affiliated with Sequential. **Not compared
+with the hardware, nor heard.**
+
+From what's documented: two VCOs per voice (A saw and pulse, with sync to B; B saw, triangle and pulse, Lo Freq and a
+keyboard switch, any waves together); five voices; mixer with noise; a 24 dB filter with keyboard off, half or full; two
+ADSRs and the release switch; one LFO, saw, triangle and square in any mix; Wheel Mod blending it with noise to five
+switches; **Poly Mod**: the filter envelope and Osc B, per voice at the audio rate, to Osc A's pitch, Osc A's pulse width
+and the filter. B keeps running with its mixer knob down. Unison on the lowest key, with Retrigger. Drift as Slop.
+
+Guesses: Poly Mod's reach (60 semitones at the pitch, ±0.48 of the width, 72 at the filter), the source being the sum of B's
+waves that are on; the wheel's reach; the mixer's drive; the two filter chips' constants, Early (SSM-like) and Late
+(Curtis-like); B's Lo range (7 octaves down). Filter tuning isn't trimmed (within 23 cents, notes 36 to 84).
+
+Added: Velocity (off), Mod Amount (where the wheel rests), Unison Detune. Exponential FM from Osc B moves the mean pitch, as
+exponential FM does.
+
+#### Fermata Uno
+
+`instrument/uno/`: modelled on the Roland TB-303. Fermata isn't affiliated with Roland. The reference is what's published
+on the circuit, Robin Whittle's Devil Fish notes and Tim Stinchcombe's filter analysis above all, from memory of
+them. **Not compared with the hardware, nor heard.**
+
+From what's published: one oscillator, saw or a square shaped from it; the diode ladder with its smaller first
+capacitor; no keyboard tracking of the filter; the MEG (3 ms attack, 200 ms to 2 s decay, always decaying whether the
+key's up or not; Env Mod's other job of pulling the base cutoff down); the VEG (a long decay of about 3.2 s with the key
+down, a fast close with it up); **accent** forcing the MEG to 200 ms, lifting the VCA and, through the capacitor whose
+charging time the Resonance pot's other half sets, the "sweep" that lags and stacks on the cutoff; **slide** as a lag of 60 ms.
+
+**How MIDI maps:** a note is a step. Overlapping notes slide: the second comes in by the lag, without restarting either
+envelope. Any gap restarts them and jumps the pitch. A velocity at or above **Accent at Velocity** (110 by default, above the
+panel keyboard's and a new note's 100) accents; a slid-to note can be accented without a restart. The last key held sounds.
+
+Guesses: Env Mod's reach (40 semitones) and its pull (14); accent's reach (36 semitones and +110 % on the VCA) and the sweep
+lag (47 to 147 ms, from a reading of a 1 µF and 47 k + 100 k); the square's droop and slew; Resonance stopping at 0.965 of self-oscillation; the
+feedback high-pass (150 Hz); the input drive. Added: Slide Time, Accent at Velocity, Drift, a bend range.
+
+#### Fermata Sedici
+
+`instrument/sedici/`: modelled on the Yamaha DX7. Fermata isn't affiliated with Yamaha. Its scales are from the published
+reverse engineering of the chips (Ken Shirriff's die photographs, the fits in Raph Levien's MSFA engine that Dexed grew
+from), **from memory of them, not checked against a source here. Not compared with the hardware, nor heard.**
+
+From what's documented: six sine operators, the 32 algorithms from the panel's diagrams (`algorithms.rs`), one feedback loop
+(the average of two samples; 4 into 6 on algorithm 4, 5 into 6 on 6, the others on themselves); four rates and four
+levels, moving in a log scale, with the attack's jump and curve; output level scale, keyboard level scaling with four curves,
+rate scaling; ratio or fixed frequency; detune; operator velocity sensitivity and amp mod sensitivity; pitch envelope; one
+LFO with six waves, delay, key sync; 16 voices; Osc Key Sync; mono with portamento. **It runs at the instrument's own 49.096 kHz at
+any session rate**, and FM's partials past that rate's Nyquist fold, as they do on the instrument; one 48-tap Kaiser sinc brings it to the session's rate.
+
+**The grit:** with Converter Grit on: an operator's output in 14 bits, a sine table of 4096 points read without interpolation, a
+12-bit mantissa with an 8-step exponent at the output. Those are what's published. How it sits in the real instrument's
+analog stages isn't documented well enough to model, so the output filter is the resampler's alone. Its clean side costs little.
+
+Approximations, not the tables: velocity (a power-law fit to the published curve's shape), the pitch envelope's level and rate (fits to their tables),
+LFO delay. Guesses: vibrato's reach at full (±12 semitones), amp mod's (about 48 dB), portamento's scale, the converter's clipping point (1.5 times a full carrier).
+
+**Differences on purpose:** a voice stolen with key sync fades for 2 ms first (the hardware clicks; the contract says it mustn't). A released voice at a fourth level above zero
+drones, as on the hardware, until the transport stops, when it fades. An operator's level or envelope moved under a held note is heard on that note, so a lane works (the hardware's edit buffer acts from the next key). Added: Volume, Touch and the wheel's routings as knobs rather than function settings. A seed only changes anything with Osc Key Sync off or a random LFO.
+
+#### Fermata Onda
+
+`instrument/onda/`: a modern wavetable synth of the kind Serum made the standard. It isn't modelled on one instrument's
+panel and isn't affiliated with Xfer Records or anyone else. Its group is **Modern Synths**. Its tables (`tables.rs`) are generated in
+code: Basic Shapes, Harmonic Rise, Vowels, Pulse Sweep, Sync Sweep, FM Sweep, Stepped Digital, Drawbars, Wavefolder, Comb Sweep.
+
+Each has 32 frames, each with 10 levels halving the harmonics from 512, made by FFT and shared read-only between instances (12 MB, built the first time one is made, off the audio
+thread). Playback crossfades two frames at the level whose top harmonic stays under the voice's Nyquist, read by a Catmull-Rom cubic, at 2x with the shared decimator. Up to 7 unison copies per oscillator; sub, noise, FM from B to A;
+Low 12 and 24, Band, High, Notch, Ladder and Diode filters (stereo in every voice). Env 1 is the VCA; Env 2 and 3, two LFOs (free or synced, shared or per voice), velocity, key, wheel and aftertouch reach eleven
+destinations through eight slots. The matrix runs every 16 ticks and ramps between. Choices that are judgement, not modelling: the reaches, the unison spread, the table contents. A tempo-synced LFO reads the song position per block: its output can differ by rounding across buffer sizes (under 1e-5 measured).
+
+#### The later models, measured
+
+All at 48 kHz, through `instrument/test_kit.rs` and each model's `tests.rs`. Aliasing is the largest thing in the audio band that isn't a harmonic, against the strongest.
+
+| Model | Tuning at 44.1, 48, 96 kHz | Aliasing | Clicks: largest step against the steady note's |
+|---|---|---|---|
+| Sei | under 0.01 cents | saw at note 96 -90 dB, pulse -85, all waves at note 84 -94 | note-off 1.00, steal 0.59, gate VCA 1.0 |
+| Cinque | under 0.01 cents | saw at note 96 -88, pulse -88, sync -90, Poly Mod to pitch (synced so it can be measured) at note 72 -89 | note-off 1.00, steal 0.46 |
+| Uno | under 0.01 cents | saw at note 84 -77, square -95, saw with resonance -65 | note-off 0.94, new step 1.26, slide 0.79 |
+| Sedici | under 0.01 cents | sine at note 84 -95 clean, -72 with the grit. FM is meant to fold: level 90 into a carrier at note 96 is -77, level 99 at note 84 -92 (nothing reaches Nyquist yet) and at note 96 -6: that's its character at full index, and every session rate gets the same | note-off 1.00, steal 0.90 |
+| Onda | under 0.01 cents | worst of saw, square, narrow pulse, sync, FM, stepped, folded and comb frames at notes 84, 96, 108: -68 dB (sync at note 84; a sync frame at note 108 has nothing in the band) | note-off 0.98, steal 1.17 |
+
+**CPU** (`instrument_bench`, release, i7-13700KF with other work on the machine, mean of the buffer's time, 512 samples and 128 are within a percent of each other):
+
+| Model, at full polyphony | Mean | |
+|---|---|---|
+| Sei, 6 voices, all waves, chorus | 4.1 % | Unison the same. |
+| Cinque, 5 voices, Poly Mod on or off | 4.7 % | Costs the same: B always runs. |
+| Uno, its one voice | 0.74 % | |
+| Sedici, 16 voices | 1.4 to 2.3 % | The cheapest per voice: a sine per operator at about half the others' rate. |
+| Onda, 8 voices, 2 oscs, 1 copy each | 5.6 % | |
+| Onda, 16 voices, 2 oscs, 1 copy each | 11 % | |
+| Onda, 8 voices, 2 oscs, 7 copies each | 15 % | |
+| Onda, 16 voices, 2 oscs, 7 copies each | 30 % | The worst this instrument does, and no worse than one core's third. Multi-core shares tracks out, not voices within one. |
+
+Worst single blocks were 2 to 6 times the mean at 128 samples for every model including Tre, on a busy machine: scheduling here, not a property of a model, and
+all under the budget. An instance at rest costs nothing (under 0.1 µs a block).
+
+**Determinism:** the same MIDI gives the same bits at 1, 37, 128, 512 and 1024 frames, also across a note after a long rest; renders repeat after a reset; `parallel_check` plays each model on a track of its own, serial against 2, 3, 4 and 8 threads, identical; `rt_alloc_check` plays them through parameter changes, presets and Track Off with 0 allocations; `instrument_check` takes each through region rendering, edit, undo, redo, every factory preset, saving and loading a user preset, reopening, Freeze and Track Off.
+
+Going to rest is by the sample (`instrument/common.rs`): a model that stopped at a block boundary would run its LFO and noise on differently at another buffer size.
+
 #### To add a model
 
 1. Write `instrument/<name>.rs` (or a folder, as `tre/`): `pub const PARAMS`, `SECTIONS`, `PRESETS`; a
@@ -1778,10 +1910,10 @@ edit to an instrument of 2000 zones 2.1 ms.
    presets, automation, MIDI learn, undo, saving, Freeze and copy and paste work from the entry. The
    `instrument` registry test checks the spec (unique ids, defaults in range, every parameter in a
    section, presets in range) and that it runs.
-3. Copy `tre/tests.rs` for what yours must hold: tuning, no NaN, block-size independence, reset.
+3. Use `instrument/test_kit.rs` for what yours must hold: tuning, no NaN, block-size independence, reset, clicks and presets; a model's `tests.rs` shows how (`tre/tests.rs` is the older long form).
 4. **Naming:** an original name, in the product and presets, with no maker's trademark. The docs may say
-   what it's modelled on, and that it isn't affiliated. `tests/builtinInstruments.test.ts` scans Tre's files
-   for it; add yours.
+   what it's modelled on, and that it isn't affiliated. `tests/builtinInstruments.test.ts` scans each model's files
+   for it; add yours to its list.
 5. If it needs a custom layout, register a panel in `FX_PANELS` (`src/fx.ts`). Otherwise `sections` will do.
 
 ### Clipboard and moving plug-ins
@@ -1999,7 +2131,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `audio_file/wav.rs`, `aiff.rs`, `flac.rs` | The writers: WAV through hound, AIFF and AIFF-C by hand, FLAC through `flacenc`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
 | `synth.rs` | Fermata Synth, the original small polyphonic instrument. Unchanged since it was written: old projects depend on its every sample. |
-| `instrument/` | Built-in instruments: the `Instrument` contract and registry (`mod.rs`), Fermata Synth in the registry (`basic.rs`), Fermata Tre (`tre/`). See [Built-in instruments](#built-in-instruments). |
+| `instrument/` | Built-in instruments: the `Instrument` contract and registry (`mod.rs`), Fermata Synth in the registry (`basic.rs`), Fermata Tre (`tre/`), Sei (`sei/`), Cinque (`cinque/`), Uno (`uno/`), Sedici (`sedici/`), Onda (`onda/`), what they share (`common.rs`) and test with (`test_kit.rs`). See [Built-in instruments](#built-in-instruments). |
 | `synth_dsp/` | Parts for synth models: `osc`, `filter`, `env`, `lfo`, `alloc`, `analog`, `resample`, `smooth`. |
 | `transients.rs` | Onset detection for transient markers and Split at Transients. |
 | `vca.rs` | VCA faders: the offset and mute a strip gets from its VCA chain, loop checks. |

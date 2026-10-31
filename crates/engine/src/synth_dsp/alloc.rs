@@ -82,6 +82,9 @@ pub struct VoiceAllocator<const V: usize> {
     held_up: [bool; 128],
     /// The note the mono voices are playing.
     mono_note: Option<u8>,
+    /// Free voices are taken in turn rather than lowest first, so what was just let go rings on.
+    rotate: bool,
+    next: usize,
 }
 
 impl<const V: usize> VoiceAllocator<V> {
@@ -97,7 +100,16 @@ impl<const V: usize> VoiceAllocator<V> {
             held_len: 0,
             held_up: [false; 128],
             mono_note: None,
+            rotate: false,
+            next: 0,
         }
+    }
+
+    /// Takes free voices in turn, starting after the last one used, which is how an analog poly's
+    /// assigner works: a new note leaves the one just let go to ring on. Off, the lowest free voice
+    /// goes first.
+    pub fn set_rotate(&mut self, on: bool) {
+        self.rotate = on;
     }
 
     /// Changes the mode. Notes already sounding carry on and end with their keys, except that going
@@ -155,6 +167,7 @@ impl<const V: usize> VoiceAllocator<V> {
         self.held_len = 0;
         self.held_up = [false; 128];
         self.mono_note = None;
+        self.next = 0;
     }
 
     /// A voice's envelopes have finished: it is free.
@@ -168,7 +181,8 @@ impl<const V: usize> VoiceAllocator<V> {
     /// out, then the longest released, then the oldest held.
     fn take_voice(&self, note: u8, taken: &[bool; V]) -> (usize, bool) {
         let open = |v: &usize| !taken[*v] && *v < self.pool();
-        if let Some(v) = (0..V).filter(open).find(|&v| self.slots[v].state == VoiceState::Free) {
+        let next = if self.rotate { self.next } else { 0 };
+        if let Some(v) = (0..V).map(|i| (next + i) % V).filter(open).find(|&v| self.slots[v].state == VoiceState::Free) {
             return (v, false);
         }
         let released = |v: &usize| self.slots[*v].state == VoiceState::Released;
@@ -196,6 +210,7 @@ impl<const V: usize> VoiceAllocator<V> {
         for i in 0..size {
             let (voice, stolen) = self.take_voice(note, &taken);
             taken[voice] = true;
+            self.next = voice + 1;
             let age = self.tick();
             self.slots[voice] = VoiceSlot { state: VoiceState::Held, note, age };
             act(VoiceAction::Start { voice, note, velocity, stolen, unison: (i as u8, size as u8) });
@@ -501,6 +516,19 @@ mod tests {
                 assert!(voice < 4, "{voice}: two groups of 2 fit in 5 voices");
             }
         }
+    }
+
+    #[test]
+    fn rotation_takes_free_voices_in_turn() {
+        let mut a = poly::<3>(1);
+        a.set_rotate(true);
+        assert!(matches!(on(&mut a, 60)[..], [Start { voice: 0, .. }]));
+        off(&mut a, 60);
+        a.voice_finished(0);
+        // The first voice is free again, but the turn has moved on.
+        assert!(matches!(on(&mut a, 62)[..], [Start { voice: 1, .. }]));
+        assert!(matches!(on(&mut a, 64)[..], [Start { voice: 2, .. }]));
+        assert!(matches!(on(&mut a, 65)[..], [Start { voice: 0, stolen: false, .. }]));
     }
 
     #[test]

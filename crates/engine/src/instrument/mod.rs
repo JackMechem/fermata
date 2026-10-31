@@ -30,8 +30,16 @@ pub use crate::fx::{FactoryPreset, FxContext, ParamKind, ParamSpec, Unit, MAX_BL
 pub type InstrumentData = std::sync::Arc<dyn std::any::Any + Send + Sync>;
 
 pub mod basic;
+pub mod cinque;
+pub mod common;
+pub mod onda;
 pub mod sampler;
+pub mod sedici;
+pub mod sei;
+#[cfg(test)]
+mod test_kit;
 pub mod tre;
+pub mod uno;
 
 /// A built-in instrument instance.
 pub trait Instrument: Send {
@@ -175,7 +183,7 @@ impl InstrumentInfo {
 
 /// Every built-in instrument. To add one: write its module and list it here.
 pub fn registry() -> Vec<InstrumentInfo> {
-    vec![basic::info(), tre::info(), sampler::info()]
+vec![basic::info(), tre::info(), sei::info(), cinque::info(), uno::info(), sedici::info(), onda::info(), sampler::info()]
 }
 
 /// The registry entry for a plug-in id.

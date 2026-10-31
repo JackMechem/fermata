@@ -186,7 +186,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Record audio and a software instrument at the same time (p. 209)
 - [x] MIDI Thru on or off; velocity scaling (as played, soft, hard, fixed) (p. 1057, 1087)
 - [x] Built-in Fermata Synth, so instrument tracks make sound without a plug-in
-- [x] Built-in instruments with panels, presets, automation and MIDI learn, like the built-in effects (Fermata Tre)
+- [x] Built-in instruments with panels, presets, automation and MIDI learn, like the built-in effects (Fermata Tre, Sei, Cinque, Uno, Sedici, Onda)
 
 ### Metronome (p. 216–218)
 
@@ -945,12 +945,13 @@ and Drummer are listed in Stage 3.
 
 ### Bundled instruments (Logic Pro Instruments guide)
 
-Fermata has two so far, on a shared framework for more (`crates/engine/src/instrument`): **Fermata
-Synth**, a small polyphonic synth that responds to pitch bend, sustain, modulation and expression; and
-**Fermata Tre**, a three-oscillator monophonic synth with a transistor-ladder filter, modelled on the
-Minimoog Model D's behaviour (not affiliated, and not compared with the hardware).
+Fermata has these so far, on a shared framework for more (`crates/engine/src/instrument`): **Fermata
+Synth**, a small polyphonic synth that responds to pitch bend, sustain, modulation and expression;
+models of documented hardware behaviour (not affiliated, and none compared with the hardware): **Fermata Tre**
+(Minimoog Model D), **Sei** (Juno-106 family), **Cinque** (Prophet-5), **Uno** (TB-303) and **Sedici** (DX7);
+and **Onda**, a modern wavetable synth.
 
-- [~] Synthesisers: Alchemy, Retro Synth, ES1, ES2, ES E, ES M, ES P, EFM1, Sculpture, Vocoder (EVOC 20 PolySynth). *Fermata Synth and Fermata Tre (closest to Retro Synth's analog mode).*
+- [~] Synthesisers: Alchemy, Retro Synth, ES1, ES2, ES E, ES M, ES P, EFM1, Sculpture, Vocoder (EVOC 20 PolySynth). *Fermata Synth; Tre, Sei, Cinque and Uno (analog); Sedici (FM, closest to EFM1 but with six operators); Onda (wavetable, closest to Retro Synth's table mode and Alchemy's simple use).*
 - [ ] Granular synthesis, including Alchemy granular sync (p. 10)
 - [~] Sample-based instruments: Sampler, Quick Sampler, Sample Alchemy (engines in Stage 3). *Fermata Sampler; no Sample Alchemy.*
 - [ ] Keyboards: Studio Piano, Vintage B3 organ, Vintage Electric Piano, Vintage Clav, Vintage Mellotron

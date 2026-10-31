@@ -3,6 +3,7 @@
 //! lanes, undo and redo, factory and user presets, saving and reopening, Freeze, Bounce in Place,
 //! a bounce's tail, Track Off, copy and paste, strip settings, duplicating, MIDI learn, note chase
 //! and live MIDI. And that Fermata Synth is still there, and an old project's slot still loads.
+//! Then the models after it, one by one, through the same core of that path.
 //! usage: instrument_check <scratch dir>
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -80,6 +81,96 @@ fn level(s: &mut Session, id: Id, ms: u64) -> f32 {
     std::thread::sleep(Duration::from_millis(ms));
     let t = s.tick();
     t.meters.iter().find(|m| m.0 == id).map(|m| m.1.max(m.2)).unwrap_or(-1.0)
+}
+
+/// One model, through the path a project takes.
+fn check_model(scratch: &std::path::Path, plugin: &str, edit: u32, to: f32) {
+    let info = daw_engine::instrument::find(plugin).unwrap();
+    let name = info.name;
+    let mut s = session();
+    let a = track(&mut s, plugin);
+    let slot = s.project.track(a).unwrap().instrument.clone().unwrap();
+    let uid = slot.uid;
+    check(&format!("{name}: a new track takes it"), slot.plugin_id == plugin && slot.name == name && slot.params.len() == info.params.len());
+    let group_ok = daw_engine::session::builtin_instruments().iter().any(|i| i.id == plugin && !i.sections.is_empty());
+    check(&format!("{name}: the registry lists it with its sections"), group_ok);
+    let base = render(&mut s);
+    check(&format!("{name}: a MIDI region renders (peak {:.3})", peak(&base)), peak(&base) > 0.01 && peak(&base) < 1.6 && base.iter().flatten().all(|v| v.is_finite()));
+    check(&format!("{name}: two renders are bit-identical"), same(&base, &render(&mut s)));
+
+    // A parameter edit, undo and redo.
+    let before = value(&s, uid, edit);
+    undoable_set(&mut s, a, edit, to);
+    let edited = render(&mut s);
+    check(&format!("{name}: a parameter edit changes the sound (by {:.3})", diff(&base, &edited)), diff(&base, &edited) > 0.005);
+    s.undo();
+    check(&format!("{name}: undo puts it back, bit for bit"), value(&s, uid, edit) == before && same(&base, &render(&mut s)));
+    s.redo();
+    check(&format!("{name}: redo sets it again"), value(&s, uid, edit) == to && same(&edited, &render(&mut s)));
+    s.undo();
+
+    // Presets.
+    let root = daw_engine::presets::user_root();
+    let list = daw_engine::presets::list(&root, plugin);
+    check(&format!("{name}: {} factory presets, Default first", list.factory.len()), list.factory.len() > info.presets.len() && list.factory[0] == "Default");
+    let mut all_differ = true;
+    for p in info.presets {
+        s.load_preset(a, SLOT, plugin, p.name, true).unwrap();
+        let x = render(&mut s);
+        let fine = x.iter().flatten().all(|v| v.is_finite()) && peak(&x) < 1.6;
+        if !fine || same(&x, &base) {
+            println!("  {}: peak {:.3}", p.name, peak(&x));
+            all_differ = false;
+        }
+    }
+    check(&format!("{name}: each factory preset loads, plays and changes the sound"), all_differ);
+    let first = info.presets[0].name;
+    s.load_preset(a, SLOT, plugin, "Default", true).unwrap();
+    s.checkpoint("Load Preset", None, false);
+    s.load_preset(a, SLOT, plugin, first, true).unwrap();
+    let preset_sound = render(&mut s);
+    check(&format!("{name}: its first preset isn't the default"), !same(&base, &preset_sound));
+    s.undo();
+    check(&format!("{name}: undo takes a preset back in one step"), same(&base, &render(&mut s)));
+    s.load_preset(a, SLOT, plugin, first, true).unwrap();
+    s.set_builtin_param(a, SLOT, edit, to).unwrap();
+    let mine = render(&mut s);
+    let user = "Instrument Check Model";
+    check(&format!("{name}: a user preset saves"), s.save_preset(a, SLOT, user, true).is_ok());
+    s.load_preset(a, SLOT, plugin, "Default", true).unwrap();
+    check(&format!("{name}: Default puts every value back"), same(&base, &render(&mut s)));
+    s.load_preset(a, SLOT, plugin, user, false).unwrap();
+    check(&format!("{name}: the user preset loads back, bit for bit"), same(&mine, &render(&mut s)));
+    check(&format!("{name}: it deletes"), daw_engine::presets::delete_user(&root, plugin, user).is_ok());
+
+    // Saving and reopening.
+    let dir = scratch.join(format!("{name}.fermata"));
+    s.save(Some(dir.clone())).unwrap();
+    drop(s);
+    let mut s = session();
+    s.open(&dir).unwrap();
+    check(&format!("{name}: reopened, the render is bit-identical"), same(&mine, &render(&mut s)));
+
+    // Freeze.
+    let long = |s: &mut Session| s.render(0, RATE * 4, 0, None, &mut |_| {}).unwrap();
+    let live_long = long(&mut s);
+    let live = render(&mut s);
+    s.freeze_tracks(&[a], &mut |_| {}).unwrap();
+    check(&format!("{name}: freezing unloads it"), s.project.track(a).unwrap().frozen.is_some());
+    let frozen = long(&mut s);
+    let upto = (RATE * 2) as usize;
+    let cut = |x: &[Vec<f32>]| x.iter().map(|c| c[..upto].to_vec()).collect::<Vec<_>>();
+    let off = diff(&cut(&frozen), &cut(&live_long));
+    check(&format!("{name}: a frozen track plays what it played live (off by {off:.5})"), off < 2e-3);
+    s.unfreeze_track(a).unwrap();
+    check(&format!("{name}: unfrozen, it renders live again, bit for bit"), same(&live, &render(&mut s)));
+
+    // Track Off.
+    s.update_track(a, TrackPatch { off: Some(true), ..Default::default() });
+    check(&format!("{name}: Off, it is silent"), peak(&render(&mut s)) == 0.0);
+    s.update_track(a, TrackPatch { off: Some(false), ..Default::default() });
+    check(&format!("{name}: on again, as before, bit for bit"), same(&live, &render(&mut s)));
+    check(&format!("{name}: no audio was contained"), s.status.bad_audio.load(Ordering::Relaxed) == 0);
 }
 
 fn main() {
@@ -325,6 +416,13 @@ fn main() {
     s.update_track(a, TrackPatch { mute: Some(true), ..Default::default() });
     check("and plays", peak(&render(&mut s)) > 0.01);
     check("no audio was contained", s.status.bad_audio.load(Ordering::Relaxed) == 0);
+    drop(s);
+
+    // Every model after Tre: the whole round through a real session.
+    use daw_engine::instrument::{cinque::params::param as cq, onda::params::param as od, sedici::params::param as sd, sei::params::param as se, uno::params::param as un};
+    for (plugin, edit, to) in [("builtin:sei", se::CUTOFF, 300.0f32), ("builtin:cinque", cq::CUTOFF, 300.0), ("builtin:uno", un::CUTOFF, 220.0), ("builtin:sedici", sd::O1 + sd::LEVEL, 50.0), ("builtin:onda", od::CUTOFF, 300.0)] {
+        check_model(&scratch, plugin, edit, to);
+    }
 
     if FAILED.load(Ordering::Relaxed) {
         std::process::exit(1);
