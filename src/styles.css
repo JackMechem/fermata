@@ -7638,6 +7638,8 @@ canvas.pr-cursor-line {
 .fx-body > .inst-panel {
   flex: 1 1 auto;
   min-height: 0;
+  max-width: none;
+  margin-inline: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -7674,6 +7676,40 @@ canvas.pr-cursor-line {
   white-space: normal;
   text-align: center;
   line-height: 1.15;
+}
+
+/* Docked, the sections run in one row, as a chain of devices, each as tall as the row. */
+.fx-dock > .fx-body:has(> .inst-panel) {
+  padding: 8px 10px;
+}
+
+/* Zero width, then all of it: the row scrolls in the room there is and never widens the dock. */
+.fx-dock .inst-sections {
+  flex-wrap: nowrap;
+  width: 0;
+  min-width: 100%;
+}
+
+.fx-dock .inst-section {
+  flex: none;
+}
+
+.fx-dock .inst-section > .fx-group-body {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: start;
+  align-content: start;
+  justify-content: start;
+  justify-items: center;
+  max-width: none;
+}
+
+.fx-dock .inst-section.one-row > .fx-group-body {
+  grid-template-rows: auto;
+}
+
+.fx-dock .inst-section.two-rows > .fx-group-body {
+  grid-template-rows: auto auto;
 }
 
 .inst-keyboard {

@@ -38,9 +38,13 @@ export function findFxSlot(project: Project | undefined, uid: Id): { track: Id; 
   return i >= 0 ? { track: MASTER_ID, slot: i, plugin: project.master.inserts[i]! } : null;
 }
 
+/** An instrument's panel opens in the bottom section whatever Settings say for effects: its
+ *  sections run in one row, across the width. Its panel can still be floated from there. */
+const panelModeFor = (uid: Id) => (getState().snap?.project.tracks.some((t) => t.instrument?.uid === uid) ? "docked" : undefined);
+
 /** Opens an effect's panel (or brings it forward), docked or floating as Settings say (fxDock.ts). */
 export function openFxPanel(uid: Id) {
-  openPanel(fxKey(uid));
+  openPanel(fxKey(uid), panelModeFor(uid));
 }
 
 export function closeFxPanel(uid: Id) {
@@ -49,7 +53,7 @@ export function closeFxPanel(uid: Id) {
 
 /** A slot click: closes the panel if it is on screen, otherwise opens or shows it. */
 export function toggleFxPanel(uid: Id) {
-  togglePanel(fxKey(uid));
+  togglePanel(fxKey(uid), panelModeFor(uid));
 }
 
 /** Loads a plug-in into a slot; a built-in effect then opens its panel (VST3s their editor). */

@@ -12,9 +12,9 @@ export function InstrumentPanel({ info, track, values, set, touch, meters }: FxP
   const byId = new Map(info.params.map((p) => [p.id, p]));
   return (
     <div className="fx-panel inst-panel">
-      <div className="inst-sections">
+      <div className="inst-sections" onWheel={wheelAcross}>
         {(info.sections ?? []).map((s) => (
-          <FxGroup key={s.title} title={s.title} className="inst-section">
+          <FxGroup key={s.title} title={s.title} className={"inst-section " + (s.params.length > 4 ? "two-rows" : "one-row")}>
             {s.params.map((id) => {
               const p = byId.get(id);
               return p ? <FxControl key={id} spec={p} value={values[id]} onChange={(v) => set(id, v)} onTouch={(on) => touch(id, on)} /> : null;
@@ -32,6 +32,12 @@ export function InstrumentPanel({ info, track, values, set, touch, meters }: FxP
       <PanelKeyboard track={track} />
     </div>
   );
+}
+
+/** Docked, the sections run in a row wider than the window: a wheel moves along it. */
+function wheelAcross(e: React.WheelEvent<HTMLDivElement>) {
+  const el = e.currentTarget;
+  if (e.deltaX === 0 && el.scrollWidth > el.clientWidth) el.scrollLeft += e.deltaY;
 }
 
 /** Two octaves to try a sound with, played through live MIDI on the instrument's track. */

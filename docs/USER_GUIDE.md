@@ -504,8 +504,9 @@ adjust Recording Delay.
 A three-oscillator monophonic synth, modelled on the behaviour of a classic 1970s synth (the
 Minimoog Model D; Fermata isn't affiliated with its maker, and this hasn't been compared with one). Choose it
 under **Vintage Synths** in the instrument slot, the Library or New Tracks. Clicking the slot's name
-opens its panel, docked or floating like an effect's, with the presets in its header and a small keyboard
-along the bottom (− and + move it by octaves). Right-click a control for Learn MIDI Assignment.
+opens its panel in the bottom section, whatever Open Effect Panels says, with the presets in its header and
+a small keyboard along the bottom (− and + move it by octaves). Its sections run in one row, and the mouse
+wheel moves along them; the button in the header floats the panel, and its sections then wrap. Right-click a control for Learn MIDI Assignment.
 Everything on it is saved in the project, can be automated in a lane, and undoes.
 
 - **Oscillators:** a range (Lo, 32' to 2'), a wave, and for 2 and 3 a Frequency knob of ±7 semitones.

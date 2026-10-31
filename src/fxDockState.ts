@@ -49,11 +49,11 @@ export const closePanel = (key: PanelKey) => apply((s) => dock.closePanel(s, key
 /** A slot or EQ thumbnail click. With "Separate windows", a panel in its own window closes
  *  (from a panel's window, which doesn't know what is detached, it comes to the front instead);
  *  otherwise a detached panel's window comes to the front (detach.ts). */
-export function togglePanel(key: PanelKey) {
+export function togglePanel(key: PanelKey, mode?: PanelMode) {
   const s = getState();
   if (inWindows() && s.detached.includes(key)) closeDetached(key);
-  else if (inWindows() && !s.fxDock.open.includes(key)) detachPanel(key);
-  else apply((d) => dock.togglePanel(d, key, panelMode()));
+  else if (!mode && inWindows() && !s.fxDock.open.includes(key)) detachPanel(key);
+  else apply((d) => dock.togglePanel(d, key, mode ?? panelMode()));
 }
 export const floatPanel = (key: PanelKey) => apply((s) => dock.floatPanel(s, key));
 export const dockPanel = (key: PanelKey) => apply((s) => dock.dockPanel(s, key));

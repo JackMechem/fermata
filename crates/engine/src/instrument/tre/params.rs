@@ -151,7 +151,7 @@ pub const SECTIONS: &[Section] = &[
     Section { title: "Oscillator 1", params: &[RANGE1, WAVE1] },
     Section { title: "Oscillator 2", params: &[RANGE2, WAVE2, TUNE2] },
     Section { title: "Oscillator 3", params: &[RANGE3, WAVE3, TUNE3, OSC3_KBD] },
-    Section { title: "Mixer", params: &[ON1, LEVEL1, ON2, LEVEL2, ON3, LEVEL3, NOISE_ON, NOISE, NOISE_COLOR, FEEDBACK_ON, FEEDBACK] },
+    Section { title: "Mixer", params: &[ON1, LEVEL1, ON2, LEVEL2, ON3, LEVEL3, NOISE_ON, NOISE, FEEDBACK_ON, FEEDBACK, NOISE_COLOR] },
     Section { title: "Filter", params: &[CUTOFF, EMPHASIS, CONTOUR, KBD1, KBD2, FILTER_MOD] },
     Section { title: "Filter Contour", params: &[F_ATTACK, F_DECAY, F_SUSTAIN] },
     Section { title: "Loudness Contour", params: &[A_ATTACK, A_DECAY, A_SUSTAIN, DECAY_ON] },
