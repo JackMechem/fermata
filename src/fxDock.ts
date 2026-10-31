@@ -182,6 +182,14 @@ export function keepOnScreen(r: Rect, view: Size): Rect {
   return { ...r, x, y };
 }
 
+/** Where a new floating window goes across: near the middle (each further one a step along), and
+ *  with all of its width in view when it can be. */
+export function openingX(viewW: number, w: number | undefined, z: number): number {
+  const half = (w ?? 560) / 2;
+  const x = viewW / 2 - half + z * 24;
+  return Math.max(20, w === undefined ? x : Math.min(x, viewW - w - 8));
+}
+
 /** Reads the remembered sizes (by effect id), dropping anything malformed. */
 export function parseSizes(text: string | null): Record<string, Size> {
   const out: Record<string, Size> = {};

@@ -7630,28 +7630,54 @@ canvas.pr-cursor-line {
 }
 
 /* A built-in instrument's panel (fx/Instrument.tsx): sections from its spec, and a keyboard. */
-.inst-panel {
+.fx-body:has(> .inst-panel) {
+  overflow: hidden;
+}
+
+/* The keyboard stays in view: the sections scroll above it. */
+.fx-body > .inst-panel {
+  flex: 1 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 8px;
+  padding: 0;
 }
 
 .inst-sections {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
   display: flex;
   flex-wrap: wrap;
   align-items: stretch;
+  align-content: flex-start;
   gap: 8px;
+}
+
+.inst-section {
+  flex: 0 1 auto;
 }
 
 .inst-section > .fx-group-body {
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 6px 4px;
-  max-width: 520px;
+  gap: 8px 6px;
+  max-width: 450px;
+}
+
+.inst-section .fx-knob {
+  width: 66px;
+}
+
+.inst-section .fx-label {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
 }
 
 .inst-keyboard {
+  flex: none;
   display: flex;
   align-items: stretch;
   justify-content: center;
@@ -7673,14 +7699,16 @@ canvas.pr-cursor-line {
   box-shadow: inset 0 0 0 1px var(--edge);
 }
 
+/* A piano's colours in every theme. */
 .inst-key.white {
   height: 100%;
-  background: var(--panel-2);
+  background: #e4e4e8;
+  box-shadow: inset 0 0 0 1px #8d9099;
 }
 
 .inst-key.black {
   height: 60%;
-  background: var(--faint);
+  background: #26272b;
 }
 
 .inst-key.down {

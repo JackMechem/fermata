@@ -5,6 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   NO_PANELS,
+  openingX,
   checkBottom,
   clampSize,
   closePanel,
@@ -225,4 +226,11 @@ test("parseSizes keeps good entries and drops the rest", () => {
     "builtin:reverb": { w: 640 },
   });
   assert.deepEqual(parseSizes(text), { "builtin:compressor": { w: 701, h: 420 } });
+});
+
+test("a new floating window opens with all of its width in view when it can", () => {
+  assert.equal(openingX(1480, undefined, 0), 460, "no known width: as if 560 wide, near the middle");
+  assert.equal(openingX(1480, 980, 0), 250);
+  assert.equal(openingX(1000, 980, 0), 20, "wider than fits: the left edge stays reachable");
+  assert.equal(openingX(1480, 980, 20), 492, "a cascade stops at the right edge");
 });

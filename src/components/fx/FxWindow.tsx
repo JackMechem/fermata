@@ -4,7 +4,7 @@
 // last size. Also here, because it is always mounted: Esc and closing panels whose instance
 // went away, for docked panels too.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { DEFAULT_WIDTH, keepOnScreen, resizeRect, type Edge, type PanelKey, type Size } from "../../fxDock";
+import { DEFAULT_WIDTH, keepOnScreen, openingX, resizeRect, type Edge, type PanelKey, type Size } from "../../fxDock";
 import { closePanel, dockPanel, escTarget, focusPanel, prunePanels, savedPanelSize, savePanelSize } from "../../fxDockState";
 import { getState, useStore } from "../../store";
 import { isMain } from "../../detach";
@@ -75,7 +75,7 @@ function FloatingPanel({ panelKey, z }: { panelKey: PanelKey; z: number }) {
   const title = usePanelTitle(panelKey);
   const type = title?.type ?? null;
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState(() => positions.get(panelKey) ?? { x: Math.max(20, window.innerWidth / 2 - 280 + z * 24), y: 120 + z * 24 });
+  const [pos, setPos] = useState(() => positions.get(panelKey) ?? { x: openingX(window.innerWidth, type ? DEFAULT_WIDTH[type] : undefined, z), y: 120 + z * 24 });
   // Null until the window is first resized: it then sizes to its content.
   const [size, setSize] = useState<Size | null>(() => (type ? savedPanelSize(type) : null));
   const sizeType = useRef(type);
@@ -156,11 +156,13 @@ function FloatingPanel({ panelKey, z }: { panelKey: PanelKey; z: number }) {
   };
 
   const at = keepOnScreen({ ...pos, w: size?.w ?? 0, h: size?.h ?? 0 }, { w: window.innerWidth, h: window.innerHeight });
+  // One that hasn't been resized never runs off the bottom: its content scrolls instead.
+  const maxHeight = size ? undefined : window.innerHeight - at.y - 8;
   return (
     <div
       ref={ref}
       className={"eq-window fx-window" + (size ? " sized" : "")}
-      style={{ left: at.x, top: at.y, zIndex: 41 + z, width: size?.w ?? (type ? DEFAULT_WIDTH[type] : undefined), height: size?.h }}
+      style={{ left: at.x, top: at.y, zIndex: 41 + z, width: size?.w ?? (type ? DEFAULT_WIDTH[type] : undefined), height: size?.h, maxHeight }}
       onMouseDown={(e) => {
         e.stopPropagation();
         focusPanel(panelKey);
