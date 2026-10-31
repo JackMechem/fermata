@@ -4,6 +4,27 @@ What's left, in the order it matters for a usable release. Each stage builds on 
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
 of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
+## Open items (built-in instruments, 2026-10-30)
+
+The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instrument_check`,
+`rt_alloc_check`, `parallel_check` and a before-and-after render of Fermata Synth all pass.
+
+- **Not heard or seen yet:** nothing here has been listened to, and the panel hasn't been opened. Listen to all
+  19 presets, and judge the fatness against what it's modelled on. Every constant marked as a guess
+  in [ARCHITECTURE](docs/ARCHITECTURE.md#fermata-tre) is there to be tuned by ear.
+- **Not compared with the hardware:** its likeness to the Model D is from documented behaviour only.
+- New instrument tracks still default to Fermata Synth: to decide after listening.
+- Next: more models; a sampler (a stolen voice needs a fade: see `synth_dsp/alloc.rs`); a custom panel for Tre.
+- A 2-pole state-variable filter and a diode ladder aren't written; `ZdfFilter` is where they go.
+- Fermata Synth's renders aren't repeatable with its mod wheel up (its LFO runs free, and `silence` keeps
+  its controllers). Left alone, as old projects depend on it; a new default could drop it.
+- `parallel_check` fails now and then, on the code before this round too (1 run in 18 with three running at once,
+  against 2 in 18 with it): a live run differs from the serial one at its very first sample (0 against 0.0897),
+  at varying buffer sizes and thread counts. Not looked into. Likely the start of a run (the first
+  block's click or a region), not the instruments.
+- A wave or range switch moved under a held note steps at once, as a real switch does; it could click a little at
+  an extreme setting.
+
 ## Open items (multi-core processing, 2026-10-30)
 
 Checked in the app on a copy of a real project (5 TONE3000, 512 samples) through PipeWire to an

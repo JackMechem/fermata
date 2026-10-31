@@ -25,7 +25,6 @@ use crate::midi_io::MidiIo;
 use crate::model::*;
 use crate::prefs::*;
 use crate::recorder::{FinishedTake, Recorder, TakePreview};
-use crate::synth::BasicSynth;
 
 mod routing;
 mod multi_out;
@@ -49,7 +48,7 @@ pub use region_moves::RegionMove;
 mod new_track_drag;
 mod tempo;
 mod builtin;
-pub use builtin::{builtin_effects, BuiltinInfo, FxTick};
+pub use builtin::{builtin_effects, builtin_instruments, BuiltinInfo, BuiltinInstrument, FxTick};
 mod presets;
 pub use presets::EQ_SLOT;
 mod insert_order;
@@ -96,6 +95,8 @@ mod track_off;
 mod vst_key;
 #[cfg(test)]
 mod held_notes;
+#[cfg(test)]
+mod instrument_tests;
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct TrackPatch {
@@ -788,13 +789,13 @@ impl Session {
         let sr = self.sample_rate();
         // Undo frees instance ids for reuse: one that held a built-in effect may come back as
         // another kind of plug-in, which mustn't inherit its latency or meters.
-        if crate::fx::find(&slot.plugin_id).is_none() {
+        if !builtin::is_builtin(&slot.plugin_id) {
             self.fx.remove(&slot.uid);
         }
         let plugin = if let Some(info) = crate::fx::find(&slot.plugin_id) {
             self.instantiate_builtin(&info, slot)
-        } else if slot.plugin_id == BUILTIN_SYNTH {
-            Plugin::Synth(Box::new(BasicSynth::new(sr as f32)))
+        } else if let Some(info) = crate::instrument::find(&slot.plugin_id) {
+            self.instantiate_instrument(&info, slot)
         } else {
             let desc = self.find_plugin(&slot.plugin_id).ok_or_else(|| anyhow!("plug-in not found: {}", slot.name))?.clone();
             let (proc, ctrl) = vst3_host::instantiate_keyed(&desc, sr, MAX_BLOCK, slot.sidechain.is_some()).map_err(|e| anyhow!(e))?;
@@ -1029,6 +1030,11 @@ impl Session {
                 }
                 let ins = t.instrument.as_ref().and_then(|s| self.instantiate_slot(s).map_err(|e| log::error!("{e}")).ok());
                 self.send(Cmd::Instrument { track: t.id, insert: ins });
+            } else if let (Some(a), Some(b)) = (&cur.instrument, &t.instrument) {
+                if a.bypass != b.bypass {
+                    self.send(Cmd::Bypass { track: t.id, uid: b.uid, bypass: b.bypass });
+                }
+                self.restore_builtin(t.id, a, b);
             }
             let reordered = self.restore_insert_order(t.id, &cur.inserts, &t.inserts);
             let had_inserts = reordered.as_deref().unwrap_or(&cur.inserts);
@@ -1455,13 +1461,14 @@ impl Session {
         };
         if kind == TrackKind::Instrument {
             let pid = instrument.unwrap_or_else(|| BUILTIN_SYNTH.to_string());
-            let name = if pid == BUILTIN_SYNTH {
-                "Fermata Synth".to_string()
-            } else {
-                self.find_plugin(&pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into())
+            let built_in = crate::instrument::find(&pid);
+            let name = match &built_in {
+                Some(i) => i.name.to_string(),
+                None => self.find_plugin(&pid).map(|d| d.name.clone()).unwrap_or_else(|| "Instrument".into()),
             };
             track.name = if pid == BUILTIN_SYNTH { format!("Inst {count}") } else { name.clone() };
-            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params: Vec::new(), sidechain: None, sidechain_pre: false });
+            let params = built_in.map(|i| i.params.iter().map(|p| (p.id, p.default)).collect()).unwrap_or_default();
+            track.instrument = Some(PluginSlot { uid: self.project.alloc_id(), plugin_id: pid, name, bypass: false, state: None, params, sidechain: None, sidechain_pre: false });
         }
         let dsp = self.build_track(&track);
         let idx = index.unwrap_or(self.project.tracks.len()).min(self.project.tracks.len());
@@ -2574,8 +2581,12 @@ impl Session {
     pub fn set_plugin(&mut self, track: Id, slot: usize, plugin_id: &str) -> Result<Id> {
         self.check_unfrozen(&[track])?;
         let builtin = crate::fx::find(plugin_id);
-        let name = if plugin_id == BUILTIN_SYNTH {
-            "Fermata Synth".to_string()
+        let instrument = crate::instrument::find(plugin_id);
+        let name = if let Some(info) = &instrument {
+            if slot != usize::MAX {
+                return Err(anyhow!("{} is an instrument: it goes in the instrument slot", info.name));
+            }
+            info.name.to_string()
         } else if let Some(info) = &builtin {
             if slot == usize::MAX {
                 return Err(anyhow!("{} is an audio effect: it goes in an Audio FX slot", info.name));
@@ -2584,8 +2595,9 @@ impl Session {
         } else {
             self.find_plugin(plugin_id).map(|d| d.name.clone()).ok_or_else(|| anyhow!("unknown plug-in"))?
         };
-        // A built-in effect's values are all written out, so the project file reads clearly.
-        let params = builtin.map(|i| i.params.iter().map(|p| (p.id, p.default)).collect()).unwrap_or_default();
+        // A built-in plug-in's values are all written out, so the project file reads clearly.
+        let specs = builtin.map(|i| i.params).or(instrument.map(|i| i.params)).unwrap_or_default();
+        let params = specs.iter().map(|p| (p.id, p.default)).collect();
         let uid = self.project.alloc_id();
         let new_slot = PluginSlot { uid, plugin_id: plugin_id.to_string(), name, bypass: false, state: None, params, sidechain: None, sidechain_pre: false };
         let ins = self.instantiate_slot(&new_slot)?;
@@ -2666,7 +2678,7 @@ impl Session {
         let tracks = p.tracks.iter().filter(|t| t.frozen.is_none()).flat_map(|t| t.instrument.iter().chain(t.inserts.iter().flatten()));
         tracks
             .chain(p.master.inserts.iter().flatten())
-            .filter(|s| s.plugin_id != BUILTIN_SYNTH && crate::fx::find(&s.plugin_id).is_none() && !self.controllers.contains_key(&s.uid))
+            .filter(|s| !builtin::is_builtin(&s.plugin_id) && !self.controllers.contains_key(&s.uid))
             .collect()
     }
 

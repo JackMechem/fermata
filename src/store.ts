@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import type { AutoParam, ChannelEq, Id, PluginDesc, PluginSlot, Region, Snapshot, Tick } from "./api";
 import type { StripSetting } from "./stripSettings";
-import type { FxInfo } from "./fx";
+import type { FxInfo, InstInfo } from "./fx";
 import type { DropTarget } from "./dnd";
 import type { DockPanels } from "./fxDock";
 import type { WaveStyle } from "./waveform";
@@ -84,6 +84,8 @@ export interface State {
   moveMidiWithTempo: boolean;
   /** The built-in effects (`list_builtin_effects`). */
   fxList: FxInfo[];
+  /** The built-in instruments, Fermata Synth among them. */
+  instList: InstInfo[];
   /** Built-in effect instances whose panels are open (docked or floating); see `fxDock`. */
   fxPanels: Id[];
   /** The overview strip under the tracks, in place of the horizontal scroll bar (View menu). */
@@ -161,6 +163,7 @@ let state: State = {
   tempoLaneH: 56,
   moveMidiWithTempo: false,
   fxList: [],
+  instList: [],
   fxPanels: [],
   showOverview: true,
   fxDock: { open: [], floating: [], active: null, ret: "none" },

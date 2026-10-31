@@ -56,6 +56,24 @@ pub fn write_bursts(path: &Path) {
     w.finalize().unwrap();
 }
 
+/// A Fermata Tre track with a part and a lane moving its cutoff, for the real-time checks: a built-in
+/// instrument with drift on, and audio-rate modulation so its costliest path runs.
+#[allow(dead_code)]
+pub fn add_tre(s: &mut Session) -> Id {
+    use daw_engine::instrument::tre::params::param;
+    let t = s.add_track(TrackKind::Instrument, InputSel::None, Some("builtin:tre".into()), None).unwrap();
+    let r = s.create_midi_region(t, 0, 8 * BAR).unwrap();
+    let notes = (0..64).map(|i| note(i * BAR / 8, BAR / 12, 36 + (i * 5 % 24) as u8, 100)).collect();
+    s.set_midi_content(vec![MidiContent { region: r, notes, cc: Vec::new(), start: None, length: None }]);
+    for (id, v) in [(param::DRIFT, 1.0), (param::ON3, 1.0), (param::NOISE_ON, 1.0), (param::FILTER_MOD, 1.0), (param::OSC_MOD, 1.0), (param::MOD_AMOUNT, 2.0)] {
+        s.set_builtin_param(t, usize::MAX, id, v).unwrap();
+    }
+    let uid = s.project.track(t).unwrap().instrument.as_ref().unwrap().uid;
+    let lane = AutoParam::Plugin { uid, param: param::CUTOFF, name: "Fermata Tre: Cutoff".into() };
+    s.set_automation_lane(t, lane, vec![pt(0, 0.3, 0.0), pt(4 * BAR, 0.8, 0.0), pt(8 * BAR, 0.4, 0.0)]);
+    t
+}
+
 fn note(start: i64, length: i64, pitch: u8, velocity: u8) -> Note {
     Note { start, length, pitch, velocity, muted: false }
 }

@@ -1,4 +1,5 @@
-//! Built-in effects (see `crate::fx`) running in insert slots.
+//! Built-in effects (see `crate::fx`) running in insert slots, and built-in instruments (see
+//! `crate::instrument`) in instrument slots.
 //!
 //! The engine owns the effect; the session keeps an [`FxShared`] per instance to read what it
 //! reports without locking: meters and live parameter values (only while the slot's panel
@@ -10,7 +11,10 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::Arc;
 
+use vst3_host::MidiEvent;
+
 use crate::fx::{EffectInfo, Effect, FxContext, Key, ParamKind, ParamSpec, MAX_METERS};
+use crate::instrument::{Instrument, InstrumentInfo};
 
 /// A plain value (in the parameter's units) from a normalized 0..1 one.
 pub fn to_plain(spec: &ParamSpec, norm: f32) -> f32 {
@@ -79,16 +83,16 @@ pub struct FxShared {
 const GR_METERS: [&str; 2] = ["Gain Reduction", "Reduction"];
 
 impl FxShared {
-    fn new(info: &EffectInfo) -> FxShared {
+    fn new(params: &[ParamSpec], meters: &[&str]) -> FxShared {
         FxShared {
             watched: AtomicBool::new(false),
             meters: std::array::from_fn(|_| AtomicU32::new(0)),
-            meter_count: info.meters.len().min(MAX_METERS),
-            ids: info.params.iter().map(|p| p.id).collect(),
-            params: info.params.iter().map(|p| AtomicU32::new(p.default.to_bits())).collect(),
+            meter_count: meters.len().min(MAX_METERS),
+            ids: params.iter().map(|p| p.id).collect(),
+            params: params.iter().map(|p| AtomicU32::new(p.default.to_bits())).collect(),
             latency: AtomicU32::new(0),
             tail: AtomicU32::new(0),
-            gr_meter: info.meters.iter().position(|m| GR_METERS.contains(m)).filter(|&k| k < MAX_METERS),
+            gr_meter: meters.iter().position(|m| GR_METERS.contains(m)).filter(|&k| k < MAX_METERS),
             gr: AtomicU32::new(0),
         }
     }
@@ -138,7 +142,7 @@ impl BuiltinDsp {
     /// Instantiates an effect with the given parameter values (plain units; missing ones keep
     /// their defaults). Allocates: call off the audio thread.
     pub fn new(info: &EffectInfo, sample_rate: f32, values: &[(u32, f32)]) -> BuiltinDsp {
-        let mut b = BuiltinDsp { fx: (info.new)(sample_rate), specs: info.params, shared: Arc::new(FxShared::new(info)), meter_buf: [0.0; MAX_METERS], fresh: true };
+        let mut b = BuiltinDsp { fx: (info.new)(sample_rate), specs: info.params, shared: Arc::new(FxShared::new(info.params, info.meters)), meter_buf: [0.0; MAX_METERS], fresh: true };
         for &(id, v) in values {
             b.set(id, v);
         }
@@ -238,6 +242,104 @@ impl BuiltinDsp {
     /// Tells the effect whether the engine is rendering offline (see `Effect::set_offline`).
     pub fn set_offline(&mut self, offline: bool) {
         self.fx.set_offline(offline);
+    }
+}
+
+/// A built-in instrument in an instrument slot. Its parameters and what it tells the session go
+/// the way an effect's do; it adds MIDI and has no side-chain.
+pub struct InstrumentDsp {
+    inst: Box<dyn Instrument>,
+    specs: &'static [ParamSpec],
+    shared: Arc<FxShared>,
+    meter_buf: [f32; MAX_METERS],
+    /// Reset and not yet run, as in `BuiltinDsp`.
+    fresh: bool,
+}
+
+impl InstrumentDsp {
+    /// Instantiates an instrument with the given parameter values (plain units; missing ones keep
+    /// their defaults) and the seed for its analog-style differences. Allocates: call off the
+    /// audio thread.
+    pub fn new(info: &InstrumentInfo, sample_rate: f32, seed: u64, values: &[(u32, f32)]) -> InstrumentDsp {
+        let mut b = InstrumentDsp { inst: (info.new)(sample_rate, seed), specs: info.params, shared: Arc::new(FxShared::new(info.params, info.meters)), meter_buf: [0.0; MAX_METERS], fresh: true };
+        for &(id, v) in values {
+            b.set(id, v);
+        }
+        b.inst.reset();
+        b.publish();
+        b
+    }
+
+    pub fn shared(&self) -> Arc<FxShared> {
+        self.shared.clone()
+    }
+
+    fn spec(&self, id: u32) -> Option<&'static ParamSpec> {
+        self.specs.iter().find(|p| p.id == id)
+    }
+
+    /// Sets a parameter in plain units. Unknown ids are ignored.
+    pub fn set(&mut self, id: u32, value: f32) {
+        let Some(spec) = self.spec(id) else { return };
+        self.inst.set_param(id, clamp(spec, value));
+        // An instrument that isn't running (bypassed, or on an Off track) reports no values, and
+        // its panel must still show this one.
+        if let Some(k) = self.specs.iter().position(|p| p.id == id) {
+            self.shared.params[k].store(self.inst.param(id).to_bits(), Ordering::Relaxed);
+        }
+        self.publish();
+    }
+
+    /// Sets a parameter from an automation lane's normalized value.
+    pub fn set_normalized(&mut self, id: u32, norm: f32) {
+        if let Some(spec) = self.spec(id) {
+            if self.inst.param(id) != to_plain(spec, norm) {
+                self.set(id, to_plain(spec, norm));
+                if self.fresh {
+                    // Nothing has played since the reset, so resetting again only snaps the
+                    // instrument's smoothed parameters to the new value.
+                    self.inst.reset();
+                }
+            }
+        }
+    }
+
+    fn publish(&self) {
+        self.shared.tail.store(self.inst.tail_secs().to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn process(&mut self, l: &mut [f32], r: &mut [f32], midi: &[MidiEvent], ctx: &FxContext) {
+        self.fresh = false;
+        self.inst.process(l, r, midi, ctx);
+        if self.shared.watched.load(Ordering::Relaxed) {
+            self.inst.meters(&mut self.meter_buf);
+            for (m, v) in self.shared.meters.iter().zip(&self.meter_buf) {
+                m.store(v.to_bits(), Ordering::Relaxed);
+            }
+            for (spec, v) in self.specs.iter().zip(&self.shared.params) {
+                v.store(self.inst.param(spec.id).to_bits(), Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// All notes end, and tails ring on (see `Instrument::all_notes_off`).
+    pub fn all_notes_off(&mut self) {
+        self.inst.all_notes_off();
+    }
+
+    /// Stops dead with everything cleared (see `Instrument::reset`).
+    pub fn reset(&mut self) {
+        self.inst.reset();
+        self.fresh = true;
+    }
+
+    /// Clears the instrument for a track going Off, meters included.
+    pub fn sleep(&mut self) {
+        self.reset();
+        self.inst.meters(&mut self.meter_buf);
+        for (m, v) in self.shared.meters.iter().zip(&self.meter_buf) {
+            m.store(v.to_bits(), Ordering::Relaxed);
+        }
     }
 }
 

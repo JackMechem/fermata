@@ -47,7 +47,9 @@ export function NewTrackDialog() {
   const inputs: [string, string][] = [["none:0", "No Input"]];
   for (let c = 0; c < ch; c++) inputs.push([`mono:${c}`, inputLabel({ type: "mono", ch: c })]);
   for (let c = 0; c + 1 < ch; c += 2) inputs.push([`stereo:${c}`, inputLabel({ type: "stereo", ch: c })]);
-  const instruments: [string, string][] = [[BUILTIN_SYNTH, "Fermata Synth"], ...plugins.filter((p) => p.is_instrument).map((p) => [p.id, `${p.name} — ${p.vendor}`] as [string, string])];
+  const instList = useStore((s) => s.instList);
+  const builtIn: [string, string][] = instList.length ? instList.map((i) => [i.id, i.category === "Fermata" ? i.name : `${i.category}: ${i.name}`]) : [[BUILTIN_SYNTH, "Fermata Synth"]];
+  const instruments: [string, string][] = [...builtIn, ...plugins.filter((p) => p.is_instrument).map((p) => [p.id, `${p.name} — ${p.vendor}`] as [string, string])];
 
   const create = async () => {
     const [t, c] = inputKey.split(":");

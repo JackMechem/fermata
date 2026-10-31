@@ -73,6 +73,7 @@ export const SYNCED_FIELDS = [
   "autoLane",
   "plugins",
   "fxList",
+  "instList",
   "themeId",
   "uiScale",
   "waveStyle",

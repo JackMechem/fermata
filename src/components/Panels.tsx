@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { act, api, BUILTIN_SYNTH, call, INSTRUMENT_SLOT, isStack, type Region, type Track } from "../api";
+import { act, BUILTIN_SYNTH, call, INSTRUMENT_SLOT, isStack, type Region, type Track } from "../api";
 import { Icon } from "../icons";
 import { isAudioPath, startFileDrag } from "../dnd";
 import { importMidiFiles, isMidiPath } from "../midiFiles";
@@ -172,6 +172,12 @@ export function Library() {
   const [rescanning, setRescanning] = useState(false);
   const isInst = track?.kind === "instrument";
   const fxList = useStore((s) => s.fxList);
+  const instList = useStore((s) => s.instList);
+  const instGroups = new Map<string, typeof instList>();
+  for (const i of instList.filter((i) => !q || `${i.name} ${i.category} ${i.about}`.toLowerCase().includes(q.toLowerCase()))) {
+    if (!instGroups.has(i.category)) instGroups.set(i.category, []);
+    instGroups.get(i.category)!.push(i);
+  }
   // Built-in effects first, by category, as in Logic's Library.
   const builtins = isInst ? [] : fxList.filter((f) => !q || `${f.name} ${f.category}`.toLowerCase().includes(q.toLowerCase()));
   const fxGroups = new Map<string, typeof builtins>();
@@ -190,7 +196,7 @@ export function Library() {
   }
   const load = (id: string) => {
     if (!track) return;
-    if (isInst) api.setPlugin(track.id, INSTRUMENT_SLOT, id, true);
+    if (isInst) loadPlugin(track.id, INSTRUMENT_SLOT, id, true);
     else {
       const slot = track.inserts.findIndex((s) => !s);
       if (slot < 0) setState({ toast: { text: "All Audio FX slots are in use", at: Date.now() } });
@@ -210,11 +216,24 @@ export function Library() {
       ) : (
         <div className="lib-list">
           <div className="lib-group">{isInst ? "Instruments" : "Audio FX"}</div>
-          {isInst && (
+          {isInst && !instList.length && (
             <div className={"lib-item" + (current(track) === BUILTIN_SYNTH ? " on" : "")} onClick={() => load(BUILTIN_SYNTH)}>
               Fermata Synth
             </div>
           )}
+          {isInst &&
+            [...instGroups.entries()]
+              .sort((a, b) => (a[0] === "Fermata" ? -1 : b[0] === "Fermata" ? 1 : a[0].localeCompare(b[0])))
+              .map(([group, is]) => (
+                <div key={`inst:${group}`}>
+                  <div className="lib-vendor">{group}</div>
+                  {is.map((i) => (
+                    <div key={i.id} className={"lib-item" + (current(track) === i.id ? " on" : "")} onClick={() => load(i.id)} title={i.about}>
+                      {i.name}
+                    </div>
+                  ))}
+                </div>
+              ))}
           {[...fxGroups.entries()]
             .sort((a, b) => a[0].localeCompare(b[0]))
             .map(([cat, fs]) => (
@@ -237,7 +256,7 @@ export function Library() {
               ))}
             </div>
           ))}
-          {list.length === 0 && builtins.length === 0 && <div className="insp-empty">No matching plug-ins</div>}
+          {list.length === 0 && builtins.length === 0 && (!isInst || instGroups.size === 0) && <div className="insp-empty">No matching plug-ins</div>}
         </div>
       )}
       <div className="pane-foot">

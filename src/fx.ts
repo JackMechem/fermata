@@ -41,7 +41,14 @@ export interface FxInfo {
   /** Names of the meter values the effect reports, in order. */
   meters: string[];
   sidechain: boolean;
+  /** A built-in instrument's menu blurb (see `InstrumentInfo` in the engine). */
+  about?: string;
+  /** A built-in instrument's panel layout: titled groups of parameter ids. */
+  sections?: { title: string; params: number[] }[];
 }
+
+/** A built-in instrument's registry entry: an effect's, with its group in `category`. */
+export type InstInfo = FxInfo & { about: string; sections: { title: string; params: number[] }[] };
 
 /** What a panel gets from the host. */
 export interface FxPanelProps {
@@ -63,7 +70,8 @@ export interface FxPanelProps {
 
 /**
  * Custom panels by plug-in id. Effects without an entry get the generic panel, which lays out
- * one control per parameter plus a bar per meter.
+ * one control per parameter plus a bar per meter; instruments get the sectioned one from their
+ * spec (`InstrumentPanel`).
  */
 export const FX_PANELS: Record<string, ComponentType<FxPanelProps>> = {
   "builtin:compressor": CompressorPanel,

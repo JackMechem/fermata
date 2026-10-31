@@ -273,6 +273,7 @@ fn main() {
             commands::set_signature_at,
             commands::move_midi_with_tempo,
             commands::list_builtin_effects,
+            commands::list_builtin_instruments,
             commands::set_builtin_param,
             commands::builtin_params,
             commands::set_sidechain,

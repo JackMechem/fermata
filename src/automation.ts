@@ -161,8 +161,9 @@ export function formatValue(p: AutoParam, v: number): string {
 function builtinSpec(uid: Id, param: number): FxParamSpec | undefined {
   const st = getState();
   const project = st.snap?.project;
-  const slot = [...(project?.tracks.flatMap((t) => t.inserts) ?? []), ...(project?.master.inserts ?? [])].find((s) => s?.uid === uid);
-  return st.fxList.find((f) => f.id === slot?.plugin_id)?.params.find((p) => p.id === param);
+  const slot = [...(project?.tracks.flatMap((t) => [t.instrument, ...t.inserts]) ?? []), ...(project?.master.inserts ?? [])].find((s) => s?.uid === uid);
+  const specs = st.fxList.find((f) => f.id === slot?.plugin_id) ?? st.instList.find((f) => f.id === slot?.plugin_id);
+  return specs?.params.find((p: FxParamSpec) => p.id === param);
 }
 
 /** The control's own value, what an empty lane stands for. */

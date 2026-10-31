@@ -28,7 +28,7 @@ Contents:
    [Autopunch](#autopunch) · [Recording MIDI](#recording-midi) ·
    [Latency compensation](#latency-compensation)
 4. [Software instruments and Musical Typing](#4-software-instruments-and-musical-typing):
-   [Musical Typing](#musical-typing) · [Step Input](#step-input)
+   [Fermata Tre](#fermata-tre) · [Musical Typing](#musical-typing) · [Step Input](#step-input)
 5. [Editing in the tracks area](#5-editing-in-the-tracks-area):
    [Selecting regions](#selecting-regions) ·
    [Moving, trimming and snapping](#moving-trimming-and-snapping) · [Drag modes](#drag-modes) ·
@@ -298,7 +298,7 @@ the Stereo Out strip.
 ### Library and Browser
 
 - **Library (Y):** the plug-ins for the selected track. For an instrument track it lists
-  instruments (Fermata Synth first, then plug-ins by vendor) and loads into the instrument
+  instruments (the built-in ones by group, then plug-ins by vendor) and loads into the instrument
   slot; for other tracks it lists Audio FX and loads into the first free insert slot. Search
   with the field at the top; **Rescan** rescans plug-ins.
 - **Browser (F)**, "All Files": browse folders (double-click to open, the up button for the
@@ -489,14 +489,44 @@ adjust Recording Delay.
 
 - Create an instrument track (New Tracks › **Software Instrument**). Its **Instrument** slot
   holds Fermata Synth by default, a built-in polyphonic synthesizer that responds to pitch bend,
-  sustain, modulation (vibrato) and expression. Choose a VST3 instrument in the New Tracks
-  dialog, the Library, or the strip's Instrument slot.
+  sustain, modulation (vibrato) and expression. Choose another built-in instrument (see
+  [Fermata Tre](#fermata-tre)) or a VST3 instrument in the New Tracks dialog, the Library, or the
+  strip's Instrument slot.
 - **MIDI input:** every connected MIDI input is routed to the selected instrument track (if
   the selected track isn't an instrument track, to the first armed one). Devices plugged in
   later are picked up within a few seconds. Settings › MIDI switches individual inputs off,
   turns MIDI Thru off (MIDI is then recorded but not played, for keyboards with their own
   sound) and sets a velocity curve.
 - **VST3 instruments** receive controllers and pitch bend through their MIDI mapping.
+
+### Fermata Tre
+
+A three-oscillator monophonic synth, modelled on the behaviour of a classic 1970s synth (the
+Minimoog Model D; Fermata isn't affiliated with its maker, and this hasn't been compared with one). Choose it
+under **Vintage Synths** in the instrument slot, the Library or New Tracks. Clicking the slot's name
+opens its panel, docked or floating like an effect's, with the presets in its header and a small keyboard
+along the bottom (− and + move it by octaves). Right-click a control for Learn MIDI Assignment.
+Everything on it is saved in the project, can be automated in a lane, and undoes.
+
+- **Oscillators:** a range (Lo, 32' to 2'), a wave, and for 2 and 3 a Frequency knob of ±7 semitones.
+  Turn **Osc 3 Keyboard** off and put it in **Lo** to make it an LFO.
+- **Mixer:** a level and a switch for each oscillator and noise. With two or three oscillators past
+  about half way the sum overdrives the filter, which is how this kind of synth gets fat. **Feedback** sends the
+  output back into the mixer for more.
+- **Filter:** a 24 dB low-pass. **Emphasis** past 8 makes it whistle by itself, in tune when both
+  **Keyboard** switches are on. **Contour Amount** is how far the Filter Contour opens it.
+- **Contours:** Attack, Decay and Sustain, one for the filter and one for loudness. With the **Decay** switch on, a
+  released key fades at the Decay time; off, the note ends at once.
+- **Controllers:** Glide, the pitch bend's range, and the modulation: **Mod Mix** blends osc 3 with noise,
+  the mod wheel (and **Mod Amount**, which is where it rests) sets how much, and **Osc Mod** and **Filter Mod** say where it goes.
+- **Voices** (not on the original): Mono is one note, the lowest key down, without restarting the contours when
+  playing legato, as the instrument does. **Priority** and **Trigger** change those. **Unison** stacks voices on one note, with
+  **Unison Detune** and **Stereo Spread**. **Poly** plays chords. **Touch** sets what velocity and aftertouch do; off to start with.
+- **Drift** is how much each voice wanders and differs from the next. A render repeats exactly, and a duplicated track has
+  its own differences.
+
+**Presets:** the pop-up in the panel's header lists factory presets and yours. **Save As** keeps the current sound as your
+own preset, in every project.
 
 ### Musical Typing
 
@@ -1604,7 +1634,7 @@ From top to bottom:
 | Part | What it does |
 |---|---|
 | **Setting** | The channel strip settings menu (see [Channel strip settings](#channel-strip-settings)). |
-| **Input** | Audio tracks: the mono/stereo button and the input ("No Input", "Input 1"..., "Input 1–2"...). Instrument tracks: the **instrument slot** (No Plug-in, Fermata Synth, or a VST3 instrument by category or vendor). Auxes show their bus ("Bus 1"), or the instrument output they're on ("Drums: Direct out 0", see [Multi-output instruments](#multi-output-instruments)); summing stacks show "Subtracks". |
+| **Input** | Audio tracks: the mono/stereo button and the input ("No Input", "Input 1"..., "Input 1–2"...). Instrument tracks: the **instrument slot** (No Plug-in, Fermata Synth, other built-in instruments by group, or a VST3 instrument by category or vendor). Auxes show their bus ("Bus 1"), or the instrument output they're on ("Drums: Direct out 0", see [Multi-output instruments](#multi-output-instruments)); summing stacks show "Subtracks". |
 | **EQ thumbnail** | The Channel EQ curve; click to open the editor. |
 | **Audio FX** | Insert slots: the filled ones plus one empty slot (up to 8). The label shows the strip's plug-in latency. |
 | **Sends** | Up to 8 send slots. |

@@ -44,6 +44,7 @@ export function PluginSlotView({
   const openEditors = useStore((s) => s.snap?.open_editors) ?? [];
   const fxOpen = usePanelShown(plugin ? fxKey(plugin.uid) : null);
   useStore((s) => s.fxList);
+  useStore((s) => s.instList);
   // A frozen track's plug-ins are unloaded and can't change until it is unfrozen.
   const frozen = useStore((s) => !!s.snap?.project.tracks.find((t) => t.id === trackId)?.frozen);
   const latency = useSlotLatency(plugin?.uid);

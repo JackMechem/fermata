@@ -1,4 +1,6 @@
-//! Built-in effects (`crate::fx`) in insert slots, on the session side.
+//! Built-in effects (`crate::fx`) in insert slots and built-in instruments (`crate::instrument`)
+//! in instrument slots, on the session side. Instruments go the effects' way throughout: their
+//! parameters, automation, meters and presets use the same calls, with slot `usize::MAX`.
 //!
 //! - A slot's parameter values live in the project (`PluginSlot::params`, plain units), so
 //!   saving, undo, duplicating, freezing and copying a slot carry them like any other setting.
@@ -22,7 +24,8 @@ use std::collections::HashSet;
 use vst3_host::ParamInfo;
 
 use super::*;
-use crate::fx::{self, EffectInfo, ParamKind, Unit};
+use crate::fx::{self, EffectInfo, ParamKind, ParamSpec, Unit};
+use crate::instrument::{self, InstrumentInfo};
 
 /// A registry entry as the UI sees it (`FxInfo` in src/fx.ts).
 #[derive(Debug, Clone, Serialize)]
@@ -56,6 +59,28 @@ pub enum BuiltinKind {
     Choice { labels: Vec<&'static str> },
 }
 
+/// An instrument's panel layout: `Section` in `crate::instrument`.
+#[derive(Debug, Clone, Serialize)]
+pub struct BuiltinSection {
+    pub title: &'static str,
+    pub params: Vec<u32>,
+}
+
+/// An instrument registry entry as the UI sees it (`InstInfo` in src/fx.ts): what an effect has,
+/// less the side-chain, plus its group and layout.
+#[derive(Debug, Clone, Serialize)]
+pub struct BuiltinInstrument {
+    pub id: &'static str,
+    pub name: &'static str,
+    /// The menu group.
+    pub category: &'static str,
+    pub about: &'static str,
+    pub params: Vec<BuiltinParam>,
+    pub meters: Vec<&'static str>,
+    pub sidechain: bool,
+    pub sections: Vec<BuiltinSection>,
+}
+
 /// One open panel's meters and the values its effect runs with (automation included).
 #[derive(Debug, Clone, Serialize)]
 pub struct FxTick {
@@ -78,9 +103,8 @@ fn unit_name(u: Unit) -> &'static str {
     }
 }
 
-fn describe(e: &EffectInfo) -> BuiltinInfo {
-    let params = e
-        .params
+fn describe_params(params: &[ParamSpec]) -> Vec<BuiltinParam> {
+    params
         .iter()
         .map(|p| BuiltinParam {
             id: p.id,
@@ -96,13 +120,43 @@ fn describe(e: &EffectInfo) -> BuiltinInfo {
             },
             log: p.log,
         })
-        .collect();
-    BuiltinInfo { id: e.id, name: e.name, category: e.category, params, meters: e.meters.to_vec(), sidechain: e.sidechain }
+        .collect()
+}
+
+fn describe(e: &EffectInfo) -> BuiltinInfo {
+    BuiltinInfo { id: e.id, name: e.name, category: e.category, params: describe_params(e.params), meters: e.meters.to_vec(), sidechain: e.sidechain }
 }
 
 /// Every built-in effect, for the slot menus, the Library and the panels.
 pub fn builtin_effects() -> Vec<BuiltinInfo> {
     fx::registry().iter().map(describe).collect()
+}
+
+/// Every built-in instrument, for the menus, the Library and the panels.
+pub fn builtin_instruments() -> Vec<BuiltinInstrument> {
+    instrument::registry()
+        .iter()
+        .map(|i| BuiltinInstrument {
+            id: i.id,
+            name: i.name,
+            category: i.group,
+            about: i.about,
+            params: describe_params(i.params),
+            meters: i.meters.to_vec(),
+            sidechain: false,
+            sections: i.sections.iter().map(|s| BuiltinSection { title: s.title, params: s.params.to_vec() }).collect(),
+        })
+        .collect()
+}
+
+/// Whether a plug-in id is one of ours: an effect or an instrument, not a VST3.
+pub(super) fn is_builtin(plugin_id: &str) -> bool {
+    fx::find(plugin_id).is_some() || instrument::find(plugin_id).is_some()
+}
+
+/// A built-in effect's or instrument's name and parameters.
+pub(super) fn builtin_spec(plugin_id: &str) -> Option<(&'static str, &'static [ParamSpec])> {
+    fx::find(plugin_id).map(|i| (i.name, i.params)).or_else(|| instrument::find(plugin_id).map(|i| (i.name, i.params)))
 }
 
 /// A slot's value for a parameter: saved, or the default.
@@ -127,22 +181,34 @@ impl Session {
         Plugin::Builtin(Box::new(b))
     }
 
-    /// The track (or MASTER_ID), slot index and slot of a built-in effect instance.
+    /// A built-in instrument instance for an instrument slot, with its saved values. The slot's
+    /// id seeds its analog-style differences, which keeps them across saving and reopening.
+    pub(super) fn instantiate_instrument(&mut self, info: &InstrumentInfo, slot: &PluginSlot) -> Plugin {
+        let i = InstrumentDsp::new(info, self.sample_rate() as f32, slot.uid, &slot.params);
+        let shared = i.shared();
+        shared.set_watched(self.fx_watch.contains(&slot.uid));
+        self.fx.insert(slot.uid, shared);
+        Plugin::Instrument(Box::new(i))
+    }
+
+    /// The track (or MASTER_ID), slot index (`usize::MAX` for the instrument slot) and slot of a
+    /// built-in effect or instrument instance.
     fn find_builtin(&self, uid: Id) -> Option<(Id, usize, &PluginSlot)> {
         let p = &self.project;
         let tracks = p.tracks.iter().map(|t| (t.id, &t.inserts));
-        tracks.chain(std::iter::once((MASTER_ID, &p.master.inserts))).find_map(|(id, ins)| {
+        let insert = tracks.chain(std::iter::once((MASTER_ID, &p.master.inserts))).find_map(|(id, ins)| {
             ins.iter().enumerate().find_map(|(k, s)| s.as_ref().filter(|s| s.uid == uid && fx::find(&s.plugin_id).is_some()).map(|s| (id, k, s)))
-        })
+        });
+        insert.or_else(|| p.tracks.iter().find_map(|t| t.instrument.as_ref().filter(|s| s.uid == uid && instrument::find(&s.plugin_id).is_some()).map(|s| (t.id, usize::MAX, s))))
     }
 
-    /// Sets a built-in effect's parameter (plain units, clamped to its range). While the
-    /// transport plays in Touch, Latch or Write, the move is recorded as automation.
+    /// Sets a built-in effect's or instrument's parameter (plain units, clamped to its range).
+    /// While the transport plays in Touch, Latch or Write, the move is recorded as automation.
     pub fn set_builtin_param(&mut self, track: Id, slot: usize, id: u32, value: f32) -> Result<()> {
         self.check_unfrozen(&[track])?;
         let s = self.slot_ref(track, slot).and_then(|s| s.as_mut()).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
-        let info = fx::find(&s.plugin_id).ok_or_else(|| anyhow!("{} isn't a built-in effect", s.name))?;
-        let spec = info.param(id).ok_or_else(|| anyhow!("{} has no parameter {id}", info.name))?;
+        let (name, specs) = builtin_spec(&s.plugin_id).ok_or_else(|| anyhow!("{} isn't a built-in effect", s.name))?;
+        let spec = specs.iter().find(|p| p.id == id).ok_or_else(|| anyhow!("{name} has no parameter {id}"))?;
         let before = to_normalized(spec, value_of(s, spec));
         let v = crate::dsp::builtin_clamp(spec, value);
         store_value(s, id, v);
@@ -162,15 +228,15 @@ impl Session {
     /// registry's order.
     pub fn builtin_params(&self, uid: Id) -> Vec<(u32, f32)> {
         let Some((_, _, s)) = self.find_builtin(uid) else { return Vec::new() };
-        let Some(info) = fx::find(&s.plugin_id) else { return Vec::new() };
-        info.params.iter().map(|p| (p.id, value_of(s, p))).collect()
+        let Some((_, specs)) = builtin_spec(&s.plugin_id) else { return Vec::new() };
+        specs.iter().map(|p| (p.id, value_of(s, p))).collect()
     }
 
     /// A parameter's value normalized to 0..1, as automation lanes hold it.
     pub(super) fn builtin_normalized(&self, uid: Id, id: u32) -> Option<f32> {
         let (_, _, s) = self.find_builtin(uid)?;
-        let info = fx::find(&s.plugin_id)?;
-        let spec = info.param(id)?;
+        let (_, specs) = builtin_spec(&s.plugin_id)?;
+        let spec = specs.iter().find(|p| p.id == id)?;
         Some(to_normalized(spec, value_of(s, spec)))
     }
 
@@ -178,7 +244,7 @@ impl Session {
     /// recording it.
     pub(super) fn set_builtin_normalized(&mut self, uid: Id, id: u32, norm: f32) {
         let Some((track, slot, s)) = self.find_builtin(uid) else { return };
-        let Some(spec) = fx::find(&s.plugin_id).and_then(|i| i.param(id).copied()) else { return };
+        let Some(spec) = builtin_spec(&s.plugin_id).and_then(|(_, specs)| specs.iter().find(|p| p.id == id).copied()) else { return };
         let v = to_plain(&spec, norm);
         if let Some(Some(s)) = self.slot_ref(track, slot) {
             store_value(s, id, v);
@@ -190,9 +256,8 @@ impl Session {
     /// An instance's parameters for the automation lane picker (None if `uid` isn't one).
     pub(super) fn builtin_param_infos(&self, uid: Id) -> Option<Vec<ParamInfo>> {
         let (_, _, s) = self.find_builtin(uid)?;
-        let info = fx::find(&s.plugin_id)?;
-        let infos = info
-            .params
+        let (_, specs) = builtin_spec(&s.plugin_id)?;
+        let infos = specs
             .iter()
             .map(|p| {
                 let (steps, units) = match p.kind {
@@ -208,7 +273,7 @@ impl Session {
 
     pub(super) fn builtin_param_name(&self, uid: Id, id: u32) -> Option<String> {
         let (_, _, s) = self.find_builtin(uid)?;
-        fx::find(&s.plugin_id)?.param(id).map(|p| p.name.to_string())
+        builtin_spec(&s.plugin_id)?.1.iter().find(|p| p.id == id).map(|p| p.name.to_string())
     }
 
     /// Keys an insert's side-chain (a built-in effect's, or a VST3's aux input) from `source`'s
@@ -302,10 +367,10 @@ impl Session {
         tracks.chain(p.master.inserts.iter()).flatten().any(|s| self.fx.get(&s.uid).map(|f| f.latency() != used(s.uid)).unwrap_or(false))
     }
 
-    /// The longest tail of a track's built-in effects (seconds).
+    /// The longest tail of a track's built-in effects and instrument (seconds).
     pub(super) fn builtin_tail_secs(&self, track: Id) -> f64 {
         let Some(t) = self.project.track(track) else { return 0.0 };
-        t.inserts.iter().flatten().filter_map(|s| self.fx.get(&s.uid)).map(|f| f.tail_secs() as f64).fold(0.0, f64::max)
+        t.inserts.iter().flatten().chain(t.instrument.iter()).filter_map(|s| self.fx.get(&s.uid)).map(|f| f.tail_secs() as f64).fold(0.0, f64::max)
     }
 
     /// Undo and redo for an instance that stays loaded: sends the side-chain and a built-in
@@ -318,9 +383,9 @@ impl Session {
         if had.sidechain_pre != want.sidechain_pre {
             self.send(Cmd::SidechainPre { track, uid: want.uid, pre: want.sidechain_pre });
         }
-        let Some(info) = fx::find(&want.plugin_id) else { return };
+        let Some((_, specs)) = builtin_spec(&want.plugin_id) else { return };
         if had.params != want.params {
-            for p in info.params {
+            for p in specs {
                 let v = value_of(want, p);
                 if value_of(had, p) != v {
                     self.send(Cmd::FxParam { track, uid: want.uid, id: p.id, value: v });
@@ -339,9 +404,10 @@ impl Session {
         let Some((automation, inserts)) = (if track == MASTER_ID { Some((&m.automation, &m.inserts)) } else { self.project.track(track).map(|t| (&t.automation, &t.inserts)) }) else { return };
         let driven = |uid: Id, id: u32| reads && automation.iter().any(|l| !l.points.is_empty() && matches!(l.param, AutoParam::Plugin { uid: u, param, .. } if u == uid && param == id));
         let mut cmds = Vec::new();
-        for s in inserts.iter().flatten() {
-            let Some(info) = fx::find(&s.plugin_id) else { continue };
-            for p in info.params.iter().filter(|p| !driven(s.uid, p.id)) {
+        let instrument = if track == MASTER_ID { None } else { self.project.track(track).and_then(|t| t.instrument.as_ref()) };
+        for s in inserts.iter().flatten().chain(instrument) {
+            let Some((_, specs)) = builtin_spec(&s.plugin_id) else { continue };
+            for p in specs.iter().filter(|p| !driven(s.uid, p.id)) {
                 cmds.push(Cmd::FxParam { track, uid: s.uid, id: p.id, value: value_of(s, p) });
             }
         }

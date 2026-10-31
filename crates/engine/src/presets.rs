@@ -1,7 +1,8 @@
-//! Presets for the Channel EQ and the built-in effects, shared by every project.
+//! Presets for the Channel EQ, the built-in effects and the built-in instruments, shared by every
+//! project.
 //!
-//! - Factory presets ship with the code: `fx::factory_presets` for the effects and
-//!   [`eq_factory`] for the Channel EQ.
+//! - Factory presets ship with the code: `fx::factory_presets` for the effects,
+//!   `InstrumentInfo::presets` for the instruments and [`eq_factory`] for the Channel EQ.
 //! - User presets are files, `<config dir>/presets/<effect>/<name>.json` (the effect id with
 //!   anything unsafe in a file name replaced, so "builtin:deesser" becomes "builtin_deesser").
 //!   Each holds its name, effect id and format version alongside the settings, and is written
@@ -141,7 +142,11 @@ pub fn factory(effect: &str) -> Vec<Preset> {
         return eq_factory().into_iter().map(|(name, eq)| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: Vec::new(), eq: Some(eq) }).collect();
     }
     let preset = |name: &str, values: &[(u32, f32)]| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: values.to_vec(), eq: None };
-    // Every built-in effect starts with its defaults, as Logic's "#default".
+    // Every built-in effect and instrument starts with its defaults, as Logic's "#default".
+    if let Some(info) = crate::instrument::find(effect) {
+        let own = info.presets.iter().map(|f| preset(f.name, f.values));
+        return std::iter::once(preset(DEFAULT, &[])).chain(own).collect();
+    }
     let default = crate::fx::find(effect).map(|_| preset(DEFAULT, &[]));
     default.into_iter().chain(crate::fx::factory_presets(effect).iter().map(|f| preset(f.name, f.values))).collect()
 }

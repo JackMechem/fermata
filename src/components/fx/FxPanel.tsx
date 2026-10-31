@@ -11,6 +11,7 @@ import { CHANNEL_EQ, findFxSlot, fxInfo } from "../../fxHost";
 import { onTick, useStore } from "../../store";
 import { EqPanel } from "../Eq";
 import { FxControl, FxMeter, FxSideChain, isReductionMeter } from "./common";
+import { InstrumentPanel } from "./Instrument";
 import { PresetButton, type Preset } from "./Presets";
 import { FxLearnContext } from "../../learn";
 
@@ -26,6 +27,7 @@ const stripName = (project: Project | undefined, track: Id) => (track === MASTER
 export function usePanelTitle(key: PanelKey): { name: string; track: string; type: string } | null {
   const project = useStore((s) => s.snap?.project);
   useStore((s) => s.fxList);
+  useStore((s) => s.instList);
   const ref = parseKey(key);
   if (!ref || !project) return null;
   if (ref.kind === "eq") {
@@ -69,6 +71,7 @@ export function PanelTools({ panelKey }: { panelKey: PanelKey }) {
 function useFx(uid: Id): { at: NonNullable<ReturnType<typeof findFxSlot>>; info: FxInfo } | null {
   const project = useStore((s) => s.snap?.project);
   useStore((s) => s.fxList);
+  useStore((s) => s.instList);
   const at = findFxSlot(project, uid);
   const info = fxInfo(at?.plugin.plugin_id);
   return at && info ? { at, info } : null;
@@ -161,7 +164,7 @@ export function FxPanelContent({ uid }: { uid: Id }) {
     act("automation_touch", { track, param: { type: "plugin", value: { uid, param: id, name: `${at.plugin.name}: ${spec?.name ?? id}` } }, touching: on });
   };
   const props: FxPanelProps = { info, track, uid, values, set, touch, meters, setMany };
-  const Panel = FX_PANELS[info.id] ?? GenericPanel;
+  const Panel = FX_PANELS[info.id] ?? (info.sections?.length ? InstrumentPanel : GenericPanel);
   return (
     <div className={"fx-body" + (at.plugin.bypass ? " bypassed" : "")}>
       {/* Lets every control offer Learn MIDI Assignment for its parameter. */}

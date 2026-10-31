@@ -1,7 +1,7 @@
 // Hosting built-in effects in the UI: the registry, their panel windows, the plug-in and Channel
 // EQ clipboard, and the slot right-click menu.
-import { act, BUILTIN_SYNTH, call, EQ_SLOT, INSTRUMENT_SLOT, MASTER_ID, type ChannelEq, type Id, type PluginSlot, type Project } from "./api";
-import type { FxInfo } from "./fx";
+import { act, BUILTIN_SYNTH, call, EQ_SLOT, INSTRUMENT_SLOT, MASTER_ID, type ChannelEq, type Id, type PluginSlot, type Project, type Track } from "./api";
+import type { FxInfo, InstInfo } from "./fx";
 import type { MenuItem } from "./components/Menu";
 import { getState, setState } from "./store";
 import { closePanel, fxKey, openPanel, togglePanel } from "./fxDockState";
@@ -11,21 +11,26 @@ import { sideChainMenu } from "./sideChain";
 export const CHANNEL_EQ = "builtin:channel-eq";
 
 export async function loadFxList() {
-  const list = await call<FxInfo[]>("list_builtin_effects");
+  const [list, instruments] = await Promise.all([call<FxInfo[]>("list_builtin_effects"), call<InstInfo[]>("list_builtin_instruments")]);
   if (list) setState({ fxList: list });
+  if (instruments) setState({ instList: instruments });
 }
 
+/** A built-in effect's or instrument's registry entry. */
 export function fxInfo(pluginId: string | undefined): FxInfo | undefined {
-  return pluginId ? getState().fxList.find((f) => f.id === pluginId) : undefined;
+  if (!pluginId) return undefined;
+  const st = getState();
+  return st.fxList.find((f) => f.id === pluginId) ?? st.instList.find((f) => f.id === pluginId);
 }
 
-/** Built-in effects (not the built-in synth) have a panel. */
-export const isBuiltinFx = (pluginId: string | undefined) => !!fxInfo(pluginId);
+/** Built-in effects and instruments with settings have a panel; Fermata Synth has none. */
+export const isBuiltinFx = (pluginId: string | undefined) => !!fxInfo(pluginId)?.params.length;
 
-/** Where a built-in effect instance sits: its strip (MASTER_ID for Stereo Out) and slot. */
+/** Where a built-in instance sits: its strip (MASTER_ID for Stereo Out) and slot. */
 export function findFxSlot(project: Project | undefined, uid: Id): { track: Id; slot: number; plugin: PluginSlot } | null {
   if (!project) return null;
   for (const t of project.tracks) {
+    if (t.instrument?.uid === uid) return { track: t.id, slot: INSTRUMENT_SLOT, plugin: t.instrument };
     const i = t.inserts.findIndex((s) => s?.uid === uid);
     if (i >= 0) return { track: t.id, slot: i, plugin: t.inserts[i]! };
   }
@@ -51,8 +56,8 @@ export function toggleFxPanel(uid: Id) {
 export async function loadPlugin(track: Id, slot: number, pluginId: string, open = true) {
   const snap = await act("set_plugin", { track, slot, pluginId, open });
   if (!snap || !open || !isBuiltinFx(pluginId)) return;
-  const inserts = track === MASTER_ID ? snap.project.master.inserts : snap.project.tracks.find((t) => t.id === track)?.inserts;
-  const uid = inserts?.[slot]?.uid;
+  const strip = track === MASTER_ID ? snap.project.master : snap.project.tracks.find((t) => t.id === track);
+  const uid = slot === INSTRUMENT_SLOT ? (strip as Track | undefined)?.instrument?.uid : strip?.inserts[slot]?.uid;
   if (uid !== undefined) openFxPanel(uid);
 }
 
@@ -108,8 +113,8 @@ export function slotMenu(track: Id, slot: number, plugin: PluginSlot | null): Me
   // Like Session::find_plugin: a plug-in found at another path matches by its class id.
   const cid = (id: string) => id.slice(id.lastIndexOf("|") + 1).toLowerCase();
   const isInstrument = (id: string) => {
-    if (id === BUILTIN_SYNTH) return true;
-    const { plugins } = getState();
+    const { plugins, instList } = getState();
+    if (id === BUILTIN_SYNTH || instList.some((i) => i.id === id)) return true;
     const desc = plugins.find((p) => p.id === id) ?? (id.includes("|") ? plugins.find((p) => p.id.includes("|") && cid(p.id) === cid(id)) : undefined);
     return !!desc?.is_instrument;
   };

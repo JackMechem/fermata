@@ -42,7 +42,7 @@ impl Plugin {
     fn sleep(&mut self) {
         match self {
             Plugin::Vst(p) => p.suspend(),
-            Plugin::Synth(s) => s.silence(),
+            Plugin::Instrument(i) => i.sleep(),
             Plugin::Builtin(b) => b.sleep(),
         }
     }

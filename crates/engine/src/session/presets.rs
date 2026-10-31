@@ -23,7 +23,7 @@ impl Session {
         Ok(copy)
     }
 
-    fn slot_get(&self, track: Id, slot: usize) -> Option<&PluginSlot> {
+    pub fn slot_get(&self, track: Id, slot: usize) -> Option<&PluginSlot> {
         if track == MASTER_ID {
             return self.project.master.inserts.get(slot)?.as_ref();
         }
@@ -41,7 +41,7 @@ impl Session {
     pub fn paste_plugin(&mut self, tracks: &[Id], slot: usize, copy: &PluginSlot) -> Result<()> {
         self.check_unfrozen(tracks)?;
         let builtin_fx = crate::fx::find(&copy.plugin_id).is_some();
-        let instrument = if copy.plugin_id == BUILTIN_SYNTH {
+        let instrument = if crate::instrument::find(&copy.plugin_id).is_some() {
             true
         } else if builtin_fx {
             false
@@ -131,8 +131,8 @@ impl Session {
         if s.plugin_id != p.effect {
             return Err(anyhow!("\"{}\" is a preset for another plug-in", p.name));
         }
-        let info = crate::fx::find(&s.plugin_id).ok_or_else(|| anyhow!("{} has no presets here", s.name))?;
-        s.params = info.params.iter().map(|spec| (spec.id, p.values.iter().find(|v| v.0 == spec.id).map(|v| crate::dsp::builtin_clamp(spec, v.1)).unwrap_or(spec.default))).collect();
+        let (_, specs) = builtin::builtin_spec(&s.plugin_id).ok_or_else(|| anyhow!("{} has no presets here", s.name))?;
+        s.params = specs.iter().map(|spec| (spec.id, p.values.iter().find(|v| v.0 == spec.id).map(|v| crate::dsp::builtin_clamp(spec, v.1)).unwrap_or(spec.default))).collect();
         let (uid, values) = (s.uid, s.params.clone());
         for (id, value) in values {
             self.send(Cmd::FxParam { track, uid, id, value });
@@ -144,7 +144,7 @@ impl Session {
         Ok(())
     }
 
-    /// Saves the settings of a built-in effect's slot (or the strip's Channel EQ, with
+    /// Saves the settings of a built-in effect's or instrument's slot (or the strip's Channel EQ, with
     /// [`EQ_SLOT`]) as a user preset. Returns the name it was saved under.
     pub fn save_preset(&self, track: Id, slot: usize, name: &str, overwrite: bool) -> Result<String> {
         let p = if slot == EQ_SLOT {
@@ -152,7 +152,7 @@ impl Session {
             Preset { name: name.into(), effect: CHANNEL_EQ.into(), version: 0, values: Vec::new(), eq: Some(eq) }
         } else {
             let s = self.slot_get(track, slot).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
-            if crate::fx::find(&s.plugin_id).is_none() {
+            if !builtin::is_builtin(&s.plugin_id) {
                 return Err(anyhow!("Presets are saved in {}'s own window", s.name));
             }
             Preset { name: name.into(), effect: s.plugin_id.clone(), version: 0, values: self.builtin_params(s.uid), eq: None }

@@ -15,6 +15,7 @@ pub mod dsp;
 pub mod eq;
 pub mod fades;
 pub mod fx;
+pub mod instrument;
 pub mod midi;
 pub mod midi_io;
 pub mod model;
@@ -29,6 +30,7 @@ pub mod smf;
 pub mod strip_settings;
 pub mod strip_silence;
 pub mod synth;
+pub mod synth_dsp;
 #[cfg(target_os = "linux")]
 pub mod sysvol;
 pub mod takes;

@@ -15,7 +15,6 @@ use crate::eq::{EqCoeffs, EqState};
 use crate::fades::FadeLaw;
 use crate::model::{AutoMode, CcEvent, CcKind, Id, InputSel, InstrumentOutput, Note, TrackKind, CC_KINDS, INSERT_SLOTS, MASTER_ID, SEND_SLOTS};
 use crate::prefs::{ClickSettings, ClickSound};
-use crate::synth::BasicSynth;
 use crate::tempo::{GridPoint, TempoMap};
 
 mod offline;
@@ -24,7 +23,7 @@ use offline::Role;
 mod pdc;
 pub use pdc::{DelayLine, PdcGlobal, PdcParams, INSTRUMENT_BIT};
 mod builtin;
-pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared};
+pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared, InstrumentDsp};
 pub(crate) mod auto;
 use auto::MasterAuto;
 mod track_off;
@@ -128,7 +127,8 @@ impl Default for EngineStatus {
 
 pub enum Plugin {
     Vst(Box<PluginProcessor>),
-    Synth(Box<BasicSynth>),
+    /// A built-in instrument (see `crate::instrument`).
+    Instrument(Box<InstrumentDsp>),
     /// A built-in effect (see `crate::fx`).
     Builtin(Box<BuiltinDsp>),
 }
@@ -151,14 +151,16 @@ fn contain(l: &mut [f32], r: &mut [f32]) -> bool {
     bad
 }
 
-/// Contains what a plug-in just produced, and reports it. A built-in effect that went
-/// unstable is also cleared, so it recovers.
+/// Contains what a plug-in just produced, and reports it. A built-in effect or instrument that
+/// went unstable is also cleared, so it recovers.
 fn check_output(status: &EngineStatus, ins: &mut InsertDsp, l: &mut [f32], r: &mut [f32]) {
     if contain(l, r) {
         status.bad_audio_uid.store(ins.uid, Ordering::Relaxed);
         status.bad_audio.fetch_add(1, Ordering::Relaxed);
-        if let Plugin::Builtin(b) = &mut ins.plugin {
-            b.reset();
+        match &mut ins.plugin {
+            Plugin::Builtin(b) => b.reset(),
+            Plugin::Instrument(i) => i.reset(),
+            Plugin::Vst(_) => {}
         }
     }
 }
@@ -210,17 +212,18 @@ impl Plugin {
     fn process(&mut self, l: &mut [f32], r: &mut [f32], midi: &[MidiEvent], t: &TransportInfo) {
         match self {
             Plugin::Vst(p) => p.process(l, r, midi, t),
-            Plugin::Synth(s) => s.process(l, r, midi),
+            Plugin::Instrument(i) => i.process(l, r, midi, &fx_context(t)),
             Plugin::Builtin(b) => b.process(l, r, None, &fx_context(t)),
         }
     }
 
-    /// Queues an automation value (normalized 0..1) for the next block (the built-in synth has
-    /// no parameters). A built-in effect takes the block's first value and glides on its own.
+    /// Queues an automation value (normalized 0..1) for the next block. A built-in effect or
+    /// instrument takes the block's first value and glides on its own.
     fn set_param(&mut self, id: u32, offset: i32, value: f64) {
         match self {
             Plugin::Vst(p) => p.queue_param(id, offset, value),
             Plugin::Builtin(b) if offset == 0 => b.set_normalized(id, value as f32),
+            Plugin::Instrument(i) if offset == 0 => i.set_normalized(id, value as f32),
             _ => {}
         }
     }
@@ -1292,13 +1295,13 @@ impl Engine {
         })
     }
 
-    /// Built-in synths stop dead, release tails included (offline renders start and end with
-    /// this, so one render's tail never reaches the next). VST3 instruments get note-offs from
-    /// `flush_all_notes`, as before.
+    /// Built-in instruments stop dead, release tails included (offline renders start and end
+    /// with this, so one render's tail never reaches the next). VST3 instruments get note-offs
+    /// from `flush_all_notes`, as before.
     fn silence_instruments(&mut self) {
         for t in &mut self.tracks {
-            if let Some(InsertDsp { plugin: Plugin::Synth(s), .. }) = &mut t.instrument {
-                s.silence();
+            if let Some(InsertDsp { plugin: Plugin::Instrument(i), .. }) = &mut t.instrument {
+                i.reset();
             }
         }
     }
@@ -1483,6 +1486,13 @@ impl Engine {
                 } else if let Some(t) = self.track_mut(track) {
                     t.inserts.iter_mut().for_each(set);
                     set(&mut t.instrument);
+                    // While bypassed it hears no note-offs: what it holds ends now, or it would
+                    // come back still holding them.
+                    if let Some(InsertDsp { uid: u, plugin: Plugin::Instrument(i), .. }) = &mut t.instrument {
+                        if bypass && *u == uid {
+                            i.all_notes_off();
+                        }
+                    }
                 }
             }
             Cmd::RecordSink { track, sink } => {
@@ -1578,6 +1588,8 @@ impl Engine {
             Cmd::FxParam { track, uid, id, value } => {
                 if let Some(b) = self.builtin_mut(track, uid) {
                     b.set(id, value);
+                } else if let Some(InsertDsp { plugin: Plugin::Instrument(i), .. }) = self.track_mut(track).and_then(|t| t.instrument.as_mut()).filter(|i| i.uid == uid) {
+                    i.set(id, value);
                 }
             }
             Cmd::Sidechain { track, uid, source } => {
@@ -2198,8 +2210,8 @@ fn run_strip<R: Routes>(cx: &BlockCtx<'_>, ti: usize, t: &mut TrackDsp, sc: &mut
                     t.midi.push(MidiEvent { offset: 0, data: [0xE0, 0, 64] });
                     t.cc_sent = false;
                 }
-                if let Some(InsertDsp { plugin: Plugin::Synth(s), .. }) = &mut t.instrument {
-                    s.all_notes_off();
+                if let Some(InsertDsp { plugin: Plugin::Instrument(i), .. }) = &mut t.instrument {
+                    i.all_notes_off();
                 }
                 t.flush_notes = false;
             }

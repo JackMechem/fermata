@@ -8,6 +8,14 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Built-in instruments and Fermata Tre:** a framework for instruments with settings, on the same
+  footing as the built-in effects: a panel with sections and a small keyboard, docked or floating, factory
+  and user presets, automation, MIDI learn, undo, saving, Freeze, Bounce and copy and paste. The first is
+  Fermata Tre, a three-oscillator monophonic synth with a mixer that overdrives, a 24 dB transistor-ladder
+  filter that self-oscillates in tune, two contours with a Decay switch, glide, oscillator drift, and osc 3 and noise as
+  modulators, plus Unison and Poly. Modelled on the Minimoog Model D's documented behaviour (no affiliation), with
+  19 factory presets; it hasn't been compared with the hardware. Fermata Synth stays the default for new instrument
+  tracks, and its projects render exactly as before.
 - **Multi-core track processing:** independent tracks play at the same time on a small pool of
   real-time threads, with the audio thread working too, so a heavy project finishes each buffer
   sooner. Settings › Audio › Processing Threads chooses Automatic (the default) or a number; 1 keeps
@@ -54,6 +62,9 @@ All notable changes to Fermata are recorded here. The format follows
   a block has gone over 100%, with a count in the tooltip, until you click the meter.
 
 ### Fixed
+
+- Undoing or redoing the bypass of an instrument now reaches the running one, and a built-in instrument
+  that gets bypassed lets go of the notes it was holding, rather than keeping them when it comes back.
 
 - Holding a key no longer repeats toggles and one-shot commands: holding Space started and
   stopped the transport over and over. Moving, zooming and nudging still repeat.

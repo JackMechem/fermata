@@ -756,7 +756,7 @@ the pool for `parallel_check` and `soak_check`, so the route is tested for ident
 | `t.rec` (recording ring) | Its strip | One producer per track. |
 | Bad-audio containment (`check_output`) | Each plug-in, its strip | Works on the strip's own buffers and effect. |
 | Effect ticks (`FxShared`) | Each effect | Atomics, per effect. |
-| Global state in plug-ins | Inside third-party code | As in any host that plays instances in parallel, which is their concern. No mutable globals in `fx/`, `synth.rs` or `vst3-host`'s processing. |
+| Global state in plug-ins | Inside third-party code | As in any host that plays instances in parallel, which is their concern. No mutable globals in `fx/`, `instrument/`, `synth_dsp/`, `synth.rs` or `vst3-host`'s processing; an instrument's randomness comes from its slot's seed. |
 
 The `unsafe` is in `parallel.rs` and `pool.rs`, each with its argument beside it: `StripJob::run` and
 `Deferred::dep` (who holds which strip), the job cell (only written with no block open), and
@@ -1511,7 +1511,7 @@ shows a generic panel. `fx_check` covers new registry entries without changes.
 ### In the engine
 
 `dsp/builtin.rs`: `Plugin::Builtin(Box<BuiltinDsp>)` sits next to `Plugin::Vst` and
-`Plugin::Synth` in an insert slot, so bypass, Low Latency Mode, `contain()` and reordering treat
+`Plugin::Instrument` in a slot, so bypass, Low Latency Mode, `contain()` and reordering treat
 it like any plug-in.
 
 - `BuiltinDsp` clamps values to their spec, and converts automation's normalized 0..1 values
@@ -1563,6 +1563,128 @@ it like any plug-in.
 - Commands: `list_presets`, `get_preset`, `load_preset` (one undo step), `save_preset`,
   `rename_preset`, `delete_preset`. The Channel EQ is addressed as slot `EQ_SLOT`
   (`usize::MAX - 1`). The pop-up is `src/components/fx/Presets.tsx`.
+
+### Built-in instruments
+
+`crates/engine/src/instrument/mod.rs` is the instrument counterpart of `fx/mod.rs`, and shares what it
+can: `ParamSpec`, `FactoryPreset`, `FxContext`, presets, `FxShared`, the panels' host.
+
+- **`Instrument`**: `set_param`, `param`, `process(l, r, midi, ctx)` (overwrites the block, with MIDI
+  sorted by sample offset, and `Midi::parse` to decode it), `all_notes_off` (tails ring on; the engine
+  calls it when the transport stops or jumps), `reset` (everything played is forgotten, MIDI
+  controllers and random generators included, as a new instance would be), and optionally `tail_secs`
+  and `meters`. The real-time rules are the effects': nothing that allocates, locks or blocks in any of
+  these. Parameter ids are stable forever. There is no latency: instruments have none to report.
+- **`InstrumentInfo`**: the registry entry: id (`builtin:tre`), name, menu `group`, `about`, `params`,
+  `sections` (the panel's layout), `meters`, `presets` and `new(sample_rate, seed)`. `seed` is the slot's
+  id, saved in the project, so an instance's analog differences stay with it across reopening, and a
+  duplicate gets its own.
+- **In the engine**: `Plugin::Instrument(Box<InstrumentDsp>)` (`dsp/builtin.rs`), `BuiltinDsp`'s
+  sibling. `Cmd::FxParam` and automation reach it the same way. `silence_instruments` calls `reset`
+  around offline renders; Track Off calls it through `Plugin::sleep`; bypassing one lets go of its
+  notes, since it won't hear their note-offs.
+- **In the session** (`session/builtin.rs`): an instrument slot is addressed as slot `usize::MAX` (`-1`
+  in the UI's `INSTRUMENT_SLOT`) in `set_builtin_param`, `load_preset`, `save_preset` and the rest.
+  `find_builtin` and `builtin_spec` find instruments and effects alike, so automation, MIDI learn, undo,
+  presets, panels and copy and paste share one path. `is_builtin` is what keeps a built-in from counting as
+  a missing plug-in. `builtin_tail_secs` includes the instrument, for Freeze.
+- **Multi-core**: a track with an instrument counts toward `heavy_width`, the same whichever kind it
+  holds. An instrument touches nothing but itself, and runs under its strip's task.
+- **In the UI**: `list_builtin_instruments` fills `instList` (`src/store.ts`). `fxInfo` looks through
+  both lists; `isBuiltinFx` is true for what has parameters, so Fermata Synth still has no panel.
+  `InstrumentPanel` (`src/components/fx/Instrument.tsx`) shows the sections and a keyboard, unless
+  `FX_PANELS` has a custom panel for that id. The keyboard selects the track and plays through
+  `midi_event`, the Musical Typing path.
+
+**Fermata Synth** stays as it was: `basic.rs` wraps `BasicSynth` without changing it. Old projects
+render bit for bit as before. It has a quirk the contract forbids for new instruments: `silence` keeps
+the mod wheel, expression and vibrato LFO, the LFO running free even while stopped, so with the wheel
+up its renders differ from one to the next.
+
+#### Shared DSP (`synth_dsp/`)
+
+Measured by the tests in each file, at 48 kHz unless it says otherwise.
+
+| Part | What it is | Measured |
+|---|---|---|
+| `osc::Osc` | Saw, reverse saw, pulse with PWM, triangle of any symmetry, sine; hard sync. A naive wave with 4-point B-spline polyBLEP and polyBLAMP residuals over a 2-sample delay, so an event the oscillator couldn't foresee (sync, PWM) corrects the same way. f64 phase. | Aliasing in the audio band, against the fundamental, run at 2x through `resample`: saw -87 dB at 1 kHz, -83 at 2 kHz, -82 at 4 kHz, -87 at 8 kHz. Pulse -90, -87, -82, -105. Triangle -124, -115, -107, -119. A naive saw at 4 kHz is -17 dB; polyBLEP at 1x is -41 dB. Hard sync at 1 kHz, ratio 2.37: -75 dB. Tuning: under 0.001 cents in every test (a note-to-Hz accuracy of 0.002 cents). |
+| `osc::Noise` | White, and pink by Paul Kellet's filter, from a seed. | |
+| `filter::Ladder` | A 4-pole transistor ladder, ZDF, Mystran's linearized tanh per stage, per-stage tolerances, behind the `ZdfFilter` trait a 2-pole state-variable or a diode ladder would implement. Trimmed so self-oscillation stays in tune as it saturates, by a fit to measurements here. | Self-oscillation at k = 5, 2x: within 3.4 cents from note 24 to 96 (after the trim; it would be 70 cents flat). 24 dB/octave, -12 dB at the cutoff, flat below. No NaN or runaway at any setting, at 1000 times full scale with the cutoff modulated at the audio rate. |
+| `env::Envelope`, `EnvShape` | RC curves: attack charging toward 1.3 and stopping at 1, decay and release exponential, times to 95 %. Retrigger from the current level. | Times within 2 to 3 % from 1 ms to 10 s. |
+| `lfo::Lfo` | Sine, triangle, saw, square, sample-and-hold. Hz, or per beat locked to the song position while playing. | Locks on the beat, same values for any block size at a steady tempo. |
+| `alloc::VoiceAllocator` | Poly with stealing (free, then the same note ringing, then longest released, then oldest held). Mono with low, last or high priority, single or multi trigger. Unison in whole groups. The sustain pedal. | State-machine tests, in the file. |
+| `analog` | `Rng`, `Drift` (a slow random walk), `Tolerance` (one voice's fixed differences), `sub_seed`. All from seeds: no global, no clock. | The same seed gives the same stream. |
+| `resample::Decimator2x` | An 8-coefficient polyphase allpass half-band, no latency to report (about 2.6 output samples at low frequencies with the oscillator's delay, 54 µs at 48 kHz). | Flat to 0.225 of the high rate within 0.05 dB, stop band -86.7 dB. |
+| `smooth` | `Smoothed` (a one-pole lag that lands exactly on its target), `Glide`. | |
+
+Stealing: the allocator says `stolen` and the voice decides. A voice with free-running oscillators
+needs nothing (`env.rs` retriggers from the current level, and the oscillators' and filter's state carry
+on). A voice whose phase jumps, like a sampler's, should keep spare voices and fade the stolen one.
+
+#### Fermata Tre
+
+`instrument/tre/`: modelled on the Minimoog Model D. Fermata isn't affiliated with Moog Music or any
+maker, and nothing in the product uses their names. **It hasn't been compared with the hardware, nor
+heard: everything below is from documented behaviour and measured here on its own terms.**
+
+Modelled from what's documented about the instrument:
+
+- Three oscillators with the 32', 16', 8', 4', 2' and Lo ranges and the panel's waves (osc 3's list
+  has reverse saw instead of the narrow pulse), osc 2 and 3 tunable ±7 semitones, and osc 3 off the
+  keyboard as a modulator.
+- The mixer: levels and switches, white or pink noise, and an overdriving sum.
+- The feedback trick, patching the output back into the external input.
+- A 24 dB ladder that loses bass as emphasis rises, self-oscillates at high emphasis, and two
+  keyboard-tracking switches of 1/3 and 2/3.
+- Two contours sharing the Decay switch: release at the Decay time, or at once.
+- Mod Mix between osc 3 and noise, through the wheel to the two routing switches, at the audio rate.
+- Glide as an RC lag on the keyboard voltage.
+- Low-note priority, single trigger. Free-running oscillators.
+
+Guesses, since what's documented doesn't say, all named constants in `tre/mod.rs` and `voice.rs`: the
+shark wave's proportions (its peak at 80 %) and the pulse widths (30 % and 10 %); the Lo range (6 octaves
+below 8', a frequency knob 4 times as wide); the modulation's reach (±12 semitones at the oscillators,
+±30 at the filter) and the wheel's squared response; the contour attack's target (1.3); how hard the
+mixer's sum and the feedback drive (`MIX_GAIN`, `FEEDBACK_GAIN`); the size of drift and tolerances;
+the fast release (12 ms, a figure chosen not to click); Emphasis reaching self-oscillation at 8. Contour
+ranges are the commonly cited 1 ms to 10 s and 4 ms to 24 s.
+
+Added to the instrument: Unison and Poly (up to 8 voices), note priority and multi trigger, velocity
+and aftertouch routings, Mod Amount (where the wheel rests, so a preset can have its modulation on). All
+off by default, except what a preset turns on.
+
+**Measured:**
+
+- **Per voice** (`instrument_bench`, release build, i7-13700KF, block time against the buffer's
+  duration): one voice with all three oscillators, noise and resonance is 87 µs at 512 samples and 21.5 µs at
+  128, 0.8 % of one core; the same with audio-rate modulation; 8 voices 600 µs and 150 µs, 5.6 %; the
+  worst block at 128 samples with 8 voices 161 to 351 µs from run to run, with other work on the machine. At rest (no notes): nothing. Fermata Synth's one
+  voice, for scale, is 0.05 %. So 16 voices of this kind would be about 11 % of one core: a polyphonic model
+  is plausible, and multi-core shares several of them out. Per sample it's about 85 ns a voice tick at 96 kHz.
+- **Block size:** the same MIDI gives the same bits at 1, 37, 128, 512 and 1024 frames. Parameter edits land
+  at the start of the block they arrive in, and automation takes each block's first value, so those two
+  differ with the buffer size, inaudibly and by the smoothing's lag.
+- **Determinism:** renders repeat bit for bit, also after reopening, and `parallel_check` plays two with
+  drift on, serial against 2, 3, 4 and 8 threads, identical. `rt_alloc_check` plays one through parameter
+  and preset changes and Track Off: 0 allocations.
+- **No clicks**, by the largest sample-to-sample step against the steady note's: 0.85 times at a note-off
+  with the Decay switch off, 1.33 times at a voice steal to a higher note (whose own slope is steeper), 1.4
+  times with volume, cutoff and a mixer level stepping every block.
+- **Aliasing end to end:** a saw at note 96 (2 kHz), filter open, through the saturators: -61 dB.
+
+#### To add a model
+
+1. Write `instrument/<name>.rs` (or a folder, as `tre/`): `pub const PARAMS`, `SECTIONS`, `PRESETS`; a
+   struct implementing `Instrument`; `pub fn info() -> InstrumentInfo`. Build voices from `synth_dsp`.
+2. List `info()` in `instrument::registry()`. That is all: the menus, New Tracks, the Library, panel,
+   presets, automation, MIDI learn, undo, saving, Freeze and copy and paste work from the entry. The
+   `instrument` registry test checks the spec (unique ids, defaults in range, every parameter in a
+   section, presets in range) and that it runs.
+3. Copy `tre/tests.rs` for what yours must hold: tuning, no NaN, block-size independence, reset.
+4. **Naming:** an original name, in the product and presets, with no maker's trademark. The docs may say
+   what it's modelled on, and that it isn't affiliated. `tests/builtinInstruments.test.ts` scans Tre's files
+   for it; add yours.
+5. If it needs a custom layout, register a panel in `FX_PANELS` (`src/fx.ts`). Otherwise `sections` will do.
 
 ### Clipboard and moving plug-ins
 
@@ -1778,7 +1900,9 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `audio_file.rs` | Writing bounces: `AudioFormat`, `BitDepth`, the shared dithering `Quantizer`. |
 | `audio_file/wav.rs`, `aiff.rs`, `flac.rs` | The writers: WAV through hound, AIFF and AIFF-C by hand, FLAC through `flacenc`. |
 | `eq.rs` | Channel EQ biquads (f64), coefficient computation, the analyzer spectrum. |
-| `synth.rs` | Fermata Synth, the built-in polyphonic instrument. |
+| `synth.rs` | Fermata Synth, the original small polyphonic instrument. Unchanged since it was written: old projects depend on its every sample. |
+| `instrument/` | Built-in instruments: the `Instrument` contract and registry (`mod.rs`), Fermata Synth in the registry (`basic.rs`), Fermata Tre (`tre/`). See [Built-in instruments](#built-in-instruments). |
+| `synth_dsp/` | Parts for synth models: `osc`, `filter`, `env`, `lfo`, `alloc`, `analog`, `resample`, `smooth`. |
 | `transients.rs` | Onset detection for transient markers and Split at Transients. |
 | `vca.rs` | VCA faders: the offset and mute a strip gets from its VCA chain, loop checks. |
 | `sysvol.rs` | Linux only: the sound server's input volume for the recording device (input level check). |
@@ -1947,11 +2071,12 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `GlobalTracks.tsx` | The global tracks: the Arrangement, Tempo and Signature lanes. |
 | `ArrangementTrack.tsx` | The Arrangement track's lane: sections, the name pop-up, menus, move, copy and resize drags. |
 | `Overview.tsx` | The overview strip under the tracks (in place of the horizontal scroll bar): cached region layer, visible-area box, playhead, scroll and zoom drags. |
-| `fx/FxPanel.tsx` | A plug-in panel's content and header controls, wherever it shows; the generic panel for effects without their own. |
+| `fx/FxPanel.tsx` | A plug-in panel's content and header controls, wherever it shows, effect or instrument; the generic panel for effects without their own. |
 | `fx/FxDock.tsx` | The bottom section's docked panels, a tab each. |
 | `fx/FxWindow.tsx` | Floating panel windows for built-in effects and the Channel EQ. |
 | `fx/common.tsx` | Shared panel controls: knobs, toggles, choices, meters, the side-chain pop-up. |
-| `fx/Presets.tsx` | The preset pop-up (built-in effects and Channel EQ). |
+| `fx/Presets.tsx` | The preset pop-up (built-in effects, instruments and Channel EQ). |
+| `fx/Instrument.tsx` | The panel a built-in instrument gets from its spec: sections and a small keyboard (`pianoKeys.ts`, pure, tested). |
 | `fx/Compressor.tsx`, `Limiter.tsx`, `Gate.tsx`, `DeEsser.tsx`, `Reverb.tsx`, `Delay.tsx`, `Tuner.tsx`, `Loudness.tsx`, `Gain.tsx`, `LinearPhaseEq.tsx` | Each effect's panel. |
 | `fx/Modulation.tsx`, `Distortion.tsx` | The Chorus, Flanger, Phaser and Tremolo panels; the Distortion and Overdrive panels. |
 | `DetachedWindow.tsx` | The root of a detached panel's window. |

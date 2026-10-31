@@ -186,6 +186,7 @@ hosting, automation and undo. This stage is mostly done.
 - [x] Record audio and a software instrument at the same time (p. 209)
 - [x] MIDI Thru on or off; velocity scaling (as played, soft, hard, fixed) (p. 1057, 1087)
 - [x] Built-in Fermata Synth, so instrument tracks make sound without a plug-in
+- [x] Built-in instruments with panels, presets, automation and MIDI learn, like the built-in effects (Fermata Tre)
 
 ### Metronome (p. 216–218)
 
@@ -944,10 +945,12 @@ and Drummer are listed in Stage 3.
 
 ### Bundled instruments (Logic Pro Instruments guide)
 
-Fermata has one: **Fermata Synth**, a small polyphonic synth that responds to pitch bend,
-sustain, modulation and expression.
+Fermata has two so far, on a shared framework for more (`crates/engine/src/instrument`): **Fermata
+Synth**, a small polyphonic synth that responds to pitch bend, sustain, modulation and expression; and
+**Fermata Tre**, a three-oscillator monophonic synth with a transistor-ladder filter, modelled on the
+Minimoog Model D's behaviour (not affiliated, and not compared with the hardware).
 
-- [~] Synthesisers: Alchemy, Retro Synth, ES1, ES2, ES E, ES M, ES P, EFM1, Sculpture, Vocoder (EVOC 20 PolySynth). *Fermata Synth only.*
+- [~] Synthesisers: Alchemy, Retro Synth, ES1, ES2, ES E, ES M, ES P, EFM1, Sculpture, Vocoder (EVOC 20 PolySynth). *Fermata Synth and Fermata Tre (closest to Retro Synth's analog mode).*
 - [ ] Granular synthesis, including Alchemy granular sync (p. 10)
 - [ ] Sample-based instruments: Sampler, Quick Sampler, Sample Alchemy (engines in Stage 3)
 - [ ] Keyboards: Studio Piano, Vintage B3 organ, Vintage Electric Piano, Vintage Clav, Vintage Mellotron

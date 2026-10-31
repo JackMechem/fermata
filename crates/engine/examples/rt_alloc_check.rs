@@ -173,6 +173,8 @@ fn scenario(scratch: &Path, threads: u32) {
     s.set_send(w.inst, 0, Some(daw_engine::model::TrackSend { bus: aux, level_db: -6.0, pre_fader: false, muted: false })).unwrap();
     s.set_plugin(aux, 0, "builtin:reverb").unwrap();
     s.set_plugin(aux, 1, "builtin:delay").unwrap();
+    // A built-in instrument playing notes, with its lane and its costliest path.
+    let tre = add_tre(&mut s);
     s.idle();
     println!("audio: {:?}", s.audio_status.running);
     let test = daw_engine::dsp::ParallelTest { always: threads > 1, renders: false, patient: true };
@@ -268,6 +270,15 @@ fn scenario(scratch: &Path, threads: u32) {
     run(&mut guard, 50, true);
     // Plug-ins and tracks coming and going, and undo and redo, while playing.
     s.set_plugin(aux, 2, "builtin:chorus").unwrap();
+    run(&mut guard, 50, true);
+    // A built-in instrument's parameter moving, its preset changing and it going off and on, mid-note.
+    s.set_builtin_param(tre, usize::MAX, daw_engine::instrument::tre::params::param::EMPHASIS, 9.0).unwrap();
+    run(&mut guard, 50, true);
+    s.load_preset(tre, usize::MAX, "builtin:tre", "Wall of Saws (unison)", true).unwrap();
+    run(&mut guard, 50, true);
+    s.update_track(tre, TrackPatch { off: Some(true), ..Default::default() });
+    run(&mut guard, 50, true);
+    s.update_track(tre, TrackPatch { off: Some(false), ..Default::default() });
     run(&mut guard, 50, true);
     let extra = s.add_track(TrackKind::Instrument, daw_engine::model::InputSel::None, Some(daw_engine::session::BUILTIN_SYNTH.into()), None).unwrap();
     run(&mut guard, 50, true);

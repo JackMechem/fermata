@@ -134,6 +134,11 @@ fn build(s: &mut Session, scratch: &Path) -> Extras {
     s.set_send(muted, 0, send(aux, -6.0, true)).unwrap();
     s.update_track(muted, TrackPatch { mute: Some(true), ..Default::default() });
 
+    // Built-in instruments with drift on: their differences must come from their own seeds.
+    let tre = add_tre(s);
+    s.set_send(tre, 0, send(aux, -9.0, false)).unwrap();
+    add_tre(s);
+
     let frozen = s.add_track(TrackKind::Instrument, InputSel::None, Some(BUILTIN_SYNTH.into()), None).unwrap();
     let r = s.create_midi_region(frozen, 0, 2 * BAR).unwrap();
     let notes = vec![Note { start: 0, length: BAR, pitch: 50, velocity: 100, muted: false }];

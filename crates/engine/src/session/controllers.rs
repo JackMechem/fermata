@@ -213,10 +213,9 @@ impl Session {
         self.touched(t);
     }
 
-    /// A built-in effect's parameter in an insert slot was changed from its panel.
+    /// A built-in effect's or instrument's parameter was changed from its panel.
     pub fn touched_slot(&mut self, track: Id, slot: usize, param: u32) {
-        let inserts = if track == MASTER_ID { Some(&self.project.master.inserts) } else { self.project.track(track).map(|t| &t.inserts) };
-        if let Some(s) = inserts.and_then(|i| i.get(slot)).and_then(|s| s.as_ref()) {
+        if let Some(s) = self.slot_get(track, slot) {
             let t = CtlTarget::Plugin { track, uid: s.uid, plugin: s.plugin_id.clone(), param };
             self.touched(t);
         }
@@ -462,8 +461,9 @@ impl Session {
         let auto = AutoParam::Plugin { uid, param, name };
         // Stereo Out's plug-ins aren't automated.
         let automated = track != MASTER_ID;
-        if let Some(spec) = crate::fx::find(plugin).and_then(|info| info.param(param).copied()) {
-            let Some(slot) = slot else { return };
+        if let Some(spec) = builtin::builtin_spec(plugin).and_then(|(_, specs)| specs.iter().find(|p| p.id == param).copied()) {
+            // None: the instrument slot.
+            let slot = slot.unwrap_or(usize::MAX);
             let pushed = !self.automation_writing(track) && self.checkpoint("Plug-in Parameter", Some(format!("fxparam:{uid}:{param}")), false);
             if automated {
                 self.ctl_hold(track, auto);

@@ -1307,7 +1307,13 @@ pub fn list_builtin_effects() -> Vec<daw_engine::session::BuiltinInfo> {
     daw_engine::session::builtin_effects()
 }
 
-/// Sets a built-in effect's parameter (plain units). A drag of one parameter makes one undo
+/// The built-in instruments, as src/fx.ts `InstInfo`.
+#[tauri::command]
+pub fn list_builtin_instruments() -> Vec<daw_engine::session::BuiltinInstrument> {
+    daw_engine::session::builtin_instruments()
+}
+
+/// Sets a built-in effect's or instrument's parameter (plain units). A drag of one parameter makes one undo
 /// step; while automation is being written the move belongs to the pass instead.
 #[tauri::command]
 pub fn set_builtin_param(state: State<AppState>, track: Id, slot: i64, id: u32, value: f32) -> R<Snapshot> {
@@ -1316,10 +1322,7 @@ pub fn set_builtin_param(state: State<AppState>, track: Id, slot: i64, id: u32, 
     if with(&state, |s| s.automation_writing(track)) {
         return try_snap(&state, |s| s.set_builtin_param(track, slot, id, value));
     }
-    let uid = with(&state, |s| {
-        let inserts = if track == daw_engine::model::MASTER_ID { Some(&s.project.master.inserts) } else { s.project.track(track).map(|t| &t.inserts) };
-        inserts.and_then(|i| i.get(slot)).and_then(|p| p.as_ref()).map(|p| p.uid)
-    });
+    let uid = with(&state, |s| s.slot_get(track, slot).map(|p| p.uid));
     let key = uid.map(|uid| format!("fxparam:{uid}:{id}"));
     try_edit(&state, "Plug-in Parameter", key, false, |s| s.set_builtin_param(track, slot, id, value))
 }
@@ -1854,10 +1857,7 @@ pub fn set_builtin_params(state: State<AppState>, track: Id, slot: i64, values: 
     if with(&state, |s| s.automation_writing(track)) {
         return try_snap(&state, set_all);
     }
-    let uid = with(&state, |s| {
-        let inserts = if track == daw_engine::model::MASTER_ID { Some(&s.project.master.inserts) } else { s.project.track(track).map(|t| &t.inserts) };
-        inserts.and_then(|i| i.get(slot)).and_then(|p| p.as_ref()).map(|p| p.uid)
-    });
+    let uid = with(&state, |s| s.slot_get(track, slot).map(|p| p.uid));
     let mut ids: Vec<u32> = values.iter().map(|v| v.0).collect();
     ids.sort_unstable();
     let key = uid.map(|uid| format!("fxparams:{uid}:{ids:?}"));
