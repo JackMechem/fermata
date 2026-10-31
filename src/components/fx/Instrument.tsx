@@ -1,17 +1,31 @@
 // The panel a built-in instrument gets without any custom code: its parameters in the sections
 // its spec lists, and a small keyboard to try it with. A model can have a layout of its own by
 // registering it in FX_PANELS (src/fx.ts), as the effects do.
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, call, type Id } from "../../api";
 import type { FxPanelProps } from "../../fx";
 import { getState } from "../../store";
+import { savedLayout, saveLayout, type PanelPlace, type SectionLayout } from "../../instLayout";
 import { keyboardKeys } from "../../pianoKeys";
 import { FxControl, FxGroup, FxMeter, isReductionMeter } from "./common";
 
 export function InstrumentPanel({ info, track, values, set, touch, meters }: FxPanelProps) {
   const byId = new Map(info.params.map((p) => [p.id, p]));
+  const ref = useRef<HTMLDivElement>(null);
+  const [place, setPlace] = useState<PanelPlace>("docked");
+  const [layout, setLayout] = useState<SectionLayout>(() => savedLayout("docked"));
+  // Floating or docking mounts the panel afresh, so this only needs to look once.
+  useLayoutEffect(() => {
+    const here: PanelPlace = ref.current?.closest(".fx-window") ? "floating" : "docked";
+    setPlace(here);
+    setLayout(savedLayout(here));
+  }, []);
+  const choose = (l: SectionLayout) => {
+    setLayout(l);
+    saveLayout(place, l);
+  };
   return (
-    <div className="fx-panel inst-panel">
+    <div ref={ref} className={"fx-panel inst-panel " + layout}>
       <div className="inst-sections" onWheel={wheelAcross}>
         {(info.sections ?? []).map((s) => (
           <FxGroup key={s.title} title={s.title} className={"inst-section " + (s.params.length > 4 ? "two-rows" : "one-row")}>
@@ -29,12 +43,22 @@ export function InstrumentPanel({ info, track, values, set, touch, meters }: FxP
           </FxGroup>
         )}
       </div>
-      <PanelKeyboard track={track} />
+      <div className="inst-footer">
+        <div className="fx-segments inst-layout" title="How the sections are laid out">
+          <button className={layout === "row" ? "on" : ""} onClick={() => choose("row")}>
+            Row
+          </button>
+          <button className={layout === "grid" ? "on" : ""} onClick={() => choose("grid")}>
+            Grid
+          </button>
+        </div>
+        <PanelKeyboard track={track} />
+      </div>
     </div>
   );
 }
 
-/** Docked, the sections run in a row wider than the window: a wheel moves along it. */
+/** In a row wider than the panel, a wheel moves along the sections. */
 function wheelAcross(e: React.WheelEvent<HTMLDivElement>) {
   const el = e.currentTarget;
   if (e.deltaX === 0 && el.scrollWidth > el.clientWidth) el.scrollLeft += e.deltaY;

@@ -7646,26 +7646,61 @@ canvas.pr-cursor-line {
   padding: 0;
 }
 
+/* Zero width, then all of it: the sections fit the room there is and never widen the panel. */
 .inst-sections {
   flex: 1 1 auto;
   min-height: 0;
+  width: 0;
+  min-width: 100%;
   overflow: auto;
   display: flex;
-  flex-wrap: wrap;
   align-items: stretch;
   align-content: flex-start;
   gap: 8px;
 }
 
-.inst-section {
-  flex: 0 1 auto;
+/* In a row, as a chain of devices, each as tall as the row. */
+.inst-panel.row .inst-sections {
+  flex-wrap: nowrap;
 }
 
-.inst-section > .fx-group-body {
+.inst-panel.row .inst-section {
+  flex: none;
+}
+
+/* In a grid, lines of sections that fill the width, with their edges lined up. */
+.inst-panel.grid .inst-sections {
   flex-wrap: wrap;
-  align-items: flex-start;
+}
+
+.inst-panel.grid .inst-section {
+  flex: 1 1 auto;
+}
+
+/* Up to four controls in a line, more in two: columns, so a switch stays over its knob. */
+.inst-section > .fx-group-body {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: start;
+  align-content: start;
+  justify-items: center;
   gap: 8px 6px;
-  max-width: 450px;
+}
+
+.inst-panel.row .inst-section > .fx-group-body {
+  justify-content: start;
+}
+
+.inst-panel.grid .inst-section > .fx-group-body {
+  justify-content: space-evenly;
+}
+
+.inst-section.one-row > .fx-group-body {
+  grid-template-rows: auto;
+}
+
+.inst-section.two-rows > .fx-group-body {
+  grid-template-rows: auto auto;
 }
 
 .inst-section .fx-knob {
@@ -7678,38 +7713,26 @@ canvas.pr-cursor-line {
   line-height: 1.15;
 }
 
-/* Docked, the sections run in one row, as a chain of devices, each as tall as the row. */
 .fx-dock > .fx-body:has(> .inst-panel) {
   padding: 8px 10px;
 }
 
-/* Zero width, then all of it: the row scrolls in the room there is and never widens the dock. */
-.fx-dock .inst-sections {
-  flex-wrap: nowrap;
-  width: 0;
-  min-width: 100%;
+/* A floating window that hasn't been resized: the sections don't set its width. */
+.fx-window:not(.sized):has(.inst-panel) {
+  width: 980px;
 }
 
-.fx-dock .inst-section {
+/* The layout switch on the left, the keyboard in the middle. */
+.inst-footer {
   flex: none;
-}
-
-.fx-dock .inst-section > .fx-group-body {
   display: grid;
-  grid-auto-flow: column;
+  grid-template-columns: 1fr auto 1fr;
   align-items: start;
-  align-content: start;
-  justify-content: start;
-  justify-items: center;
-  max-width: none;
+  gap: 8px;
 }
 
-.fx-dock .inst-section.one-row > .fx-group-body {
-  grid-template-rows: auto;
-}
-
-.fx-dock .inst-section.two-rows > .fx-group-body {
-  grid-template-rows: auto auto;
+.inst-layout {
+  justify-self: start;
 }
 
 .inst-keyboard {

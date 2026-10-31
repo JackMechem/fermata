@@ -505,8 +505,10 @@ A three-oscillator monophonic synth, modelled on the behaviour of a classic 1970
 Minimoog Model D; Fermata isn't affiliated with its maker, and this hasn't been compared with one). Choose it
 under **Vintage Synths** in the instrument slot, the Library or New Tracks. Clicking the slot's name
 opens its panel in the bottom section, whatever Open Effect Panels says, with the presets in its header and
-a small keyboard along the bottom (− and + move it by octaves). Its sections run in one row, and the mouse
-wheel moves along them; the button in the header floats the panel, and its sections then wrap. Right-click a control for Learn MIDI Assignment.
+a small keyboard along the bottom (− and + move it by octaves). The button in the header floats the panel.
+**Row** and **Grid**, beside the keyboard, choose how the sections are laid out: in one row, which the mouse
+wheel moves along, or in lines that fill the panel. The bottom section starts with Row and a floating panel
+with Grid, and each remembers its own choice. Right-click a control for Learn MIDI Assignment.
 Everything on it is saved in the project, can be automated in a lane, and undoes.
 
 - **Oscillators:** a range (Lo, 32' to 2'), a wave, and for 2 and 3 a Frequency knob of ±7 semitones.
