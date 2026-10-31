@@ -140,6 +140,33 @@ fn build(s: &mut Session, scratch: &Path) -> Extras {
     s.set_send(tre, 0, send(aux, -9.0, false)).unwrap();
     add_tre(s);
 
+    // A sampler with loops, an LFO and round robin: its turns and random LFO come from itself.
+    let sampler = s.add_track(TrackKind::Instrument, InputSel::None, Some(daw_engine::instrument::sampler::ID.into()), None).unwrap();
+    s.sampler_add_files(sampler, &[w.audio.clone(), w.audio.clone()], Some(50)).unwrap();
+    {
+        use daw_engine::instrument::sampler::{params::param, state::SamplerState};
+        let state = s.project.track(sampler).and_then(|t| t.instrument.as_ref()).and_then(|i| i.state.clone());
+        let mut zones = SamplerState::parse(state.as_deref()).zones;
+        for z in &mut zones {
+            z.key_lo = 0;
+            z.key_hi = 127;
+            z.rr_group = 1;
+            z.loop_on = true;
+            z.loop_start = 2000;
+            z.loop_end = 12000;
+            z.xfade = 500;
+        }
+        zones[1].reverse = true;
+        s.sampler_update_zones(sampler, zones).unwrap();
+        s.set_builtin_param(sampler, usize::MAX, param::LFO_WAVE, 4.0).unwrap();
+        s.set_builtin_param(sampler, usize::MAX, param::LFO_PITCH, 40.0).unwrap();
+        s.set_builtin_param(sampler, usize::MAX, param::F_TYPE, 4.0).unwrap();
+        s.set_builtin_param(sampler, usize::MAX, param::CUTOFF, 3000.0).unwrap();
+        let r = s.create_midi_region(sampler, 0, 2 * BAR).unwrap();
+        let notes = (0..12).map(|k| Note { start: k * BAR / 6, length: BAR / 4, pitch: 48 + (k as u8 * 5) % 24, velocity: 110, muted: false }).collect();
+        s.set_midi_content(vec![daw_engine::session::MidiContent { region: r, notes, cc: Vec::new(), start: None, length: None }]);
+    }
+
     let frozen = s.add_track(TrackKind::Instrument, InputSel::None, Some(BUILTIN_SYNTH.into()), None).unwrap();
     let r = s.create_midi_region(frozen, 0, 2 * BAR).unwrap();
     let notes = vec![Note { start: 0, length: BAR, pitch: 50, velocity: 100, muted: false }];

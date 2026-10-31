@@ -727,10 +727,10 @@ smart tempo, samplers, virtual players, pattern tools, Live Loops and notation.
 
 ### Sampler, Quick Sampler and Drum Machine Designer (p. 122, 329, 564)
 
-- [ ] Sampler instrument (multi-zone, mapping, modulation)
-- [ ] Quick Sampler: Classic, One Shot, Slice and Recorder modes
-- [ ] Create sampler tracks by dropping files on Sampler or Quick Sampler zones, Original or Optimized (p. 122)
-- [ ] Convert audio regions to a new Sampler track, sliced at transients or markers (p. 329)
+- [x] Sampler instrument (multi-zone, mapping, modulation). *Fermata Sampler; see its open items in TODO.md.*
+- [~] Quick Sampler: Classic, One Shot, Slice and Recorder modes. *All in Fermata Sampler's one panel: a zone over the keyboard, one-shot, Slice, Record.*
+- [~] Create sampler tracks by dropping files on Sampler or Quick Sampler zones, Original or Optimized (p. 122). *Dropping on the panel of a sampler track that exists. No Optimized mode.*
+- [x] Convert audio regions to a new Sampler track, sliced at transients or markers (p. 329). *Whole or at transients; not at markers.*
 - [ ] Drum Machine Designer: a pad grid of sub-tracks with per-pad channel strips (p. 122, 697)
 - [ ] Sample Alchemy (p. 122)
 - [ ] Drum replacement and doubling from a recorded drum track (p. 133)
@@ -952,7 +952,7 @@ Minimoog Model D's behaviour (not affiliated, and not compared with the hardware
 
 - [~] Synthesisers: Alchemy, Retro Synth, ES1, ES2, ES E, ES M, ES P, EFM1, Sculpture, Vocoder (EVOC 20 PolySynth). *Fermata Synth and Fermata Tre (closest to Retro Synth's analog mode).*
 - [ ] Granular synthesis, including Alchemy granular sync (p. 10)
-- [ ] Sample-based instruments: Sampler, Quick Sampler, Sample Alchemy (engines in Stage 3)
+- [~] Sample-based instruments: Sampler, Quick Sampler, Sample Alchemy (engines in Stage 3). *Fermata Sampler; no Sample Alchemy.*
 - [ ] Keyboards: Studio Piano, Vintage B3 organ, Vintage Electric Piano, Vintage Clav, Vintage Mellotron
 - [ ] Orchestral: Studio Strings, Studio Horns
 - [ ] Bass: Studio Bass

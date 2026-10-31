@@ -93,6 +93,8 @@ mod musical_moves;
 mod threads;
 mod track_off;
 mod vst_key;
+mod sampler;
+pub use sampler::{prepare_files, PreparedFile, SamplerAdded, SamplerRecording, SamplerView, SamplerWave, SfzReport, ZoneView, SAMPLES_DIR};
 #[cfg(test)]
 mod held_notes;
 #[cfg(test)]
@@ -172,6 +174,7 @@ pub struct Session {
     cmd_tx: rtrb::Producer<Cmd>,
     cmds_sent: u64,
     garbage_rx: rtrb::Consumer<Garbage>,
+    sampler: sampler::SamplerHost,
     pub status: Arc<EngineStatus>,
     audio: Option<AudioIo>,
     pub audio_status: AudioStatus,
@@ -348,6 +351,7 @@ impl Session {
             midi,
             midi_rec_rx: rec_rx,
             recorder: Recorder::new(),
+            sampler: Default::default(),
             controllers: HashMap::new(),
             meters: HashMap::new(),
             plugins,
@@ -2701,8 +2705,9 @@ impl Session {
             self.update_pdc();
         }
         while let Ok(g) = self.garbage_rx.pop() {
-            drop(g);
+            self.sampler_garbage(g);
         }
+        self.sampler_idle();
         let written = self.auto_idle();
         let stepped = self.vst_undo_idle();
         let controlled = self.controller_idle();
@@ -2847,6 +2852,7 @@ impl Session {
         if self.rec_punch.is_some() {
             self.stop();
         }
+        self.sampler_record_cancel();
         self.send(Cmd::Stop);
         self.controllers.clear();
         self.vst_watches.clear();
@@ -2863,6 +2869,7 @@ impl Session {
         self.selected = None;
         self.locate(0);
         self.rebuild_graph();
+        self.sampler.pool.forget_unused();
     }
 
     /// Forgets every undo and redo step. The Project Chooser builds a new project's template
@@ -2906,6 +2913,7 @@ impl Session {
                 c.path = rel.to_string_lossy().to_string();
                 copied.insert(src, c.path.clone());
             }
+            self.sampler_copy_samples(&target)?;
         }
         self.project.name = target.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Untitled".into());
         // The first alternative is named after the project, and keeps that name (alternatives.rs).
@@ -2939,6 +2947,7 @@ impl Session {
         if self.rec_punch.is_some() {
             self.stop();
         }
+        self.sampler_record_cancel();
         self.send(Cmd::Stop);
         // Instance ids restart in every project, so old controllers must not leak state into
         // the new one.
@@ -2980,6 +2989,8 @@ impl Session {
         if !missing.is_empty() {
             self.warning = Some(format!("Not installed: {}. Their settings are kept with the project.", missing.join(", ")));
         }
+        self.sampler.pool.forget_unused();
+        self.sampler_warn_missing();
         Ok(())
     }
 }

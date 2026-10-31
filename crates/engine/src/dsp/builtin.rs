@@ -322,6 +322,14 @@ impl InstrumentDsp {
         }
     }
 
+    /// Hands over data built off the audio thread, returning what it replaced (see
+    /// `Instrument::swap_data`). Its tail may have changed.
+    pub fn swap_data(&mut self, data: crate::instrument::InstrumentData) -> Option<crate::instrument::InstrumentData> {
+        let old = self.inst.swap_data(data);
+        self.publish();
+        old
+    }
+
     /// All notes end, and tails ring on (see `Instrument::all_notes_off`).
     pub fn all_notes_off(&mut self) {
         self.inst.all_notes_off();

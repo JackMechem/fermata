@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use daw_engine::audio_io::AudioConfig;
-use daw_engine::model::{AutoParam, TrackKind};
+use daw_engine::model::{AutoParam, Id, TrackKind};
 use daw_engine::session::{RegionParamsPatch, TrackPatch, VcaPatch};
 use daw_engine::Session;
 
@@ -142,6 +142,45 @@ fn vst_gate(d: &vst3_host::PluginDescriptor) {
     check(&format!("a bypassed VST3 takes its editor's edits without allocating ({n})"), n == 0 && !p.has_edits());
 }
 
+fn s_state(s: &Session, t: Id) -> Option<String> {
+    s.project.track(t).and_then(|t| t.instrument.as_ref()).and_then(|i| i.state.clone())
+}
+
+/// A track with Fermata Sampler, its zones in the way a real instrument would use them, and enough
+/// notes at low polyphony to keep it stealing.
+fn add_sampler(s: &mut Session, scratch: &std::path::Path) -> Id {
+    use daw_engine::instrument::sampler::{params::param, state::SamplerState};
+    let dir = scratch.join("sampler-files");
+    std::fs::create_dir_all(&dir).unwrap();
+    let wave = |hz: f32, rate: u32| -> Vec<f32> { (0..rate * 2).map(|i| (i as f32 / rate as f32 * hz * std::f32::consts::TAU).sin() * 0.3).collect() };
+    let a = dir.join("A.wav");
+    let b = dir.join("B.wav");
+    daw_engine::decode::write_wav(&a, 44100, &[wave(220.0, 44100), wave(221.0, 44100)]).unwrap();
+    daw_engine::decode::write_wav(&b, 96000, &[wave(330.0, 96000)]).unwrap();
+    let t = s.add_track(TrackKind::Instrument, daw_engine::model::InputSel::None, Some(daw_engine::instrument::sampler::ID.into()), None).unwrap();
+    s.sampler_add_files(t, &[a, b.clone(), b], Some(40)).unwrap();
+    let mut zones = SamplerState::parse(s_state(s, t).as_deref()).zones;
+    for z in &mut zones {
+        z.key_lo = 0;
+        z.key_hi = 127;
+    }
+    zones[0].loop_on = true;
+    zones[0].loop_start = 10000;
+    zones[0].loop_end = 50000;
+    zones[0].xfade = 4000;
+    zones[1].rr_group = 1;
+    zones[2].rr_group = 1;
+    zones[2].reverse = true;
+    s.sampler_update_zones(t, zones).unwrap();
+    s.set_builtin_param(t, usize::MAX, param::POLYPHONY, 2.0).unwrap();
+    s.set_builtin_param(t, usize::MAX, param::LFO_PITCH, 30.0).unwrap();
+    s.set_builtin_param(t, usize::MAX, param::GLIDE, 20.0).unwrap();
+    let r = s.create_midi_region(t, 0, 48000 * 8).unwrap();
+    let notes: Vec<daw_engine::model::Note> = (0..64).map(|k| daw_engine::model::Note { start: k * 6000, length: 18000, pitch: 40 + (k % 37) as u8, velocity: 100, muted: false }).collect();
+    s.set_midi_content(vec![daw_engine::session::MidiContent { region: r, notes, cc: Vec::new(), start: None, length: None }]);
+    t
+}
+
 fn main() {
     let scratch = PathBuf::from(std::env::args().nth(1).expect("scratch dir"));
     daw_engine::dsp::pool::set_worker_hook(|| {
@@ -175,6 +214,8 @@ fn scenario(scratch: &Path, threads: u32) {
     s.set_plugin(aux, 1, "builtin:delay").unwrap();
     // A built-in instrument playing notes, with its lane and its costliest path.
     let tre = add_tre(&mut s);
+    // A sampler with loops, layers, reversed audio and round robin, stealing its voices.
+    let sampler = add_sampler(&mut s, scratch);
     s.idle();
     println!("audio: {:?}", s.audio_status.running);
     let test = daw_engine::dsp::ParallelTest { always: threads > 1, renders: false, patient: true };
@@ -280,6 +321,27 @@ fn scenario(scratch: &Path, threads: u32) {
     run(&mut guard, 50, true);
     s.update_track(tre, TrackPatch { off: Some(false), ..Default::default() });
     run(&mut guard, 50, true);
+    // A sampler's zones and samples replaced under its held notes, with the old ones going back.
+    use daw_engine::instrument::sampler::state::SamplerState;
+    let zones = |s: &Session| SamplerState::parse(s_state(s, sampler).as_deref()).zones;
+    let mut z = zones(&s);
+    z[0].gain_db = -3.0;
+    s.sampler_update_zones(sampler, z).unwrap();
+    run(&mut guard, 50, true);
+    let mut z = zones(&s);
+    z[0].file = z[1].file.clone();
+    z[0].loop_end = 30000;
+    s.sampler_update_zones(sampler, z).unwrap();
+    run(&mut guard, 50, true);
+    s.sampler_delete_zones(sampler, &[zones(&s)[1].id]).unwrap();
+    run(&mut guard, 50, true);
+    s.idle();
+    s.set_builtin_param(sampler, usize::MAX, daw_engine::instrument::sampler::params::param::F_TYPE, 4.0).unwrap();
+    run(&mut guard, 50, true);
+    s.update_track(sampler, TrackPatch { off: Some(true), ..Default::default() });
+    run(&mut guard, 20, true);
+    s.update_track(sampler, TrackPatch { off: Some(false), ..Default::default() });
+    run(&mut guard, 20, true);
     let extra = s.add_track(TrackKind::Instrument, daw_engine::model::InputSel::None, Some(daw_engine::session::BUILTIN_SYNTH.into()), None).unwrap();
     run(&mut guard, 50, true);
     s.delete_track(extra);

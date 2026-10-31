@@ -22,7 +22,8 @@ export interface PluginSlot {
   sidechain?: Id | null;
   /** The side-chain key is taken before the source's fader (absent: after it). */
   sidechain_pre?: boolean;
-  /** A VST3's state, only in what `copy_plugin` returns (for the clipboard). */
+  /** A VST3's state, only in what `copy_plugin` returns (for the clipboard). In a snapshot, a
+   * sampler's has a fingerprint of its zones, which tells its panel when to read them again. */
   state?: string | null;
 }
 

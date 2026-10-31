@@ -55,6 +55,7 @@ CHECKS=(
   "rt_alloc_check dir"
   "parallel_check dir"
   "instrument_check dir"
+  "sampler_check dir"
   "onoff_check tone dir"
   "vst_sidechain_check tone dir"
   "multiout_check dir"

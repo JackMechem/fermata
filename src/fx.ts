@@ -13,6 +13,7 @@ import { LinearPhaseEqPanel } from "./components/fx/LinearPhaseEq";
 import { LoudnessPanel } from "./components/fx/Loudness";
 import { ChorusPanel, FlangerPanel, PhaserPanel, TremoloPanel } from "./components/fx/Modulation";
 import { ReverbPanel } from "./components/fx/Reverb";
+import { SamplerPanel } from "./components/fx/Sampler";
 import { TunerPanel } from "./components/fx/Tuner";
 
 export type FxUnit = "none" | "db" | "ms" | "hz" | "ratio" | "percent" | "semitones" | "note" | "deg";
@@ -90,4 +91,5 @@ export const FX_PANELS: Record<string, ComponentType<FxPanelProps>> = {
   "builtin:distortion": DistortionPanel,
   "builtin:gain": GainPanel,
   "builtin:linear-phase-eq": LinearPhaseEqPanel,
+  "builtin:sampler": SamplerPanel,
 };

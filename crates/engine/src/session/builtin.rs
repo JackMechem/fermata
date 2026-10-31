@@ -184,7 +184,12 @@ impl Session {
     /// A built-in instrument instance for an instrument slot, with its saved values. The slot's
     /// id seeds its analog-style differences, which keeps them across saving and reopening.
     pub(super) fn instantiate_instrument(&mut self, info: &InstrumentInfo, slot: &PluginSlot) -> Plugin {
-        let i = InstrumentDsp::new(info, self.sample_rate() as f32, slot.uid, &slot.params);
+        let mut i = InstrumentDsp::new(info, self.sample_rate() as f32, slot.uid, &slot.params);
+        if info.id == instrument::sampler::ID {
+            let data = self.sampler_data(slot);
+            // Not playing yet, so what it replaces is free to go here.
+            drop(i.swap_data(data));
+        }
         let shared = i.shared();
         shared.set_watched(self.fx_watch.contains(&slot.uid));
         self.fx.insert(slot.uid, shared);
@@ -382,6 +387,10 @@ impl Session {
         }
         if had.sidechain_pre != want.sidechain_pre {
             self.send(Cmd::SidechainPre { track, uid: want.uid, pre: want.sidechain_pre });
+        }
+        if had.state != want.state && want.plugin_id == instrument::sampler::ID {
+            let data = self.sampler_data(want);
+            self.send(Cmd::InstrumentData { track, uid: want.uid, data });
         }
         let Some((_, specs)) = builtin_spec(&want.plugin_id) else { return };
         if had.params != want.params {

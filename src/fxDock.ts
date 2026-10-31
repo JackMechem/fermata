@@ -221,4 +221,5 @@ export const DEFAULT_WIDTH: Record<string, number> = {
   "builtin:channel-eq": 820,
   "builtin:linear-phase-eq": 820,
   "builtin:tre": 980,
+  "builtin:sampler": 1240,
 };

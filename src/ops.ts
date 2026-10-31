@@ -1,6 +1,7 @@
 // Track and region operations, shared by the right-click menus, the local Edit menu, the native
 // menu bar and the keyboard, plus the context menus themselves.
 import { open } from "@tauri-apps/plugin-dialog";
+import { openFxPanel } from "./fxHost";
 import { act, actMade, api, call, canRecord, isStack, type Group, type Id, type Region, type Snapshot, type Track } from "./api";
 import { newAux } from "./routing";
 import type { MenuItem } from "./components/Menu";
@@ -463,6 +464,22 @@ export function regionMenu(r: Region, rename: () => void): MenuItem[] {
     { label: "Bounce in Place…", onClick: () => openBounceInPlace([], ids) },
     { label: "Export as Audio File…", disabled: ids.length > 1, onClick: () => openBounce("region", r.id) },
   );
+  if (ids.length === 1 && r.content.type === "audio") {
+    const convert = (slices: number | null) =>
+      actMade("convert_region_to_sampler", { region: r.id, slices }).then((made) => {
+        if (!made?.length) return;
+        api.selectTrack(made[0]);
+        const uid = getState().snap?.project.tracks.find((t) => t.id === made[0])?.instrument?.uid;
+        if (uid !== undefined) openFxPanel(uid);
+      });
+    items.push({
+      label: "Convert to Sampler Track",
+      children: [
+        { label: "Whole Region, One Key Plays It", onClick: () => convert(null) },
+        { label: "Slice at Transients, One Key Each", onClick: () => convert(0.5) },
+      ],
+    });
+  }
   const track = trackOf(r.id);
   items.push(
     { separator: true },

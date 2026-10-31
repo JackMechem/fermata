@@ -4,6 +4,22 @@ What's left, in the order it matters for a usable release. Each stage builds on 
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
 of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
+## Open items (Fermata Sampler, 2026-10-30)
+
+`sampler_check`, its unit tests, `rt_alloc_check` and `parallel_check` pass, silently, against generated audio.
+
+- **Not seen or heard:** the panel hasn't been opened at any size, drops haven't been tried, and nothing's been listened to. Try one
+  recording played across the keyboard, a real instrument's samples (loops above all), a free SFZ library, and a drum loop sliced.
+- **Not tried on a real interface:** recording ran only through a simulated input. Try it through a real one, including
+  the input menu's channels, an input with nothing plugged in, and the level bar.
+- SFZ is a subset (see [ARCHITECTURE](docs/ARCHITECTURE.md#fermata-sampler)). Likely next by how often libraries need them: per-region filters, `amp_veltrack`,
+  `group`/`off_by` for hi-hats, release triggers, `ampeg_hold`, and `loop_sustain` playing on past its loop.
+- A channel strip setting or a template with a sampler keeps its zones, not its samples, so elsewhere they show as missing. A saved instrument is the way across projects.
+- Converting a region keeps its gain, not its fades, loop or playback parameters.
+- There's no disk streaming, so a library bigger than 4 GB loads in part and says so. Loading an SFZ's samples has no progress beyond a message.
+- No input monitoring while recording into it. Ping-pong loops, per-zone filters, a zone's own LFO and zone groups aren't there.
+- Copying a large library into the project takes the disk space of the library, with no link option yet.
+
 ## Open items (built-in instruments, 2026-10-30)
 
 The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instrument_check`,
@@ -14,7 +30,7 @@ The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instru
   in [ARCHITECTURE](docs/ARCHITECTURE.md#fermata-tre) is there to be tuned by ear.
 - **Not compared with the hardware:** its likeness to the Model D is from documented behaviour only.
 - New instrument tracks still default to Fermata Synth: to decide after listening.
-- Next: more models; a sampler (a stolen voice needs a fade: see `synth_dsp/alloc.rs`); a custom panel for Tre.
+- Next: more models; a custom panel for Tre.
 - A 2-pole state-variable filter and a diode ladder aren't written; `ZdfFilter` is where they go.
 - Fermata Synth's renders aren't repeatable with its mod wheel up (its LFO runs free, and `silence` keeps
   its controllers). Left alone, as old projects depend on it; a new default could drop it.

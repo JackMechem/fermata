@@ -8,6 +8,14 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Fermata Sampler:** make instruments from your own sounds. Drop or choose audio files and play them across the
+  keyboard at once, record straight into it from the audio input, or turn an audio region into one with Convert to
+  Sampler Track, whole or sliced at its transients. Map samples across keys and velocities with loops and
+  crossfades, one-shot, reverse, velocity layers and round robin, an amp envelope, filter with envelope, LFO, glide and
+  polyphony. Several files map themselves by the note in their names, or chromatically. Save an instrument with its
+  samples to use in any project; it appears in the preset menu, from `~/Music/Fermata Instruments`. A useful subset of SFZ loads, and what it
+  doesn't do is listed. Samples are copied into the project, so it survives being moved or the originals deleted, and a
+  missing sample shows plainly while the rest play. Samples are held in memory, up to 4 GB. It hasn't been heard or seen yet.
 - **Built-in instruments and Fermata Tre:** a framework for instruments with settings, on the same
   footing as the built-in effects: a panel with sections and a small keyboard, docked or floating, factory
   and user presets, automation, MIDI learn, undo, saving, Freeze, Bounce and copy and paste. The first is

@@ -10,6 +10,7 @@ import { indexAt, trackLayout, autoLayout } from "./layout";
 import { importMidiFiles, isMidiPath } from "./midiFiles";
 import { getState, setState } from "./store";
 import { samplesPerBeat, snapPos } from "./time";
+import { dropOnSampler, hoverSampler, samplerAt } from "./samplerDrop";
 
 export type DropTarget =
   | { kind: "lane"; track: Id; index: number; sample: number }
@@ -126,15 +127,25 @@ export function installNativeDrop(): () => void {
     const ev = e.payload;
     if (ev.type === "enter") {
       paths = ev.paths;
+      hoverSampler(...toCss(ev.position));
       if (!droppable(paths)) return;
       hoverDrop(resolveDrop(...toCss(ev.position), midiOnly(paths)));
     } else if (ev.type === "over") {
+      hoverSampler(...toCss(ev.position));
       if (droppable(paths)) hoverDrop(resolveDrop(...toCss(ev.position), midiOnly(paths)));
     } else if (ev.type === "drop") {
-      performDrop(ev.paths, resolveDrop(...toCss(ev.position), midiOnly(ev.paths)));
+      hoverSampler(null, null);
+      const at = samplerAt(...toCss(ev.position));
+      if (at) {
+        hoverDrop(null);
+        dropOnSampler(at.track, ev.paths, at.key);
+      } else {
+        performDrop(ev.paths, resolveDrop(...toCss(ev.position), midiOnly(ev.paths)));
+      }
       paths = [];
     } else {
       paths = [];
+      hoverSampler(null, null);
       hoverDrop(null);
     }
   });
@@ -161,6 +172,7 @@ export function startFileDrag(e: React.MouseEvent, path: string, label: string) 
       document.body.style.cursor = "copy";
     }
     ghost.style.transform = `translate(${ev.clientX + 12}px, ${ev.clientY + 10}px)`;
+    hoverSampler(ev.clientX, ev.clientY);
     hoverDrop(resolveDrop(ev.clientX, ev.clientY, midiOnly([path])));
   };
   const up = (ev: MouseEvent) => {
@@ -169,7 +181,14 @@ export function startFileDrag(e: React.MouseEvent, path: string, label: string) 
     document.body.style.cursor = "";
     if (ghost) {
       ghost.remove();
-      performDrop([path], resolveDrop(ev.clientX, ev.clientY, midiOnly([path])));
+      hoverSampler(null, null);
+      const at = samplerAt(ev.clientX, ev.clientY);
+      if (at) {
+        hoverDrop(null);
+        dropOnSampler(at.track, [path], at.key);
+      } else {
+        performDrop([path], resolveDrop(ev.clientX, ev.clientY, midiOnly([path])));
+      }
     }
   };
   window.addEventListener("mousemove", move);

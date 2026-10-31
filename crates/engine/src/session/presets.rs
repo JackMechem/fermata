@@ -137,6 +137,10 @@ impl Session {
         for (id, value) in values {
             self.send(Cmd::FxParam { track, uid, id, value });
         }
+        // What isn't numbers comes in too, with any files it brought.
+        if let Some(state) = &p.state {
+            self.sampler_apply_preset(track, state, p.base.as_deref())?;
+        }
         if self.builtin_latency_changed() {
             self.update_pdc();
         }
@@ -149,13 +153,16 @@ impl Session {
     pub fn save_preset(&self, track: Id, slot: usize, name: &str, overwrite: bool) -> Result<String> {
         let p = if slot == EQ_SLOT {
             let eq = self.eq_of(track).ok_or_else(|| anyhow!("no such track"))?;
-            Preset { name: name.into(), effect: CHANNEL_EQ.into(), version: 0, values: Vec::new(), eq: Some(eq) }
+            Preset { name: name.into(), effect: CHANNEL_EQ.into(), version: 0, values: Vec::new(), eq: Some(eq), state: None, base: None }
         } else {
             let s = self.slot_get(track, slot).ok_or_else(|| anyhow!("no plug-in in that slot"))?;
             if !builtin::is_builtin(&s.plugin_id) {
                 return Err(anyhow!("Presets are saved in {}'s own window", s.name));
             }
-            Preset { name: name.into(), effect: s.plugin_id.clone(), version: 0, values: self.builtin_params(s.uid), eq: None }
+            if s.plugin_id == crate::instrument::sampler::ID {
+                return self.sampler_save_instrument(track, name, overwrite);
+            }
+            Preset { name: name.into(), effect: s.plugin_id.clone(), version: 0, values: self.builtin_params(s.uid), eq: None, state: None, base: None }
         };
         presets::write_user(&presets::user_root(), &p, overwrite)
     }

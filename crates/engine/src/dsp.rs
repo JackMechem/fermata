@@ -507,6 +507,10 @@ pub enum Cmd {
     ReorderInserts { track: Id, order: [u8; INSERT_SLOTS] },
     Bypass { track: Id, uid: Id, bypass: bool },
     RecordSink { track: Id, sink: Option<rtrb::Producer<f32>> },
+    /// Copies an input to a recorder whatever the transport does, for recording into a sampler.
+    InputTap { input: InputSel, sink: Option<rtrb::Producer<f32>> },
+    /// Hands a built-in instrument data built off the audio thread (see `Instrument::swap_data`).
+    InstrumentData { track: Id, uid: Id, data: crate::instrument::InstrumentData },
     MidiTarget(Option<Id>),
     /// Whether record-enabled tracks play their input without the I button.
     AutoMonitor(bool),
@@ -561,6 +565,9 @@ pub enum Garbage {
     Tempo(Arc<TempoMap>),
     Workers(Box<Workers>),
     Graph(Box<TaskGraph>),
+    /// What an instrument's new data replaced. Its notes may still be reading it, so the session
+    /// keeps hold of it until they're done (`Session::sampler_idle`).
+    InstrumentData(crate::instrument::InstrumentData),
 }
 
 /// Metronome parameters, worked out from the project's [`ClickSettings`].
@@ -779,6 +786,8 @@ pub struct Engine {
     parallel: parallel::Parallel,
     /// See `Cmd::Autopunch`.
     punch_range: Option<(i64, i64)>,
+    /// Where the input goes for a recording into a sampler (see `Cmd::InputTap`).
+    input_tap: Option<(InputSel, rtrb::Producer<f32>)>,
     capture: Option<(i64, i64)>,
     /// See `Cmd::Chase`: (notes, controllers).
     chase: (bool, bool),
@@ -1177,6 +1186,7 @@ impl Engine {
             scratch: Scratch::default(),
             parallel: Default::default(),
             punch_range: None,
+            input_tap: None,
             capture: None,
             chase: (true, true),
             draining: false,
@@ -1585,6 +1595,22 @@ impl Engine {
                 self.punch_range = range;
                 self.capture = Some(capture);
             }
+            Cmd::InputTap { input, sink } => {
+                let old = std::mem::replace(&mut self.input_tap, sink.map(|s| (input, s)));
+                if let Some((_, s)) = old {
+                    self.discard(Garbage::Sink(s));
+                }
+            }
+            Cmd::InstrumentData { track, uid, data } => {
+                let old = match self.track_mut(track).and_then(|t| t.instrument.as_mut()).filter(|i| i.uid == uid) {
+                    Some(InsertDsp { plugin: Plugin::Instrument(i), .. }) => i.swap_data(data),
+                    // It's gone by now: the data goes straight back.
+                    _ => Some(data),
+                };
+                if let Some(o) = old {
+                    self.discard(Garbage::InstrumentData(o));
+                }
+            }
             Cmd::FxParam { track, uid, id, value } => {
                 if let Some(b) = self.builtin_mut(track, uid) {
                     b.set(id, value);
@@ -1824,6 +1850,22 @@ impl Engine {
         }
         for c in in_ch..MAX_INPUTS {
             self.inputs[c][..n].fill(0.0);
+        }
+        // Only real input: a device without any shouldn't record silence at its own speed.
+        if in_ch > 0 && stride > 0 {
+            if let Some((sel, sink)) = &mut self.input_tap {
+                for i in 0..n {
+                    match *sel {
+                        InputSel::Mono(c) => drop(sink.push(self.inputs[c as usize % MAX_INPUTS][i])),
+                        InputSel::Stereo(c) => {
+                            let c = c as usize % (MAX_INPUTS - 1);
+                            let _ = sink.push(self.inputs[c][i]);
+                            let _ = sink.push(self.inputs[c + 1][i]);
+                        }
+                        InputSel::None => {}
+                    }
+                }
+            }
         }
 
         self.bus_l[..n].fill(0.0);

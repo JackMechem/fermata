@@ -33,6 +33,13 @@ pub struct Preset {
     /// The Channel EQ's settings.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub eq: Option<ChannelEq>,
+    /// An instrument's settings that aren't numbers, as its `PluginSlot::state` holds them. None
+    /// leaves what's there alone (a factory preset that shapes a sampler's sound keeps its zones).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
+    /// The folder a preset saved with its files came from, which `state`'s paths are relative to.
+    #[serde(skip)]
+    pub base: Option<PathBuf>,
 }
 
 /// The presets offered for one effect.
@@ -62,18 +69,50 @@ pub fn clean_name(name: &str) -> Result<String> {
     Ok(out)
 }
 
+/// Where instruments saved with their samples live: a folder for each under the user's Music
+/// folder, next to the projects folder and easy to find, back up or share. It's created on first
+/// save.
+pub fn bundle_root() -> PathBuf {
+    let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE")).map(PathBuf::from).unwrap_or_default();
+    home.join("Music").join("Fermata Instruments")
+}
+
+/// The name of the document in an instrument's folder.
+pub const BUNDLE_DOC: &str = "instrument.json";
+
+/// Whether an effect's user presets are folders with their files in them, not single files.
+fn is_bundle(effect: &str) -> bool {
+    effect == crate::instrument::sampler::ID
+}
+
+/// An instrument's folder, for a name already cleaned.
+pub fn bundle_dir(name: &str) -> PathBuf {
+    bundle_root().join(name)
+}
+
 fn effect_dir(root: &Path, effect: &str) -> PathBuf {
+    if is_bundle(effect) {
+        return bundle_root();
+    }
     let safe: String = effect.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }).collect();
     root.join(safe)
 }
 
 fn file(root: &Path, effect: &str, name: &str) -> PathBuf {
+    if is_bundle(effect) {
+        return bundle_dir(name).join(BUNDLE_DOC);
+    }
     effect_dir(root, effect).join(format!("{name}.json"))
 }
 
 /// The user presets saved for an effect, by name.
 pub fn list_user(root: &Path, effect: &str) -> Vec<String> {
     let Ok(rd) = std::fs::read_dir(effect_dir(root, effect)) else { return Vec::new() };
+    if is_bundle(effect) {
+        let mut names: Vec<String> = rd.flatten().filter(|e| e.path().join(BUNDLE_DOC).is_file()).map(|e| e.file_name().to_string_lossy().to_string()).collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        return names;
+    }
     let mut names: Vec<String> = rd
         .flatten()
         .filter_map(|e| {
@@ -91,6 +130,7 @@ pub fn read_user(root: &Path, effect: &str, name: &str) -> Result<Preset> {
     let text = std::fs::read_to_string(&path).with_context(|| format!("No preset named \"{name}\""))?;
     let mut p: Preset = serde_json::from_str(&text).with_context(|| format!("The preset \"{name}\" can't be read"))?;
     // The file name is what the list shows, whatever the file says.
+    p.base = is_bundle(effect).then(|| bundle_dir(&name));
     p.name = name;
     Ok(p)
 }
@@ -103,7 +143,7 @@ pub fn write_user(root: &Path, p: &Preset, overwrite: bool) -> Result<String> {
     if path.exists() && !overwrite {
         return Err(anyhow!("A preset named \"{name}\" already exists"));
     }
-    std::fs::create_dir_all(effect_dir(root, &p.effect))?;
+    std::fs::create_dir_all(path.parent().unwrap_or(root))?;
     let doc = Preset { name: name.clone(), version: VERSION, ..p.clone() };
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_string_pretty(&doc)?)?;
@@ -113,6 +153,11 @@ pub fn write_user(root: &Path, p: &Preset, overwrite: bool) -> Result<String> {
 
 pub fn delete_user(root: &Path, effect: &str, name: &str) -> Result<()> {
     let name = clean_name(name)?;
+    if is_bundle(effect) {
+        // It's listed only if this file is there, so this can't take an unrelated folder with it.
+        file(root, effect, &name).is_file().then_some(()).with_context(|| format!("No preset named \"{name}\""))?;
+        return std::fs::remove_dir_all(bundle_dir(&name)).with_context(|| format!("Couldn't delete \"{name}\""));
+    }
     std::fs::remove_file(file(root, effect, &name)).with_context(|| format!("No preset named \"{name}\""))
 }
 
@@ -128,6 +173,16 @@ pub fn rename_user(root: &Path, effect: &str, old: &str, new: &str) -> Result<St
     if !same_file && file(root, effect, &new_name).exists() {
         return Err(anyhow!("A preset named \"{new_name}\" already exists"));
     }
+    if is_bundle(effect) {
+        // The folder moves with its samples. A case-only rename goes through a third name.
+        let (from, to) = (bundle_dir(&p.name), bundle_dir(&new_name));
+        let step = bundle_root().join(format!(".renaming {new_name}"));
+        std::fs::rename(&from, &step)?;
+        std::fs::rename(&step, &to)?;
+        p.name = new_name.clone();
+        write_user(root, &p, true)?;
+        return Ok(new_name);
+    }
     let old_name = std::mem::replace(&mut p.name, new_name);
     let saved = write_user(root, &p, same_file)?;
     if !same_file {
@@ -139,9 +194,9 @@ pub fn rename_user(root: &Path, effect: &str, old: &str, new: &str) -> Result<St
 /// The factory presets of an effect (or the Channel EQ), complete.
 pub fn factory(effect: &str) -> Vec<Preset> {
     if effect == CHANNEL_EQ {
-        return eq_factory().into_iter().map(|(name, eq)| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: Vec::new(), eq: Some(eq) }).collect();
+        return eq_factory().into_iter().map(|(name, eq)| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: Vec::new(), eq: Some(eq), state: None, base: None }).collect();
     }
-    let preset = |name: &str, values: &[(u32, f32)]| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: values.to_vec(), eq: None };
+    let preset = |name: &str, values: &[(u32, f32)]| Preset { name: name.into(), effect: effect.into(), version: VERSION, values: values.to_vec(), eq: None, state: None, base: None };
     // Every built-in effect and instrument starts with its defaults, as Logic's "#default".
     if let Some(info) = crate::instrument::find(effect) {
         let own = info.presets.iter().map(|f| preset(f.name, f.values));
@@ -279,7 +334,7 @@ mod tests {
     #[test]
     fn user_presets_round_trip() {
         let root = temp_root("rt");
-        let p = Preset { name: "My: Kick/Gate?".into(), effect: "builtin:noise-gate".into(), version: 0, values: vec![(0, -31.5), (4, 120.0)], eq: None };
+        let p = Preset { name: "My: Kick/Gate?".into(), effect: "builtin:noise-gate".into(), version: 0, values: vec![(0, -31.5), (4, 120.0)], eq: None, state: None, base: None };
         let name = write_user(&root, &p, false).unwrap();
         assert_eq!(name, "My Kick Gate");
         assert!(root.join("builtin_noise-gate").join("My Kick Gate.json").exists());
@@ -292,7 +347,7 @@ mod tests {
         assert_eq!(list_user(&root, "builtin:noise-gate"), vec!["Kick".to_string()]);
         delete_user(&root, "builtin:noise-gate", "Kick").unwrap();
         assert!(list_user(&root, "builtin:noise-gate").is_empty());
-        let eq = Preset { name: "Bright".into(), effect: CHANNEL_EQ.into(), version: 0, values: Vec::new(), eq: Some(eq_factory()[3].1.clone()) };
+        let eq = Preset { name: "Bright".into(), effect: CHANNEL_EQ.into(), version: 0, values: Vec::new(), eq: Some(eq_factory()[3].1.clone()), state: None, base: None };
         write_user(&root, &eq, false).unwrap();
         assert_eq!(get(&root, CHANNEL_EQ, "Bright", false).unwrap().eq.unwrap().bands[6].gain, 4.0);
         assert!(clean_name(" ..  ").is_err());

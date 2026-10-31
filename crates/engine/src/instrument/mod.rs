@@ -25,7 +25,12 @@ use vst3_host::MidiEvent;
 
 pub use crate::fx::{FactoryPreset, FxContext, ParamKind, ParamSpec, Unit, MAX_BLOCK, MAX_METERS};
 
+/// Data an instrument plays from, built off the audio thread and handed over whole (see
+/// [`Instrument::swap_data`]).
+pub type InstrumentData = std::sync::Arc<dyn std::any::Any + Send + Sync>;
+
 pub mod basic;
+pub mod sampler;
 pub mod tre;
 
 /// A built-in instrument instance.
@@ -66,6 +71,18 @@ pub trait Instrument: Send {
     /// Writes the values listed in [`InstrumentInfo::meters`], in that order, for the panel.
     fn meters(&self, out: &mut [f32; MAX_METERS]) {
         let _ = out;
+    }
+    /// Takes over data that isn't numeric (a sampler's zones and audio), and gives back what it
+    /// replaced for the engine to return to the session. Runs on the audio thread, so only swaps
+    /// pointers. The instrument may go on reading the old data through clones of its `Arc` (notes
+    /// still ringing): dropping those is safe here, because the session keeps its own hold on what
+    /// comes back until it is the last holder, and frees it then, on its own thread.
+    ///
+    /// The settings behind the data live in `PluginSlot::state`, which saving, undo, copying and
+    /// Freeze carry. The session builds the data from them before sending it, so there's nothing
+    /// for an offline render to wait for.
+    fn swap_data(&mut self, data: InstrumentData) -> Option<InstrumentData> {
+        Some(data)
     }
 }
 
@@ -158,7 +175,7 @@ impl InstrumentInfo {
 
 /// Every built-in instrument. To add one: write its module and list it here.
 pub fn registry() -> Vec<InstrumentInfo> {
-    vec![basic::info(), tre::info()]
+    vec![basic::info(), tre::info(), sampler::info()]
 }
 
 /// The registry entry for a plug-in id.

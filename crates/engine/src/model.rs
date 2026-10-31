@@ -1150,12 +1150,18 @@ impl Project {
         self.samples_per_beat() * self.sig_num as f64
     }
 
-    /// A copy safe to hand to the UI (plugin state blobs stripped).
+    /// A copy safe to hand to the UI (plugin state blobs stripped). A sampler's state goes as a
+    /// short fingerprint instead, which tells its panel when to read the zones again.
     pub fn for_ui(&self) -> Project {
         let mut p = self.clone();
         let strip = |s: &mut Option<PluginSlot>| {
             if let Some(s) = s {
-                s.state = None;
+                s.state = s.state.take().filter(|_| s.plugin_id == crate::instrument::sampler::ID).map(|text| {
+                    use std::hash::{Hash, Hasher};
+                    let mut h = std::collections::hash_map::DefaultHasher::new();
+                    text.hash(&mut h);
+                    format!("{:x}", h.finish())
+                });
             }
         };
         for t in &mut p.tracks {

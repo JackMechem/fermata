@@ -1575,6 +1575,12 @@ can: `ParamSpec`, `FactoryPreset`, `FxContext`, presets, `FxShared`, the panels'
   controllers and random generators included, as a new instance would be), and optionally `tail_secs`
   and `meters`. The real-time rules are the effects': nothing that allocates, locks or blocks in any of
   these. Parameter ids are stable forever. There is no latency: instruments have none to report.
+- **`swap_data`**, also optional: takes over data that isn't numeric, built off the audio thread, and gives
+  back what it replaced. It arrives by `Cmd::InstrumentData` and what it replaced leaves as
+  `Garbage::InstrumentData`, which the session keeps until it holds the last reference, so notes still
+  reading the old data through clones never free it on the audio thread. The settings behind the data live
+  in `PluginSlot::state`, carried by saving, undo, copying and Freeze, and a `Preset` has a `state` field
+  for them. A preset without one leaves what's there alone.
 - **`InstrumentInfo`**: the registry entry: id (`builtin:tre`), name, menu `group`, `about`, `params`,
   `sections` (the panel's layout), `meters`, `presets` and `new(sample_rate, seed)`. `seed` is the slot's
   id, saved in the project, so an instance's analog differences stay with it across reopening, and a
@@ -1671,6 +1677,98 @@ off by default, except what a preset turns on.
   with the Decay switch off, 1.33 times at a voice steal to a higher note (whose own slope is steeper), 1.4
   times with volume, cutoff and a mixer level stepping every block.
 - **Aliasing end to end:** a saw at note 96 (2 kHz), filter open, through the saturators: -61 dB.
+
+#### Fermata Sampler
+
+`instrument/sampler/`, and `session/sampler.rs` on the session's side. **Nothing here has been heard,
+and its panel hasn't been opened.** Everything below is measured against generated audio.
+
+- **Zones** (`state.rs`) are JSON in the slot's `PluginSlot::state`: file, key and velocity ranges, root,
+  fine, gain, pan, start, end, loop, crossfade, one-shot, reverse, round-robin group, and an amp envelope of
+  their own from an SFZ. Positions are the file's frames, whatever the project's rate. The numeric
+  parameters (`params.rs`) are the whole instrument's. A slot's state reaches the UI only as a fingerprint
+  (`Project::for_ui`), which tells the panel when to fetch `sampler_view` again.
+- **Files** are copied into the project's `Samples` folder when they arrive and named relative to the project.
+  A take records straight into it. Save As copies the whole folder, including files only an undo step uses.
+  Files are copied as they are; nothing is converted.
+- **Loading is synchronous from the engine's point of view.** `SamplerMap::build` makes a complete, immutable
+  map (`map.rs`) from the state and the `SamplePool` (`sample.rs`) before it's sent, so **an offline render has
+  nothing to wait for and `Instrument` needed no `set_offline`**: a render hears whichever map the last edit
+  sent, since `render` drains the commands first. The UI's commands decode on a worker into the pool first
+  (`prepare_files`, without the session's lock), so the edit on the main thread finds the files ready and a big
+  drop doesn't hold the window. Opening a project decodes on the opening thread, as its audio clips do.
+- **Swapping.** Voices hold the map they started with by a clone of its `Arc`, so an edit doesn't touch notes
+  in progress: they finish on the old one, and new notes use the new. Dropping a clone on the audio thread is a
+  decrement, since the instance holds the current map and `SamplerHost::retired` holds the old ones.
+  `sampler_idle` frees those at a strong count of 1, on the session's thread.
+- **Memory:** samples are decoded whole, 4 bytes per frame and channel, at the file's rate, with no disk
+  streaming. The pool's limit is 4 GiB (`MEMORY_LIMIT`), about 6 hours of 48 kHz stereo. Past it, unused files go
+  first; if that isn't enough the file refuses to load, its zone says so in the panel and on opening, and the
+  rest play. A reversed zone holds a backwards copy, and a loop holds a copy of its span, the second counted in
+  no limit.
+- **Interpolation** (`kernel.rs`): Kaiser-windowed sinc (β 9), 256 phases with linear blending between them,
+  in 25 banks a quarter octave apart. Bank 0 is the plain sinc over 32 taps, so a sample at its root and own rate comes
+  out bit for bit (a test). Above that the cutoff follows the ratio and the kernel stretches at 32 taps per unit
+  of ratio, up to 512 taps at 4 octaves. From there to 6 octaves the kernel stays 512 taps and its cutoff comes down
+  early, trading the sound's top for no aliases. **No mipmaps:** stretching costs no memory, leaves no seam in a loop
+  (a decimated loop isn't a whole number of samples long), and costs only the voices playing high. The tables are
+  7 MB, once per process, built in 60 ms on first use.
+- **Loops** (`LoopBuf`): each is baked to its own circular buffer of one period, crossfaded from the audio before
+  its start, with its own continuation on each side, so a kernel anywhere in it reads the loop going round. A voice
+  moves over once well inside the loop. Equal gain by default (correlated audio stays level; a loop of a periodic
+  wave comes out unchanged), equal power as an option. A loop too near the sample's start gets a shorter crossfade,
+  down to none at frame 0, where the seam is only as clean as the audio is. Baked loops are cached by what they
+  depend on, so moving one zone doesn't bake the others.
+- **Stealing:** the allocator hands out notes up to the polyphony (64 at most). Behind them are 144 voices, for
+  two layers per note and 16 kept spare. A stolen voice fades over 4 ms while the note starts on another.
+- **Determinism:** round robin counts per group and resets with `reset`. The only randomness is the LFO's Random
+  wave, from the slot's seed. The control tick (pitch, filter coefficients, LFO, every 32 samples) runs on the
+  instrument's own sample count, so block size doesn't move it. For the same MIDI, output is bit-identical at 1, 37,
+  128, 512 and 1024 frames. **Two things do differ with block size,** as for Tre: parameter edits land at the start of
+  the block they arrive in, and a tempo-synced LFO re-locks to the song position at the start of each block.
+- **Recording** reuses the engine's input and `Recorder`. `Cmd::InputTap` copies an input to a recorder's ring whatever the
+  transport does, only when there is real input, and the file lands in `Samples`. A second `Recorder` instance keeps
+  its take out of `finish_all` for a song's recording. There's no crash journal for it, no monitoring (the engine doesn't
+  play the input back for this) and no latency compensation (trimming makes that moot for a sample).
+- **Reusable instruments** (`presets.rs`): the sampler's user presets are folders, `~/Music/Fermata Instruments/<name>/`
+  with `instrument.json` and `Samples/`, listed in the ordinary preset menu. Loading one copies its samples into the
+  project. Renaming and deleting move or remove the folder. Factory presets only shape the parameters and keep the zones.
+- **Name parsing** (`mapping.rs`): note names read as C3 = 60, as Fermata shows them, so a library named with C4 = 60 lands an
+  octave off (its SFZ, if it has one, reads C4 = 60, as SFZ defines). A file's `smpl` chunk outranks its name.
+- **SFZ** (`sfz.rs`). Read: `<control>` (`default_path`, `note_offset`, `octave_offset`), `<global>`, `<master>`, `<group>`, `<region>`,
+  `#define`, `#include`, `sample`, `key`, `lokey`, `hikey`, `lovel`, `hivel`, `pitch_keycenter`, `tune` or `pitch`, `transpose`, `volume`, `pan`,
+  `offset`, `end`, `direction`, `loop_mode`, `loop_start`, `loop_end`, `seq_length`, `seq_position`, and `ampeg_attack`, `_decay`, `_sustain`,
+  `_release`. A WAV's own loop and root apply where the file says nothing, and sample paths match loosely on case. **Everything else is
+  ignored and listed to the user with a count**, including filters, `amp_veltrack`, key switches, CC modulation, `group`/`off_by` and `ampeg_hold`.
+  `loop_sustain` loops on through the release, and is listed. Regions with `trigger=` anything but `attack`, and generators (`*sine`), are
+  left out and listed. SoundFont (.sf2) isn't read.
+- **Filters:** Off, 12 dB low, band and high (a clean state-variable filter in `voice.rs`), and `Ladder` at 24 dB. The filter runs at the
+  output rate, without oversampling, and its coefficients update at the control rate.
+
+**Measured** (release build, i7-13700KF, `sampler_bench` at 48 kHz, with another agent's builds running beside it, so the worst blocks are pessimistic):
+
+| Case | 512 samples, mean (worst) | 128 samples, mean (worst) |
+|---|---|---|
+| 1 stereo voice, pitched | 0.13 % (0.16 %) | 0.13 % (0.23 %) |
+| 64 stereo voices, 44.1 kHz files, across 5 octaves | 9.7 % (17.8 %) | 9.7 % (51 %) |
+| 64 mono voices | 7.6 % (13.8 %) | 7.5 % (37 %) |
+| 64 stereo with the 12 dB filter | 10.6 % (16.3 %) | 10.6 % (19.9 %) |
+| 64 stereo with the ladder | 27.1 % (34.7 %) | 27.2 % (60.8 %) |
+| 64 stereo, 96 kHz files | 15.4 % (20.8 %) | 15.2 % (28.3 %) |
+| 8 stereo voices, 4 octaves up (512 taps) | 5.5 % (12.9 %) | 5.5 % (36 %) |
+
+Percentages are of the block's time on one core. Decoding a 5-minute stereo 24-bit WAV (86 MB) took 412 ms, baking a 2-minute loop 25 ms, and an
+edit to an instrument of 2000 zones 2.1 ms.
+
+- **Aliasing:** a band-limited saw at 750 Hz with harmonics up to Nyquist, played up by 1, 7, 12, 19, 24, 31 and 36 semitones: everything non-harmonic below 18 kHz
+  is -107 dB or lower against its fundamental. Sines at awkward ratios, including ones sent above Nyquist: -115.8 dB or lower below 19 kHz. A low saw of 500
+  harmonics up 47, 59 and 71 semitones: -132, -122 and -109 dB. Those come from a measurement with a Kaiser window of β 16. Above 19 kHz some folds back by design. Past 6 octaves up aliasing rises.
+- **Tuning:** worst 0.0002 cents, for notes from 3 octaves below the root to 2 above, at project rates of 44.1, 48 and 96 kHz and files at those rates; 16, 24 and 32-bit
+  integer and 32-bit float files under 0.02 cents.
+- **No clicks**, by the largest sample-to-sample step against the steady note's: a steal 1.03 times, a note-off at the shortest release 1.0 times, a looped sine through
+  its seam at most 1.01 times (a fifth up, 1.02), vibrato over a kernel change under 1.05 times.
+- **Real time:** `rt_alloc_check` plays one stealing voices, through zones and samples replaced under held notes, a parameter change and Track Off, at 1 and 4 threads: 0 allocations or frees.
+  `parallel_check` plays one with round robin, loops and the Random LFO, serial against 2, 3, 4 and 8 threads.
 
 #### To add a model
 

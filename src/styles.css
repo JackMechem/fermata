@@ -7773,3 +7773,232 @@ canvas.pr-cursor-line {
 .inst-key.down {
   background: var(--accent);
 }
+
+/* Fermata Sampler's panel (fx/Sampler.tsx): left to right for the dock, scrolling sideways. */
+.fx-body:has(> .smp-panel) {
+  overflow: hidden;
+}
+
+.fx-body > .smp-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  padding: 0;
+}
+
+/* width: 0 with min-width: 100% keeps the row from widening the dock. */
+.smp-row {
+  width: 0;
+  min-width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto hidden;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.smp-panel.smp-drop .smp-zones {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.smp-col {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.smp-col > .fx-group-body {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.smp-zones,
+.smp-wave {
+  min-height: 240px;
+}
+
+.smp-col > .fx-group-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smp-zones {
+  width: 400px;
+}
+
+.smp-wave {
+  width: 500px;
+}
+
+.smp-zones > .fx-group-body,
+.smp-wave > .fx-group-body {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+/* Two rows of controls, as many columns as they need. */
+.smp-section > .fx-group-body {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(2, auto);
+  align-content: start;
+  justify-items: center;
+  gap: 6px;
+}
+
+.smp-section .fx-knob {
+  width: 60px;
+}
+
+.smp-section .fx-label {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.smp-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+}
+
+.smp-input,
+.smp-zone-pick {
+  flex: none;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 11px;
+}
+
+.smp-rec.on {
+  color: #ff6a5e;
+}
+
+.smp-rec-time {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.smp-rec-level {
+  flex: 1 1 auto;
+  height: 8px;
+  background: var(--panel-3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.smp-rec-level > span {
+  display: block;
+  height: 100%;
+  background: #5fd38d;
+}
+
+.smp-rec-level > span.over {
+  background: #ff6a5e;
+}
+
+.smp-map-box {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 80px;
+}
+
+.smp-map,
+.smp-wave-canvas {
+  display: block;
+  width: 100%;
+  touch-action: none;
+}
+
+.smp-map {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+}
+
+.smp-wave-canvas {
+  flex: 1 1 auto;
+  min-height: 70px;
+  height: 0;
+  cursor: ew-resize;
+}
+
+.smp-empty {
+  position: absolute;
+  inset: 0 0 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+  color: var(--dim);
+  pointer-events: none;
+}
+
+.smp-wave .smp-empty {
+  position: static;
+  flex: 1 1 auto;
+}
+
+.smp-status {
+  flex: none;
+  font-size: 11px;
+  line-height: 14px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.smp-status.bad {
+  color: #ff7d72;
+}
+
+.smp-fields {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 2px 6px;
+}
+
+.smp-field {
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  color: var(--dim);
+}
+
+.smp-field > input {
+  box-sizing: border-box;
+  height: 18px;
+  padding: 0 3px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.smp-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.smp-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.smp-sens {
+  width: 52px;
+}
