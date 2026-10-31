@@ -232,9 +232,9 @@ impl Sampler {
         c.control_rate = rate / CONTROL as f32;
         // At the slider's bottom an envelope has no attack at all, which a drum wants.
         let attack = |ms: f32| if ms <= 0.1 { 0.0 } else { ms / 1000.0 };
-        c.amp = EnvShape::new(attack(self.v(A_ATTACK)), secs(A_DECAY), self.v(A_SUSTAIN) / 100.0, secs(A_RELEASE), rate);
-        c.filter_env = EnvShape::new(attack(self.v(F_ATTACK)), secs(F_DECAY), self.v(F_SUSTAIN) / 100.0, secs(F_RELEASE), c.control_rate);
-        c.vel_amp = self.v(VEL_AMP) / 100.0;
+        c.amp = EnvShape::new(attack(self.v(A_ATTACK)), secs(A_DECAY), self.v(A_SUSTAIN), secs(A_RELEASE), rate);
+        c.filter_env = EnvShape::new(attack(self.v(F_ATTACK)), secs(F_DECAY), self.v(F_SUSTAIN), secs(F_RELEASE), c.control_rate);
+        c.vel_amp = self.v(VEL_AMP);
         c.filter = match self.v(F_TYPE) as usize {
             1 => FilterKind::Low12,
             2 => FilterKind::Band12,
@@ -243,8 +243,8 @@ impl Sampler {
             _ => FilterKind::Off,
         };
         c.cutoff_note = hz_to_note(self.v(CUTOFF));
-        c.resonance = self.v(RESONANCE) / 100.0;
-        c.key_track = self.v(KEY_TRACK) / 100.0;
+        c.resonance = self.v(RESONANCE);
+        c.key_track = self.v(KEY_TRACK);
         c.env_st = self.v(F_ENV);
         c.vel_cutoff_st = self.v(VEL_CUTOFF);
         c.glide_secs = secs(GLIDE);

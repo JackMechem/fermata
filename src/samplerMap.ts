@@ -186,3 +186,9 @@ export function zoomed(from: number, to: number, frames: number, at: number, fac
 
 /** What can be picked up by the sampler: audio files and SFZ files. */
 export const isSfzPath = (p: string) => /\.sfz$/i.test(p);
+
+/** Memory for the panel's readout: small amounts in MB, so one sample doesn't read as nothing. */
+export function memorySize(bytes: number): string {
+  const mb = bytes / (1 << 20);
+  return mb < 1024 ? `${mb < 10 ? mb.toFixed(1) : mb.toFixed(0)} MB` : `${(mb / 1024).toFixed(2)} GB`;
+}

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { dragZone, grabOf, isSfzPath, keyAt, keyName, moveHandle, parseKey, pointsOf, velAt, zoneAt, zoneRect, zoomed, type ZoneView } from "../src/samplerMap.ts";
+import { memorySize, dragZone, grabOf, isSfzPath, keyAt, keyName, moveHandle, parseKey, pointsOf, velAt, zoneAt, zoneRect, zoomed, type ZoneView } from "../src/samplerMap.ts";
 
 const zone = (over: Partial<ZoneView> = {}): ZoneView => ({
   id: 1,
@@ -93,4 +93,11 @@ test("zooming holds the frame under the pointer, within the file", () => {
   assert.deepEqual(zoomed(250, 750, 1000, 500, 10), [0, 1000]);
   assert.equal(zoomed(0, 40, 1000, 10, 0.1)[1] - zoomed(0, 40, 1000, 10, 0.1)[0], 32);
   assert.ok(isSfzPath("/a/B.SFZ") && !isSfzPath("/a/b.wav"));
+});
+
+test("the memory readout doesn't round a small sample to nothing", () => {
+  assert.equal(memorySize(0), "0.0 MB");
+  assert.equal(memorySize(3 << 20), "3.0 MB");
+  assert.equal(memorySize(200 << 20), "200 MB");
+  assert.equal(memorySize(1536 << 20), "1.50 GB");
 });

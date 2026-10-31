@@ -8,10 +8,11 @@ import { act, api, call, type Id, type InputSel, type Snapshot } from "../../api
 import type { FxPanelProps } from "../../fx";
 import { findFxSlot } from "../../fxHost";
 import { dropOnSampler } from "../../samplerDrop";
-import { dragZone, grabOf, keyAt, keyName, moveHandle, parseKey, pointsOf, toZone, zoneAt, zoneRect, zoomed, type MapBox, type SamplerView, type SamplerWave, type WaveHandle, type ZoneGrab, type ZoneView } from "../../samplerMap";
+import { memorySize, dragZone, grabOf, keyAt, keyName, moveHandle, parseKey, pointsOf, toZone, zoneAt, zoneRect, zoomed, type MapBox, type SamplerView, type SamplerWave, type WaveHandle, type ZoneGrab, type ZoneView } from "../../samplerMap";
 import { getState, setState, useStore } from "../../store";
 import { AUDIO_EXTENSIONS } from "../../dnd";
 import { FxControl, FxGroup } from "./common";
+import { wheelAcross } from "./Instrument";
 
 type Result<T> = { snapshot: Snapshot; result: T };
 
@@ -282,6 +283,8 @@ function Waveform({ track, zone, onChange }: { track: Id; zone: ZoneView; onChan
       className="smp-wave-canvas"
       title="Drag S and E for where the zone starts and ends, L and R for its loop. Scroll to zoom, double-click to see it all."
       onWheel={(e) => {
+        // It zooms the waveform; the row behind it stays where it is.
+        e.stopPropagation();
         e.preventDefault();
         if (zone.frames) setRange(zoomed(range[0], range[1], zone.frames, frameAt(e), e.deltaY < 0 ? 0.75 : 1.33));
       }}
@@ -518,7 +521,7 @@ export function SamplerPanel({ info, track, uid, values, set, touch, meters }: F
   const gb = (b: number) => (b / (1 << 30)).toFixed(b < 1 << 30 ? 2 : 1);
   return (
     <div className="fx-panel smp-panel" data-sampler-track={track}>
-      <div className="smp-row">
+      <div className="smp-row" onWheel={wheelAcross}>
         <FxGroup title="Zones" className="smp-col smp-zones">
           <div className="smp-tools">
             <button className="fx-toggle" title="Add audio files, or load an SFZ in place of the zones. You can drop them here too." onClick={addFiles}>
@@ -540,7 +543,7 @@ export function SamplerPanel({ info, track, uid, values, set, touch, meters }: F
             </div>
           ) : (
             <div className="smp-status">
-              {zones.length} zone{zones.length === 1 ? "" : "s"}, {gb(view?.memory ?? 0)} of {gb(view?.limit ?? 0)} GB in memory, {meters[0] ?? 0} voices
+              {zones.length} zone{zones.length === 1 ? "" : "s"}, {memorySize(view?.memory ?? 0)} of {gb(view?.limit ?? 0)} GB in memory, {meters[0] ?? 0} voices
             </div>
           )}
         </FxGroup>

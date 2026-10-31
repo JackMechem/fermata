@@ -454,7 +454,7 @@ fn nothing_goes_nan_whatever_the_file_holds() {
     s.reset();
     for f in [0.0, 1.0, 2.0, 3.0, 4.0] {
         s.set_param(params::param::F_TYPE, f);
-        s.set_param(params::param::RESONANCE, 100.0);
+        s.set_param(params::param::RESONANCE, 1.0);
         s.set_param(params::param::CUTOFF, 200.0);
         s.process(&mut [0.0; 8], &mut [0.0; 8], &[], &CTX);
         s.reset();
@@ -528,7 +528,7 @@ fn reset_repeats_bit_for_bit_and_block_size_doesnt_matter() {
     use params::param::*;
     s.set_param(F_TYPE, 4.0);
     s.set_param(CUTOFF, 1500.0);
-    s.set_param(RESONANCE, 40.0);
+    s.set_param(RESONANCE, 0.4);
     s.set_param(F_ENV, 24.0);
     s.set_param(LFO_PITCH, 30.0);
     s.set_param(LFO_FILTER, 12.0);

@@ -197,6 +197,16 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
+    fn percent_parameters_are_stored_as_fractions() {
+        // The panel multiplies by 100, so one stored as 0..100 reads "10000 %".
+        for info in registry() {
+            for p in info.params.iter().filter(|p| p.unit == crate::fx::Unit::Percent) {
+                assert!(p.max <= 1.0, "{}: {} goes up to {}", info.id, p.name, p.max);
+            }
+        }
+    }
+
+    #[test]
     fn registry_entries_are_well_formed() {
         let reg = registry();
         let mut ids = HashSet::new();

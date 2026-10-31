@@ -59,7 +59,7 @@ export function InstrumentPanel({ info, track, values, set, touch, meters }: FxP
 }
 
 /** In a row wider than the panel, a wheel moves along the sections. */
-function wheelAcross(e: React.WheelEvent<HTMLDivElement>) {
+export function wheelAcross(e: React.WheelEvent<HTMLDivElement>) {
   const el = e.currentTarget;
   if (e.deltaX === 0 && el.scrollWidth > el.clientWidth) el.scrollLeft += e.deltaY;
 }

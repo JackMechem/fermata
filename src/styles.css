@@ -7782,8 +7782,14 @@ canvas.pr-cursor-line {
 .fx-body > .smp-panel {
   flex: 1 1 auto;
   min-height: 0;
+  max-width: none;
+  margin-inline: 0;
   display: flex;
   padding: 0;
+}
+
+.fx-dock > .fx-body:has(> .smp-panel) {
+  padding: 8px 10px;
 }
 
 /* width: 0 with min-width: 100% keeps the row from widening the dock. */
