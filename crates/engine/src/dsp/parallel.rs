@@ -590,8 +590,14 @@ mod tests {
         e.engine.process(&[], 0, &mut out, 2);
         assert!(out.iter().all(|&s| s == 0.0), "silence for the block");
         assert_eq!(e.status.engine_errors.load(Ordering::Relaxed), 1, "and it's counted");
-        e.engine.process(&[], 0, &mut out, 2);
-        assert!(out.iter().any(|s| s.abs() > 0.01), "the pool isn't poisoned");
+        // Reporting a panic can take long enough to count as an overload (with a backtrace on
+        // Windows it does), and the engine then stays quiet for `SHED_SECS`.
+        let blocks = (2.0 * SHED_SECS * SR / BLOCK as f64) as usize;
+        let heard = (0..blocks).any(|_| {
+            e.engine.process(&[], 0, &mut out, 2);
+            out.iter().any(|s| s.abs() > 0.01)
+        });
+        assert!(heard, "the pool isn't poisoned");
         assert_eq!(e.status.engine_errors.load(Ordering::Relaxed), 1);
     }
 
