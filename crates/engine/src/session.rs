@@ -2821,7 +2821,16 @@ impl Session {
             self.stop();
         }
         let what = if was_running { "so playback stopped" } else { "so it skipped a moment of audio" };
-        let msg = format!("System overload: the audio engine couldn't keep up, {what}. Try a larger buffer size in Settings › Audio, or bypass or freeze heavy plug-ins.");
+        let ms = f32::from_bits(self.status.overload_secs.load(Ordering::Relaxed)) * 1000.0;
+        let track = self.project.track(self.status.overload_track.load(Ordering::Relaxed)).map(|t| t.name.clone());
+        let detail = match (self.status.overload_stuck.load(Ordering::Relaxed), track) {
+            (true, Some(t)) => format!("A processing thread stayed in \"{t}\" for over {ms:.0} ms."),
+            (true, None) => format!("A processing thread didn't finish within {ms:.0} ms."),
+            (false, Some(t)) => format!("A buffer took {ms:.0} ms; \"{t}\" took longest."),
+            (false, None) => format!("A buffer took {ms:.0} ms."),
+        };
+        log::warn!("overload: {detail} ({} threads, {} late blocks so far)", self.status.threads.load(Ordering::Relaxed), self.status.late_blocks.load(Ordering::Relaxed));
+        let msg = format!("System overload: the audio engine couldn't keep up, {what}. {detail} Try a larger buffer size in Settings › Audio, or bypass or freeze heavy plug-ins.");
         self.warning.get_or_insert(msg);
     }
 

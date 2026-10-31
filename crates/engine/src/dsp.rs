@@ -92,6 +92,12 @@ pub struct EngineStatus {
     /// Times the engine fell so far behind that it skipped processing for a moment (see
     /// `Engine::process`).
     pub overloads: AtomicU32,
+    /// The latest overload, for its message: how long its callback took in seconds (f32 bits), the
+    /// track that took longest or that a worker is stuck in (0: none), and whether it gave up on a
+    /// stuck worker.
+    pub overload_secs: AtomicU32,
+    pub overload_track: AtomicU64,
+    pub overload_stuck: AtomicBool,
     /// Threads playing the strips in the latest block, and how many blocks went through the pool
     /// (see `parallel.rs`).
     pub threads: AtomicU32,
@@ -119,6 +125,9 @@ impl Default for EngineStatus {
             bad_audio: AtomicU32::new(0),
             bad_audio_uid: AtomicU64::new(0),
             overloads: AtomicU32::new(0),
+            overload_secs: AtomicU32::new(0),
+            overload_track: AtomicU64::new(0),
+            overload_stuck: AtomicBool::new(false),
             threads: AtomicU32::new(1),
             parallel_blocks: AtomicU64::new(0),
         }
@@ -389,6 +398,8 @@ pub struct TrackDsp {
     feed: multi_out::OutputFeed,
     /// What the strip played this block when it ran on the pool (see `parallel.rs`).
     outs: Outlets,
+    /// How long the strip's last block took, in seconds.
+    spent: f32,
     /// What its folder does to it this block, read before the pool started.
     fold_now: auto::FoldState,
 }
@@ -439,6 +450,7 @@ impl TrackDsp {
             instrument_ran: false,
             feed: Default::default(),
             outs: Outlets::new(),
+            spent: 0.0,
             fold_now: Default::default(),
         }
     }
@@ -1736,6 +1748,9 @@ impl Engine {
                     self.status.late_blocks.store(self.block_load.late, Ordering::Relaxed);
                     self.behind_secs = 0.0;
                     self.shedding = (SHED_SECS * self.sample_rate / frames.max(1) as f64).ceil() as u32;
+                    self.status.overload_secs.store((started.elapsed().as_secs_f32()).to_bits(), Ordering::Relaxed);
+                    self.status.overload_track.store(self.parallel.stuck_track().unwrap_or(0), Ordering::Relaxed);
+                    self.status.overload_stuck.store(true, Ordering::Relaxed);
                     self.status.overloads.fetch_add(1, Ordering::Relaxed);
                     return;
                 }
@@ -1798,6 +1813,10 @@ impl Engine {
                 self.behind_secs = 0.0;
                 self.shedding = (SHED_SECS / budget).ceil() as u32;
                 self.flush_all_notes();
+                let slowest = self.tracks.iter().max_by(|a, b| a.spent.total_cmp(&b.spent)).map_or(0, |t| t.id);
+                self.status.overload_secs.store((spent as f32).to_bits(), Ordering::Relaxed);
+                self.status.overload_track.store(slowest, Ordering::Relaxed);
+                self.status.overload_stuck.store(false, Ordering::Relaxed);
                 self.status.overloads.fetch_add(1, Ordering::Relaxed);
             }
         }
@@ -1953,7 +1972,9 @@ impl Engine {
                 let (before, rest) = self.tracks.split_at_mut(ti);
                 let (cur, tail) = rest.split_first_mut().unwrap();
                 let mut routes = Direct { before, tail, ti, bus: (&mut self.bus_l[..n], &mut self.bus_r[..n]), analyzer: &mut self.analyzer_tx };
+                let at = Instant::now();
                 run_strip(&cx, ti, cur, &mut self.scratch, &mut routes);
+                cur.spent = at.elapsed().as_secs_f32();
             }
         }
 

@@ -45,6 +45,8 @@ struct StripJob {
     tracks: *const *mut TrackDsp,
     scratch: *mut Scratch,
     graph: *const TaskGraph,
+    /// The track each thread is in (0: none).
+    busy: *const AtomicU64,
 }
 
 // SAFETY: the pointers are what `run` says they are, and `BlockCtx` is Sync by itself.
@@ -58,9 +60,15 @@ impl Job for StripJob {
         let (t, sc) = unsafe { (&mut **self.tracks.add(task), &mut *self.scratch.add(thread)) };
         // SAFETY: valid and unchanging while the block is open.
         let graph = unsafe { &*self.graph };
+        // SAFETY: one per thread, and it lives as long as the pool.
+        let busy = unsafe { &*self.busy.add(thread) };
+        busy.store(t.id, Ordering::Relaxed);
+        let at = std::time::Instant::now();
         t.outs.reset();
         let mut routes = Deferred { tracks: self.tracks, graph, ti: task, n: self.cx.n };
         run_strip(&self.cx, task, t, sc, &mut routes);
+        t.spent = at.elapsed().as_secs_f32();
+        busy.store(0, Ordering::Relaxed);
     }
 }
 
@@ -69,6 +77,7 @@ pub struct Workers {
     pool: Pool,
     /// One per thread.
     scratch: Vec<Scratch>,
+    busy: Vec<AtomicU64>,
     /// Stays in place while a block is open, whatever happens to the engine's own fields.
     job: Box<UnsafeCell<Option<StripJob>>>,
     /// The strips of the open block.
@@ -83,7 +92,8 @@ impl Workers {
     pub fn new(opts: PoolOptions) -> Box<Workers> {
         let pool = Pool::new(opts);
         let scratch = (0..pool.threads()).map(|_| Scratch::default()).collect();
-        Box::new(Workers { pool, scratch, job: Box::new(UnsafeCell::new(None)), tracks: vec![std::ptr::null_mut(); MAX_TASKS] })
+        let busy = (0..pool.threads()).map(|_| AtomicU64::new(0)).collect();
+        Box::new(Workers { pool, scratch, busy, job: Box::new(UnsafeCell::new(None)), tracks: vec![std::ptr::null_mut(); MAX_TASKS] })
     }
 
     pub fn threads(&self) -> usize {
@@ -181,6 +191,12 @@ impl Parallel {
         })
     }
 
+    /// A track a thread is in right now, after a block was given up on.
+    pub fn stuck_track(&self) -> Option<Id> {
+        let w = self.workers.as_ref()?;
+        w.busy.iter().map(|b| b.load(Ordering::Relaxed)).find(|&id| id != 0)
+    }
+
     /// Whether a block given up on is over.
     pub fn open_block_over(&self) -> bool {
         self.workers.as_ref().is_none_or(|w| w.pool.is_done())
@@ -210,7 +226,7 @@ impl Parallel {
         // boxed settings) stays where it is and unchanged while the block is open, because the
         // caller applies no commands until `open_block_over`, and the job doesn't outlive that.
         let cx: BlockCtx<'static> = unsafe { std::mem::transmute(*cx) };
-        let job = StripJob { cx, tracks: w.tracks.as_ptr(), scratch: w.scratch.as_mut_ptr(), graph };
+        let job = StripJob { cx, tracks: w.tracks.as_ptr(), scratch: w.scratch.as_mut_ptr(), graph, busy: w.busy.as_ptr() };
         // SAFETY: the last block is over (the caller checks `stalled`), so nobody reads the cell; and
         // the job, the graph and the strips stay put until the block is, as above.
         unsafe {
