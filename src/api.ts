@@ -495,6 +495,8 @@ export interface Tick {
   cpu_peak: number;
   /** Blocks so far that took longer than their own audio. Only ever grows. */
   late_blocks: number;
+  /** Threads playing tracks right now: 1 until a project needs more. */
+  threads: number;
   meters: [Id, number, number][];
   master: [number, number];
   inputs: number[];
@@ -553,6 +555,8 @@ export interface AudioConfig {
   input_enabled: boolean;
   auto_monitor: boolean;
   recording_delay_ms: number;
+  /** Threads that play tracks: 0 is Automatic, 1 the audio thread alone. */
+  processing_threads: number;
 }
 
 export const MASTER_ID = 0;

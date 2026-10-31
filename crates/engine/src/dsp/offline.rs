@@ -93,6 +93,7 @@ impl Engine {
     }
 
     fn render_with(&mut self, from: i64, to: i64, tail: i64, isolate: Option<Isolate>, progress: &mut dyn FnMut(f64), edit: Option<(i64, &mut dyn FnMut())>) -> Vec<Vec<f32>> {
+        self.settle();
         // Apply edits that are still queued, so the render hears the latest settings.
         self.process(&[], 0, &mut [], 0);
         let saved = Saved {
@@ -129,7 +130,7 @@ impl Engine {
         // Live MIDI and the analyzer stay out of the render.
         self.midi_target = None;
         self.analyzer_target = None;
-        self.isolate = isolate;
+        self.isolate = isolate.map(Box::new);
         self.offline = true;
         self.snap_gains = true;
         // Nothing is live in a render, and no audio from before it leaks in.

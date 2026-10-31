@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { threadOptions, type ThreadChoices } from "../threads";
 import { useSheetKeys } from "../sheetKeys";
 import type { SheetMode } from "../sheetKeysModel";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -210,6 +211,7 @@ function AudioPane({ close }: { close: () => void }) {
   const [cfg, setCfgState] = useState<AudioConfig | null>(audioDraft);
   const [applied, setApplied] = useState<AudioConfig | null>(null);
   const [busy, setBusy] = useState(false);
+  const [threads, setThreads] = useState<ThreadChoices | null>(null);
   const setCfg = (c: AudioConfig) => {
     audioDraft = c;
     setCfgState(c);
@@ -219,6 +221,7 @@ function AudioPane({ close }: { close: () => void }) {
       setApplied(c);
       if (c && !audioDraft) setCfgState(c);
     });
+    call<ThreadChoices>("thread_choices").then(setThreads);
   }, []);
   useEffect(() => {
     if (cfg) call<DeviceList>("audio_devices", { host: cfg.host }).then(setDevices);
@@ -285,6 +288,13 @@ function AudioPane({ close }: { close: () => void }) {
           <Select value={cfg.buffer_size} options={[32, 64, 128, 256, 512, 1024, 2048].map((b) => [b, `${b} samples`] as [number, string])} onChange={(b) => setCfg({ ...cfg, buffer_size: b })} />
           <span className="dim">{bufferMs} ms per buffer</span>
         </div>
+        <label>Processing Threads:</label>
+        {threads ? <Select value={cfg.processing_threads} options={threadOptions(threads)} onChange={(n) => setCfg({ ...cfg, processing_threads: n })} /> : <span />}
+        <span />
+        <span className="form-note">
+          How many threads play tracks at once. Automatic uses more only when a project needs them; 1 keeps everything on the audio thread. Changes take effect
+          without restarting audio.
+        </span>
         <label>Monitoring:</label>
         <label className="check">
           <input type="checkbox" checked={cfg.auto_monitor} onChange={(e) => setCfg({ ...cfg, auto_monitor: e.target.checked })} />

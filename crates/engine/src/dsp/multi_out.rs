@@ -50,12 +50,11 @@ impl OutputFeed {
         }
     }
 
-    /// Adds this block of the output to `out`. `before` are the tracks played earlier in the
-    /// block, `scratch` two buffers of the block's length.
-    pub(super) fn pull(&mut self, before: &[Box<TrackDsp>], p: &Pull, tap: &mut Tap, out: (&mut [f32], &mut [f32]), scratch: (&mut [f32], &mut [f32])) {
+    /// Adds this block of the output to `out`. `src` is the instrument's track, played earlier in
+    /// the block, `scratch` two buffers of the block's length.
+    pub(super) fn pull(&mut self, src: Option<&TrackDsp>, p: &Pull, tap: &mut Tap, out: (&mut [f32], &mut [f32]), scratch: (&mut [f32], &mut [f32])) {
         let (l, r) = out;
         let (sl, sr) = scratch;
-        let src = self.source.and_then(|i| before.get(i));
         // A plug-in that didn't run this block (off, bypassed, skipped) has last block's audio
         // there, and one with fewer outputs has no such bus.
         let bus = src.filter(|s| s.instrument_ran).and_then(|s| s.instrument.as_ref()).and_then(|i| match &i.plugin {

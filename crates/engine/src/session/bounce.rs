@@ -107,6 +107,7 @@ impl Session {
         if to <= from {
             return Err(anyhow!("Nothing to bounce: the range is empty"));
         }
+        self.sync_parallel();
         let engine = self.engine.clone();
         // A built-in effect's lookahead may have just changed: let the engine apply it, so
         // the render's delay compensation is up to date.

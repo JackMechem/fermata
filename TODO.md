@@ -4,6 +4,25 @@ What's left, in the order it matters for a usable release. Each stage builds on 
 The full Logic Pro feature scope is in [LOGIC_FEATURES.md](LOGIC_FEATURES.md); known limitations
 of what exists are in the [User Guide](docs/USER_GUIDE.md#20-known-limitations).
 
+## Open items (multi-core processing, 2026-10-30)
+
+Everything was measured by driving the engine by hand on the null device. Nothing has been heard yet.
+
+- **Check on a real device:** the tooltip's thread count on the 5-TONE3000 project, the meter against
+  the same project at 1 thread, listening for dropouts, and that the log shows no "stays at normal
+  priority" (rtkit can refuse: it did during rapid restarts here, and then workers run at normal
+  priority).
+- Workers at normal priority beside a real-time callback are safe but can be late under system load.
+  Nothing yet falls back to one thread when promotion is refused.
+- A plug-in that never returns while on a worker still meets the kernel's 200 ms limit, as on the
+  callback. The callback now gives up on the block, and could demote the worker so the app survives.
+- Renders stay on one thread. They could go parallel with workers at normal priority.
+- Automatic is 1 on macOS and Windows until workers get real-time priority there.
+- Before this round: `soak_check <dir> 600 22` fails, on one thread as on eight: undoing every edit
+  doesn't give the first document back. Not looked into. The default seed passes.
+- Before this round: the first render after a send was added depends on how many live blocks ran in
+  between, as `snap_gains` doesn't cover send gains. Two renders in a row agree.
+
 ## Open items (2026-10-30)
 
 Left over from the round of 2026-10-30 (Track On/Off, drag to a new track, VST3 side-chain inputs,
@@ -189,6 +208,7 @@ Goal: the larger Logic features that set a full DAW apart.
 - [x] Track alternatives; project alternatives and backups; user project templates
 - [x] Arrangement track; markers with their own lengths
 - [x] Step Sequencer: pattern regions, rows of steps, edit modes, polymeter, swing
+- [x] Multi-core track processing: Settings › Audio › Processing Threads, bit-identical to one thread
 - [ ] Score Editor
 
 ## Stage 7: Formats and reach

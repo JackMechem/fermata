@@ -33,6 +33,7 @@ pub mod synth;
 pub mod sysvol;
 pub mod takes;
 pub mod tempo;
+pub mod threads;
 pub mod transients;
 pub mod vca;
 pub mod wav_repair;

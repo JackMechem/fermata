@@ -8,13 +8,18 @@ test("the peak never shows under the average", () => {
 });
 
 test("the tooltip gives the average and the peak", () => {
-  const title = cpuTitle(0.52, 1.304, 0);
+  const title = cpuTitle(0.52, 1.304, 0, 1);
   assert.match(title, /Average 52%, recent peak 130%\./);
   assert.match(title, /system monitor/);
 });
 
 test("late blocks are counted, and only mentioned when there are some", () => {
-  assert.doesNotMatch(cpuTitle(0.1, 0.1, 0), /Click to clear/);
-  assert.match(cpuTitle(0.1, 0.1, 1), /1 block over 100%\. Click to clear\./);
-  assert.match(cpuTitle(0.1, 0.1, 3), /3 blocks over 100%\. Click to clear\./);
+  assert.doesNotMatch(cpuTitle(0.1, 0.1, 0, 1), /Click to clear/);
+  assert.match(cpuTitle(0.1, 0.1, 1, 1), /1 block over 100%\. Click to clear\./);
+  assert.match(cpuTitle(0.1, 0.1, 3, 1), /3 blocks over 100%\. Click to clear\./);
+});
+
+test("the tooltip says how many threads are playing", () => {
+  assert.match(cpuTitle(0.1, 0.1, 0, 1), /audio thread alone/);
+  assert.match(cpuTitle(0.1, 0.1, 0, 4), /Playing on 4 threads\./);
 });

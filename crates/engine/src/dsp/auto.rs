@@ -6,7 +6,7 @@ use super::*;
 
 /// What a folder stack does to a subtrack this block (see [`fold_at`]).
 #[derive(Debug, Clone, Copy, Default)]
-pub(super) struct FoldState {
+pub(crate) struct FoldState {
     /// The folder's gain, with the folders it is in.
     pub gain: f32,
     /// The folder, or a stack it is in, is muted.

@@ -221,16 +221,18 @@ function CpuMeter() {
   const [cpu, setCpu] = useState(0);
   const [blockPeak, setBlockPeak] = useState(0);
   const [lateBlocks, setLateBlocks] = useState(0);
+  const [threads, setThreads] = useState(1);
   const [cleared, setCleared] = useState(0);
   useEffect(() => onTick((t) => {
     setCpu((c) => (Math.abs(c - t.cpu) > 0.01 ? t.cpu : c));
     setBlockPeak((p) => (Math.abs(p - t.cpu_peak) > 0.01 ? t.cpu_peak : p));
     setLateBlocks(t.late_blocks);
+    setThreads(t.threads);
   }), []);
   const peak = shownPeak(cpu, blockPeak);
   const late = lateBlocks - cleared;
   return (
-    <div className={"cpu" + (late > 0 ? " over" : "")} title={cpuTitle(cpu, peak, late)} onClick={() => setCleared(lateBlocks)}>
+    <div className={"cpu" + (late > 0 ? " over" : "")} title={cpuTitle(cpu, peak, late, threads)} onClick={() => setCleared(lateBlocks)}>
       <span>CPU</span>
       <div className="cpu-bar">
         <div style={{ width: `${Math.min(100, cpu * 100)}%`, background: cpu > 0.8 ? "#f0524a" : cpu > 0.5 ? "#f0b43c" : "#8d9099" }} />

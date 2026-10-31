@@ -127,7 +127,7 @@ Contents:
 ### Choosing a driver and devices
 
 Settings › Audio holds the device settings. The driver, devices, sample rate, buffer size,
-Monitoring and Recording Delay take effect when you click **Apply Changes**; Done, switching
+Processing Threads, Monitoring and Recording Delay take effect when you click **Apply Changes**; Done, switching
 tabs or closing the window drops changes you haven't applied. The delay compensation options on
 the same tab apply at once.
 
@@ -140,6 +140,13 @@ the same tab apply at once.
 - **Sample Rate.** Only the rates both devices support are offered.
 - **I/O Buffer Size.** 32 to 2048 samples; the time per buffer is shown next to it. Smaller is
   more responsive, larger is safer against crackles.
+- **Processing Threads.** How many threads play tracks at once, the audio thread included.
+  **Automatic** (the default) brings in more threads when a project needs them and leaves a light
+  project on the audio thread alone. **1** keeps everything on the audio thread, the way to rule
+  threads out if you suspect them. The output is the same sample for sample whatever you choose.
+  Apply Changes takes effect at once, without restarting audio. Bounces and other renders always
+  play on one thread. On macOS and Windows, Automatic stays on one thread for now, as the extra
+  threads can only get real-time priority on Linux so far.
 - **Reset Audio Engine** closes and reopens the devices, for example after replugging an
   interface.
 
@@ -2539,6 +2546,7 @@ Metronome tab (saved with the project).
 | Input Device | None (playback only), System Default or a device | System Default |
 | Sample Rate | Rates both devices support (44.1 to 192 kHz) | 48 kHz |
 | I/O Buffer Size | 32, 64, 128, 256, 512, 1024, 2048 samples | 256 |
+| Processing Threads | Automatic, 1 up to the number of hardware threads (at most 16) | Automatic |
 | Monitoring | Hear record-enabled tracks without pressing I | Off |
 | Recording Delay | -500 to 500 ms, added to the measured latency | 0 |
 | Plug-in Delay Compensation | All, Off (applies at once) | All |
@@ -2913,6 +2921,8 @@ at 40% lowers everything you record by about 24 dB, and a muted source records s
 - Raise the **I/O Buffer Size** in Settings › Audio (256 or 512 samples), then Apply Changes.
 - Watch the [CPU meter](#the-cpu-meter) in the control bar, its peak tick above all; freeze heavy
   tracks (snowflake button).
+- Leave **Processing Threads** on Automatic. If dropouts started with a change to it, set it to 1
+  in Settings › Audio to see whether it makes a difference.
 - Make sure real-time scheduling is available: on Linux, rtkit must be running
   (`security.rtkit.enable = true;` on NixOS). PipeWire's own quantum can also be raised.
 - Use **PipeWire** as the driver on Linux. Direct ALSA (`hw:`) devices lock the interface for
@@ -2947,11 +2957,14 @@ Set **Recording Delay** in Settings › Audio. See [Latency compensation](#laten
 
 ### The CPU meter
 
-The **CPU** meter in the control bar shows the audio load: how much of each buffer's time the
-audio thread uses. It is not your system monitor's CPU figure, which is shared across all
-cores: one audio thread at 80% on a 24-thread machine reads about 3% there. The audio
+The **CPU** meter in the control bar shows the audio load: how much of each buffer's time it
+takes to finish the buffer, from when it starts until every track is done, however many
+[threads](#choosing-a-driver-and-devices) work on it. It is not your system monitor's CPU figure, which is shared
+across all cores: one audio thread at 80% on a 24-thread machine reads about 3% there. The audio
 load is what decides whether audio drops out, because a block that takes longer than the buffer
-plays arrives too late. Hover over the meter for the numbers.
+plays arrives too late. Spreading tracks over more threads lowers it, down to what the slowest
+single track (with whatever feeds it) takes on its own, so one very heavy plug-in still sets the
+limit. Hover over the meter for the numbers and how many threads are playing just now.
 
 - **The bar** is the average: amber above 50%, red above 80%.
 - **The thin tick** is the worst single block lately. It stays for two seconds, then falls. A

@@ -77,7 +77,12 @@ pub fn snapshot(s: &Session) -> Snapshot {
 }
 
 fn with<T>(state: &State<AppState>, f: impl FnOnce(&mut Session) -> T) -> T {
-    f(&mut state.session.lock())
+    let mut s = state.session.lock();
+    let out = f(&mut s);
+    // Routes an edit changed get their task graph now, not at the next idle: until then the engine
+    // plays those blocks on one thread (see `Session::sync_parallel`).
+    s.sync_parallel();
+    out
 }
 
 fn snap(state: &State<AppState>, f: impl FnOnce(&mut Session)) -> Snapshot {
@@ -166,6 +171,11 @@ pub fn rescan_plugins(state: State<AppState>) -> R<Vec<PluginDescriptor>> {
 #[tauri::command(async)]
 pub fn audio_devices(host: Option<String>) -> DeviceList {
     list_devices(host.as_deref())
+}
+
+#[tauri::command]
+pub fn thread_choices(state: State<AppState>) -> daw_engine::threads::ThreadChoices {
+    with(&state, |s| s.thread_choices())
 }
 
 #[tauri::command]

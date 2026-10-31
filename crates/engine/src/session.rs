@@ -91,6 +91,7 @@ pub use recovery::{discard_journals, read_journal, recording_journals, JournalTa
 mod zero_crossings;
 mod region_gain;
 mod musical_moves;
+mod threads;
 mod track_off;
 mod vst_key;
 #[cfg(test)]
@@ -119,6 +120,8 @@ pub struct Tick {
     pub cpu: f32,
     pub cpu_peak: f32,
     pub late_blocks: u32,
+    /// Threads playing tracks right now (1 unless the project needs more).
+    pub threads: u32,
     pub meters: Vec<(Id, f32, f32)>,
     pub master: (f32, f32),
     pub inputs: Vec<f32>,
@@ -242,6 +245,10 @@ pub struct Session {
     section_clip: Option<SectionClip>,
     /// Plug-ins whose editor is open, watched for undo steps (see `session/vst_undo.rs`).
     vst_watches: HashMap<Id, vst_undo::Watch>,
+    /// Processing Threads (see `session/threads.rs`), and whether an edit may have changed the
+    /// task graph or the setting since it was last looked at.
+    threads: threads::ThreadState,
+    graph_dirty: bool,
 }
 
 /// A project snapshot taken before an edit.
@@ -380,6 +387,8 @@ impl Session {
             midi_seen: 0,
             section_clip: None,
             vst_watches: HashMap::new(),
+            threads: threads::ThreadState { topology: crate::threads::Topology::detect(), ..Default::default() },
+            graph_dirty: true,
         };
         s.restart_audio();
         s.sync_globals();
@@ -389,6 +398,7 @@ impl Session {
     // ---- engine plumbing ------------------------------------------------------------------
 
     fn send(&mut self, cmd: Cmd) {
+        self.graph_dirty |= threads::changes_routes(&cmd);
         if self.cmd_tx.push(cmd).is_ok() {
             self.cmds_sent += 1;
         }
@@ -419,6 +429,8 @@ impl Session {
         let rate = if status.running { status.sample_rate } else { self.audio_config.sample_rate };
         self.audio = io;
         self.audio_status = status;
+        // Whether the workers should be real-time threads depends on the device.
+        self.graph_dirty = true;
         // The command counter restarts with the engine's view of it.
         self.cmds_sent = self.status.cmds_done.load(Ordering::Relaxed);
         self.pending_pos = None;
@@ -434,11 +446,13 @@ impl Session {
 
     pub fn set_audio_config(&mut self, cfg: AudioConfig) {
         let reopen = !cfg.same_devices(&self.audio_config) || self.audio.is_none();
+        self.graph_dirty |= cfg.processing_threads != self.audio_config.processing_threads;
         self.audio_config = cfg;
         if reopen {
             self.restart_audio();
         }
         self.send(Cmd::AutoMonitor(self.audio_config.auto_monitor));
+        self.sync_parallel();
     }
 
     /// Round trip from what the performer heard to when their playing reached the engine:
@@ -843,6 +857,7 @@ impl Session {
         // The one lock outside an offline render: a swap, with the old graph dropped after.
         let old = self.engine.lock().replace_graph(sr, built, master);
         self.engine_rate = sr;
+        self.graph_dirty = true;
         drop(old);
         drop(old_controllers);
         // Another project (or the same one reloaded): its strips start without clips.
@@ -2662,6 +2677,7 @@ impl Session {
     /// Returns true if the set of open editors changed or automation was written, when the UI
     /// needs a new snapshot.
     pub fn idle(&mut self) -> bool {
+        self.sync_parallel();
         let before = self.open_editors().len();
         let mut latency_changed = false;
         for c in self.controllers.values_mut() {
@@ -2734,6 +2750,7 @@ impl Session {
             cpu: f32::from_bits(self.status.cpu_load.load(Ordering::Relaxed)),
             cpu_peak: f32::from_bits(self.status.cpu_peak.load(Ordering::Relaxed)),
             late_blocks: self.status.late_blocks.load(Ordering::Relaxed),
+            threads: self.status.threads.load(Ordering::Relaxed),
             meters,
             master,
             inputs: self.status.inputs[..n_in.min(MAX_INPUTS)].iter().map(|m| m.take().0).collect(),

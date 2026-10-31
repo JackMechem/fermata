@@ -7,7 +7,10 @@
 //! `invariants`); every so often the edit is undone and redone (bit-identical renders) and the
 //! project saved and reopened (same render). At the end, undoing every edit must give back the
 //! first render and document exactly, and redoing them all the last.
-//! usage: soak_check <scratch dir> [edits] [seed]
+//! Plays on four threads throughout (`threads`, 1 for the callback alone): the null device's
+//! callback runs every block through the worker pool while the edits land, renders go through the
+//! pool too, and every so often one is compared with the serial loop's, bit for bit.
+//! usage: soak_check <scratch dir> [edits] [seed] [threads]
 //! To find the edit that broke a save and reopen, set SOAK_REOPEN_EVERY=1 (and
 //! SOAK_REOPEN_FROM=<edit> to start checking there).
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -16,6 +19,7 @@ use std::path::PathBuf;
 use daw_engine::arrange_cmds::SectionEdit;
 use daw_engine::audio_io::AudioConfig;
 use daw_engine::fades::DragMode;
+use daw_engine::dsp::ParallelTest;
 use daw_engine::model::{AutoMode, AutoParam, Id, Note, Project, RegionContent, TrackKind, MASTER_ID};
 use daw_engine::pattern::Step;
 use daw_engine::session::{MidiContent, RegionMove, RegionParamsPatch, TrackPatch, VcaPatch};
@@ -650,6 +654,13 @@ fn main() {
     let scratch = PathBuf::from(args.next().expect("scratch dir"));
     let count: usize = args.next().map(|x| x.parse().unwrap()).unwrap_or(300);
     let seed: u64 = args.next().map(|x| x.parse().unwrap()).unwrap_or(0x5eed_f00d);
+    let threads: u32 = args.next().map(|x| x.parse().unwrap()).unwrap_or(4);
+    // Patient: a loaded machine may keep a worker from a block for as long as it likes.
+    let pool_on = |s: &mut Session| {
+        if threads > 1 {
+            s.set_threads_for_checks(threads, ParallelTest { always: true, renders: true, patient: true });
+        }
+    };
     let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
     let mut s = Session::new(cfg.clone(), Vec::new());
     s.prefs.general.undo_limit = 100_000;
@@ -659,6 +670,9 @@ fn main() {
         s.checkpoint(name, None, true);
         step(&mut s, &mut w);
     }
+    pool_on(&mut s);
+    s.set_cycle(true, 0, LEN);
+    s.play();
     s.idle();
     check(&format!("the all-features project holds together ({:?})", invariants(&s.project)), invariants(&s.project).is_none());
     let first = render(&mut s);
@@ -673,6 +687,7 @@ fn main() {
     let mut redo = 0usize;
     let mut broken = None;
     let mut checked = 0;
+    let mut compared = 0;
     for i in 0..count {
         // Now and then an undo or redo of earlier edits, as a user would.
         let undid = if depth > 0 && g.chance(8) {
@@ -713,6 +728,12 @@ fn main() {
         if i % 7 == 0 {
             s.idle();
         }
+        // The session's graph must keep describing what the engine does, or it plays serially for good.
+        if threads > 1 && !s.pool_usable_for_checks() {
+            check(&format!("after edit {i} ({name}) the task graph fits the engine's routes"), false);
+            broken = Some(i);
+            break;
+        }
         if let Some(problem) = invariants(&s.project).or_else(|| pdc_problem(&s)) {
             check(&format!("after edit {i} ({name}) the project holds together: {problem}"), false);
             broken = Some(i);
@@ -744,11 +765,22 @@ fn main() {
                 checked += 1;
             }
         }
+        if threads > 1 && i % 40 == 0 {
+            let pooled = render(&mut s);
+            s.set_threads_for_checks(1, ParallelTest::default());
+            let serial = render(&mut s);
+            pool_on(&mut s);
+            if !same(&pooled, &serial) {
+                check(&format!("after edit {i} ({name}) the pool renders as the serial loop does ({})", first_diff(&pooled, &serial)), false);
+            }
+            compared += 1;
+        }
         if i % every == every - 1 && i >= from {
             let now = render(&mut s);
             let dir = scratch.join(format!("Soak{i}.fermata"));
             let saved = s.save(Some(dir)).unwrap();
             let mut t = Session::new(cfg.clone(), Vec::new());
+            pool_on(&mut t);
             t.open(&saved).unwrap();
             let reopened = render(&mut t);
             check(&format!("after edit {i} ({name}), the project saves and reopens with the same render ({})", if same(&reopened, &now) { "bit-identical".into() } else { first_diff(&reopened, &now) }), same(&reopened, &now));
@@ -757,6 +789,12 @@ fn main() {
     }
     check(&format!("{count} random edits made without a panic or a broken project (seed {seed:#x})"), broken.is_none());
     println!("  {depth} undo steps deep; {checked} edits undone and redone with renders");
+    if threads > 1 {
+        s.stop();
+        check(&format!("{compared} renders on {threads} threads matched the serial loop's"), compared > 0);
+        let pooled = s.status.parallel_blocks.load(std::sync::atomic::Ordering::Relaxed);
+        check(&format!("the pool played throughout ({pooled} blocks), and no strip panicked"), pooled > 0 && s.status.engine_errors.load(std::sync::atomic::Ordering::Relaxed) == 0);
+    }
 
     let last = render(&mut s);
     let last_doc = doc(&s);

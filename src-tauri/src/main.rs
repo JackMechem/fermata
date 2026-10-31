@@ -140,6 +140,7 @@ fn main() {
             commands::rescan_plugins,
             commands::audio_devices,
             commands::get_audio_config,
+            commands::thread_choices,
             commands::set_audio_config,
             commands::play,
             commands::stop,

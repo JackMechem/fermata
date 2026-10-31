@@ -6,11 +6,13 @@
 //! blocks, among them a latency change that makes delay compensation glide.
 //! The silent ALSA null device runs, so edits queue their commands for the next block as they
 //! do during playback; holding the engine's lock keeps its callback out.
+//! Runs twice: with the callback alone, and with every block on the pool of worker threads
+//! (`dsp/pool.rs`), whose threads are counted for as long as a block can be running.
 //! usage: rt_alloc_check <scratch dir>
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use daw_engine::audio_io::AudioConfig;
 use daw_engine::model::{AutoParam, TrackKind};
@@ -31,19 +33,28 @@ const SHOW: usize = 6;
 
 thread_local! {
     static COUNTING: Cell<bool> = const { Cell::new(false) };
+    /// This thread is one of the pool's workers (set by the pool's start hook).
+    static WORKER: Cell<bool> = const { Cell::new(false) };
 }
 
+/// The workers are being watched: from before a block starts until after it ends.
+static WORKERS_COUNTED: AtomicBool = AtomicBool::new(false);
+static WORKERS_SEEN: AtomicUsize = AtomicUsize::new(0);
+
 fn counted(what: &str) {
-    let on = COUNTING.try_with(|c| c.get()).unwrap_or(false);
+    let worker = WORKERS_COUNTED.load(Ordering::Relaxed) && WORKER.try_with(|c| c.get()).unwrap_or(false);
+    let on = worker || COUNTING.try_with(|c| c.get()).unwrap_or(false);
     if !on {
         return;
     }
     ALLOCS.fetch_add(1, Ordering::Relaxed);
     if SHOWN.fetch_add(1, Ordering::Relaxed) < SHOW {
         // The backtrace allocates too: not counted.
-        COUNTING.with(|c| c.set(false));
+        let was = WORKER.with(|c| c.replace(false));
+        let counting = COUNTING.with(|c| c.replace(false));
         eprintln!("{what} inside Engine::process:\n{}", std::backtrace::Backtrace::force_capture());
-        COUNTING.with(|c| c.set(true));
+        COUNTING.with(|c| c.set(counting));
+        WORKER.with(|c| c.set(was));
     }
 }
 
@@ -133,10 +144,25 @@ fn vst_gate(d: &vst3_host::PluginDescriptor) {
 
 fn main() {
     let scratch = PathBuf::from(std::env::args().nth(1).expect("scratch dir"));
+    daw_engine::dsp::pool::set_worker_hook(|| {
+        WORKER.with(|c| c.set(true));
+        WORKERS_SEEN.fetch_add(1, Ordering::Relaxed);
+    });
+    println!("-- the callback alone");
+    scenario(&scratch.join("serial"), 1);
+    println!("-- four threads");
+    scenario(&scratch.join("pool"), 4);
+    if FAILED.load(Ordering::Relaxed) {
+        std::process::exit(1);
+    }
+}
+
+fn scenario(scratch: &Path, threads: u32) {
+    std::fs::create_dir_all(scratch).unwrap();
     let cfg = AudioConfig { host: Some("ALSA".into()), output: Some("alsa:null".into()), input_enabled: false, ..Default::default() };
     let mut s = Session::new(cfg, Vec::new());
     s.dir = scratch.join("RtAlloc.fermata");
-    let mut w = base(&mut s, &scratch);
+    let mut w = base(&mut s, scratch);
     for (name, step) in steps() {
         s.checkpoint(name, None, true);
         step(&mut s, &mut w);
@@ -149,6 +175,9 @@ fn main() {
     s.set_plugin(aux, 1, "builtin:delay").unwrap();
     s.idle();
     println!("audio: {:?}", s.audio_status.running);
+    let test = daw_engine::dsp::ParallelTest { always: threads > 1, renders: false, patient: true };
+    let workers_before = WORKERS_SEEN.load(Ordering::Relaxed);
+    s.set_threads_for_checks(threads, test);
     // The counter itself works (quietly: no backtrace for this one).
     SHOWN.store(SHOW, Ordering::Relaxed);
     COUNTING.with(|c| c.set(true));
@@ -175,12 +204,15 @@ fn main() {
     // Runs `blocks` blocks, counting what they allocate when `count` is set.
     let mut run = |guard: &mut parking_lot::MutexGuard<daw_engine::dsp::Engine>, blocks: usize, count: bool| {
         for _ in 0..blocks {
+            WORKERS_COUNTED.store(count, Ordering::Relaxed);
             COUNTING.with(|c| c.set(count));
             guard.process(&[], 0, &mut buf, 2);
             COUNTING.with(|c| c.set(false));
+            WORKERS_COUNTED.store(false, Ordering::Relaxed);
             peak = buf.iter().fold(peak, |m, x| m.max(x.abs()));
         }
     };
+    let pooled_before = guard.status.parallel_blocks.load(Ordering::Relaxed);
     // Between blocks the session makes edits; their commands wait for the next block.
     s.locate(0);
     s.play();
@@ -280,14 +312,19 @@ fn main() {
     let moves = ALLOCS.load(Ordering::Relaxed) - mark;
     check(&format!("locating, cycling and stopping allocate nothing ({moves})"), moves == 0);
     check(&format!("it played something (peak {peak:.3})"), peak > 0.01);
+    let pooled = guard.status.parallel_blocks.load(Ordering::Relaxed) - pooled_before;
+    if threads > 1 {
+        // The route changes above play serially until the idle after them sends a new graph.
+        check(&format!("the pool played it ({pooled} blocks)"), pooled > 1000);
+        let seen = WORKERS_SEEN.load(Ordering::Relaxed) - workers_before;
+        check(&format!("and its workers were counted ({seen})"), seen >= threads as usize - 1);
+    } else {
+        check("the callback played it alone", pooled == 0);
+    }
     drop(guard);
     s.stop();
     match &lsp {
         Some(d) => vst_gate(d),
         None => println!("SKIP the VST3 side-chain: LSP's Sidechain Compressor isn't installed"),
-    }
-
-    if FAILED.load(Ordering::Relaxed) {
-        std::process::exit(1);
     }
 }

@@ -152,6 +152,12 @@ impl BuiltinDsp {
         b
     }
 
+    /// Puts an effect in that holds state of its own, which `EffectInfo::new` can't give it.
+    #[cfg(test)]
+    pub(crate) fn replace_effect_for_tests(&mut self, fx: Box<dyn Effect>) {
+        self.fx = fx;
+    }
+
     pub fn shared(&self) -> Arc<FxShared> {
         self.shared.clone()
     }

@@ -25,10 +25,15 @@ mod pdc;
 pub use pdc::{DelayLine, PdcGlobal, PdcParams, INSTRUMENT_BIT};
 mod builtin;
 pub use builtin::{clamp as builtin_clamp, to_normalized, to_plain, BuiltinDsp, FxShared};
-mod auto;
+pub(crate) mod auto;
 use auto::MasterAuto;
 mod track_off;
 mod multi_out;
+pub mod graph;
+pub mod parallel;
+pub mod pool;
+pub use graph::TaskGraph;
+pub use parallel::{ParallelTest, Workers};
 
 pub const MAX_BLOCK: usize = 1024;
 pub const MAX_INPUTS: usize = 32;
@@ -88,6 +93,10 @@ pub struct EngineStatus {
     /// Times the engine fell so far behind that it skipped processing for a moment (see
     /// `Engine::process`).
     pub overloads: AtomicU32,
+    /// Threads playing the strips in the latest block, and how many blocks went through the pool
+    /// (see `parallel.rs`).
+    pub threads: AtomicU32,
+    pub parallel_blocks: AtomicU64,
 }
 
 impl Default for EngineStatus {
@@ -111,6 +120,8 @@ impl Default for EngineStatus {
             bad_audio: AtomicU32::new(0),
             bad_audio_uid: AtomicU64::new(0),
             overloads: AtomicU32::new(0),
+            threads: AtomicU32::new(1),
+            parallel_blocks: AtomicU64::new(0),
         }
     }
 }
@@ -373,6 +384,10 @@ pub struct TrackDsp {
     instrument_ran: bool,
     /// For an aux on an instrument's extra output: where that comes from.
     feed: multi_out::OutputFeed,
+    /// What the strip played this block when it ran on the pool (see `parallel.rs`).
+    outs: Outlets,
+    /// What its folder does to it this block, read before the pool started.
+    fold_now: auto::FoldState,
 }
 
 impl TrackDsp {
@@ -420,6 +435,8 @@ impl TrackDsp {
             live_held: [false; 128],
             instrument_ran: false,
             feed: Default::default(),
+            outs: Outlets::new(),
+            fold_now: Default::default(),
         }
     }
 
@@ -522,6 +539,12 @@ pub enum Cmd {
     /// Settings › MIDI › Chase: whether starting or jumping mid-region starts the notes held
     /// over the playhead, and sends the controller values in effect there.
     Chase { notes: bool, controllers: bool },
+    /// The threads that play strips (None: the callback plays them alone).
+    Workers(Option<Box<Workers>>),
+    /// Which strips wait for which, for the workers. None drops it.
+    Graph(Option<Box<TaskGraph>>),
+    /// Makes checks go through the pool (see [`ParallelTest`]).
+    ParallelTest(ParallelTest),
 }
 
 pub enum Garbage {
@@ -533,6 +556,8 @@ pub enum Garbage {
     Automation(Arc<Vec<LaneDsp>>),
     Delay(Box<DelayLine>),
     Tempo(Arc<TempoMap>),
+    Workers(Box<Workers>),
+    Graph(Box<TaskGraph>),
 }
 
 /// Metronome parameters, worked out from the project's [`ClickSettings`].
@@ -740,17 +765,15 @@ pub struct Engine {
     /// An offline render is running: it may take as long as it needs.
     offline: bool,
     /// Set while an offline render plays only some tracks (see `offline.rs`).
-    isolate: Option<Isolate>,
+    isolate: Option<Box<Isolate>>,
     /// Jump faders straight to their targets on the next block instead of gliding, so a
     /// render starts (and live playback resumes) at the right levels.
     snap_gains: bool,
     pdc: PdcGlobal,
-    /// Scratch for a send that reads the delay line at its own tap, and the fader gains of
-    /// the block, which post-fader sends at another tap apply again.
-    tap_l: Vec<f32>,
-    tap_r: Vec<f32>,
-    gain_l: Vec<f32>,
-    gain_r: Vec<f32>,
+    /// The serial loop's scratch (each of the pool's threads has one of its own).
+    scratch: Scratch,
+    /// Playing strips on several threads (see `parallel.rs`).
+    parallel: parallel::Parallel,
     /// See `Cmd::Autopunch`.
     punch_range: Option<(i64, i64)>,
     capture: Option<(i64, i64)>,
@@ -760,6 +783,199 @@ pub struct Engine {
     /// comes out: the transport runs on (so automation and Stereo Out's lanes keep following
     /// that audio), but regions, notes and the click start nothing new.
     draining: bool,
+}
+
+impl Drop for Engine {
+    fn drop(&mut self) {
+        self.settle();
+    }
+}
+
+/// Space a strip works in, one per thread: a send reading the delay line at its own tap, and the
+/// fader gains of the block, which post-fader sends at another tap apply again.
+pub(crate) struct Scratch {
+    tap_l: Vec<f32>,
+    tap_r: Vec<f32>,
+    gain_l: Vec<f32>,
+    gain_r: Vec<f32>,
+}
+
+impl Default for Scratch {
+    fn default() -> Self {
+        Scratch { tap_l: vec![0.0; MAX_BLOCK], tap_r: vec![0.0; MAX_BLOCK], gain_l: vec![0.0; MAX_BLOCK], gain_r: vec![0.0; MAX_BLOCK] }
+    }
+}
+
+/// What every strip knows about the block. Nothing in here changes while the strips run.
+#[derive(Clone, Copy)]
+pub(crate) struct BlockCtx<'a> {
+    n: usize,
+    pos: i64,
+    playing: bool,
+    recording: bool,
+    sr: f64,
+    sources: bool,
+    punch_range: Option<(i64, i64)>,
+    capture_from: i64,
+    capture_end: i64,
+    auto_monitor: bool,
+    low_latency: bool,
+    block_end: i64,
+    smooth: f32,
+    any_solo: bool,
+    snap_gains: bool,
+    iso: Option<&'a Isolate>,
+    transport: TransportInfo,
+    tempo: &'a TempoMap,
+    status: &'a EngineStatus,
+    inputs: &'a [Vec<f32>],
+    live: &'a [MidiEvent],
+    midi_target: Option<Id>,
+    midi_thru: bool,
+    chase: (bool, bool),
+    analyzer_target: Option<Id>,
+    /// Wait for every strip however long it takes, as an offline render can.
+    wait: bool,
+}
+
+/// Where a strip's output goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum Dest {
+    /// Not heard: a key-only track in an isolated render, or a strip that didn't run.
+    #[default]
+    Nowhere,
+    /// Stereo Out's bus.
+    Bus,
+    /// The input of the track at this index.
+    Track(usize),
+}
+
+/// A send on its way: its slot, the index of the track it feeds, and which side of the fader it
+/// taps (that decides its turn among what the strip writes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct SendOut {
+    slot: usize,
+    to: usize,
+    pre: bool,
+}
+
+/// What a strip played this block on the pool, for the strips that wait for it and for the summing
+/// of Stereo Out: its output stays in `TrackDsp::l` and `r`, and this holds the rest.
+pub(crate) struct Outlets {
+    dest: Dest,
+    sends: [Option<SendOut>; SEND_SLOTS],
+    /// Each send's signal with its gain applied, left and right.
+    buf: Vec<f32>,
+    /// The spectrum analyzer's feed, when the analyzer looks at this strip.
+    analysis: Vec<f32>,
+    analyzed: bool,
+}
+
+impl Outlets {
+    fn new() -> Outlets {
+        // Only pages a send really uses are ever touched.
+        Outlets { dest: Dest::Nowhere, sends: [None; SEND_SLOTS], buf: vec![0.0; SEND_SLOTS * 2 * MAX_BLOCK], analysis: vec![0.0; MAX_BLOCK], analyzed: false }
+    }
+
+    fn reset(&mut self) {
+        self.dest = Dest::Nowhere;
+        self.sends = [None; SEND_SLOTS];
+        self.analyzed = false;
+    }
+
+    fn dest(&self) -> Dest {
+        self.dest
+    }
+
+    fn analysis(&self, n: usize) -> Option<&[f32]> {
+        self.analyzed.then(|| &self.analysis[..n])
+    }
+
+    fn send_buf(&self, slot: usize, n: usize) -> (&[f32], &[f32]) {
+        let at = slot * 2 * MAX_BLOCK;
+        (&self.buf[at..at + n], &self.buf[at + MAX_BLOCK..at + MAX_BLOCK + n])
+    }
+
+    fn send_buf_mut(&mut self, slot: usize, n: usize) -> (&mut [f32], &mut [f32]) {
+        let at = slot * 2 * MAX_BLOCK;
+        let (a, b) = self.buf[at..at + 2 * MAX_BLOCK].split_at_mut(MAX_BLOCK);
+        (&mut a[..n], &mut b[..n])
+    }
+}
+
+/// How a strip reaches the other strips, which is all that differs between the serial loop and the
+/// pool: the loop's [`Direct`] writes straight into them, and the pool's `parallel::Deferred` leaves
+/// everything in the strip's [`Outlets`] for them to read. The arithmetic is the same.
+pub(crate) trait Routes {
+    /// The track at `idx`, played earlier in the block.
+    fn earlier(&self, idx: usize) -> Option<&TrackDsp>;
+    /// The id of a track later in the list.
+    fn id_of(&self, j: usize) -> Id;
+    /// What the folder at `j` does to this strip's fader at timeline position `at`.
+    fn fold(&self, read_ahead: auto::FoldState, j: usize, at: i64, playing: bool) -> auto::FoldState;
+    /// A bus's input for the block into `l` and `r`, which hold silence.
+    fn inputs(&mut self, sum: (&mut [f32], &mut [f32]), l: &mut [f32], r: &mut [f32]);
+    /// A send of `from`, with its gain ramping to `target`.
+    fn send(&mut self, outs: &mut Outlets, send: SendOut, from: (&[f32], &[f32]), gain: &mut f32, target: f32, smooth: f32);
+    /// The strip's output.
+    fn output(&mut self, outs: &mut Outlets, dest: Dest, l: &[f32], r: &[f32]);
+    /// The analyzer's feed, when it looks at this strip (None: silence, from an Off track).
+    fn analyze(&mut self, outs: &mut Outlets, signal: Option<(&[f32], &[f32])>, n: usize);
+}
+
+/// The serial loop's routes.
+struct Direct<'a> {
+    before: &'a [Box<TrackDsp>],
+    tail: &'a mut [Box<TrackDsp>],
+    ti: usize,
+    bus: (&'a mut [f32], &'a mut [f32]),
+    analyzer: &'a mut rtrb::Producer<f32>,
+}
+
+impl Routes for Direct<'_> {
+    fn earlier(&self, idx: usize) -> Option<&TrackDsp> {
+        self.before.get(idx).map(|t| &**t)
+    }
+
+    fn id_of(&self, j: usize) -> Id {
+        self.tail[j - self.ti - 1].id
+    }
+
+    fn fold(&self, _read_ahead: auto::FoldState, j: usize, at: i64, playing: bool) -> auto::FoldState {
+        auto::fold_at(self.tail, self.ti + 1, j, at, playing)
+    }
+
+    fn inputs(&mut self, sum: (&mut [f32], &mut [f32]), l: &mut [f32], r: &mut [f32]) {
+        l.copy_from_slice(sum.0);
+        r.copy_from_slice(sum.1);
+        sum.0.fill(0.0);
+        sum.1.fill(0.0);
+    }
+
+    fn send(&mut self, _outs: &mut Outlets, send: SendOut, from: (&[f32], &[f32]), gain: &mut f32, target: f32, smooth: f32) {
+        mix_send(&mut self.tail[send.to - self.ti - 1], from.0, from.1, gain, target, smooth);
+    }
+
+    fn output(&mut self, _outs: &mut Outlets, dest: Dest, l: &[f32], r: &[f32]) {
+        let (dl, dr) = match dest {
+            Dest::Nowhere => return,
+            Dest::Bus => (&mut *self.bus.0, &mut *self.bus.1),
+            Dest::Track(j) => {
+                let o = &mut *self.tail[j - self.ti - 1];
+                (&mut o.sum_l[..l.len()], &mut o.sum_r[..r.len()])
+            }
+        };
+        for i in 0..l.len() {
+            dl[i] += l[i];
+            dr[i] += r[i];
+        }
+    }
+
+    fn analyze(&mut self, _outs: &mut Outlets, signal: Option<(&[f32], &[f32])>, n: usize) {
+        for i in 0..n {
+            let _ = self.analyzer.push(signal.map_or(0.0, |(l, r)| 0.5 * (l[i] + r[i])));
+        }
+    }
 }
 
 fn db_to_gain(db: f32) -> f32 {
@@ -859,8 +1075,8 @@ pub fn mix_regions(regions: &[RegionDsp], pos: i64, l: &mut [f32], r: &mut [f32]
 /// The side-chain signal for an insert keyed by the track at `idx` (played earlier in
 /// the block): its post-fader output (or with `pre`, its signal before the fader), or None when
 /// there is none (no source, or one an isolated render leaves out).
-fn key_signal<'a>(tracks: &'a [Box<TrackDsp>], idx: Option<usize>, pre: bool, iso: Option<&Isolate>, n: usize) -> crate::fx::Key<'a> {
-    let src = tracks.get(idx?)?;
+fn key_signal<'a>(src: Option<&'a TrackDsp>, pre: bool, iso: Option<&Isolate>, n: usize) -> crate::fx::Key<'a> {
+    let src = src?;
     if !(if pre { src.keyed_pre } else { src.keyed }) || src.kind == TrackKind::Folder || iso.map(|i| i.role(src.id) == Role::Skip).unwrap_or(false) {
         return None;
     }
@@ -868,6 +1084,24 @@ fn key_signal<'a>(tracks: &'a [Box<TrackDsp>], idx: Option<usize>, pre: bool, is
         return Some((&src.pre_key_l[..n], &src.pre_key_r[..n]));
     }
     Some((&src.key_l[..n], &src.key_r[..n]))
+}
+
+/// `mix_send` for the pool: `gain * (l, r)` into `out`, for the receiver to add. False if the send
+/// is silent and nothing was written.
+fn render_send(out: (&mut [f32], &mut [f32]), from: (&[f32], &[f32]), gain: &mut f32, target: f32, smooth: f32) -> bool {
+    let mut g = *gain;
+    if g == 0.0 && target == 0.0 {
+        return false;
+    }
+    let (dl, dr) = out;
+    let (l, r) = from;
+    for i in 0..l.len() {
+        g += (target - g) * smooth;
+        dl[i] = l[i] * g;
+        dr[i] = r[i] * g;
+    }
+    *gain = if target == 0.0 && g.abs() < 1e-6 { 0.0 } else { g };
+    true
 }
 
 /// Adds `gain * (l, r)` into an aux's (or summing stack's) input, ramping the gain to `target`.
@@ -937,10 +1171,8 @@ impl Engine {
             isolate: None,
             snap_gains: false,
             pdc: PdcGlobal::default(),
-            tap_l: vec![0.0; MAX_BLOCK],
-            tap_r: vec![0.0; MAX_BLOCK],
-            gain_l: vec![0.0; MAX_BLOCK],
-            gain_r: vec![0.0; MAX_BLOCK],
+            scratch: Scratch::default(),
+            parallel: Default::default(),
             punch_range: None,
             capture: None,
             chase: (true, true),
@@ -956,6 +1188,7 @@ impl Engine {
         tracks: Vec<Box<TrackDsp>>,
         master_inserts: Vec<Option<InsertDsp>>,
     ) -> (Vec<Box<TrackDsp>>, Vec<Option<InsertDsp>>) {
+        self.settle();
         self.sample_rate = sample_rate;
         self.playing = false;
         self.recording = false;
@@ -1005,6 +1238,8 @@ impl Engine {
     /// earlier in the list (Stereo Out's plug-ins can be keyed by any track); others hear
     /// nothing.
     fn resolve_keys(&mut self) {
+        // Whatever moved, the task graph needs looking at again before it's trusted.
+        self.parallel.routes_changed();
         for t in &mut self.tracks {
             t.keyed = false;
             t.keyed_pre = false;
@@ -1369,6 +1604,17 @@ impl Engine {
                 }
             }
             Cmd::Chase { notes, controllers } => self.chase = (notes, controllers),
+            Cmd::Workers(w) => {
+                if let Some(old) = self.parallel.set_workers(w) {
+                    self.discard(Garbage::Workers(old));
+                }
+            }
+            Cmd::Graph(g) => {
+                if let Some(old) = self.parallel.set_graph(g) {
+                    self.discard(Garbage::Graph(old));
+                }
+            }
+            Cmd::ParallelTest(t) => self.parallel.test = t,
         }
     }
 
@@ -1377,6 +1623,17 @@ impl Engine {
         let started = Instant::now();
         let _ftz = crate::denormals::NoDenormals::new();
         let frames = if out_ch == 0 { 0 } else { output.len() / out_ch };
+
+        // A block was given up on and a strip still isn't done: the strips and everything the
+        // block reads belong to the threads playing it, commands wait, and the output is silent.
+        if self.parallel.stalled {
+            if !self.parallel.open_block_over() {
+                output.fill(0.0);
+                return;
+            }
+            self.parallel.stalled = false;
+            self.flush_all_notes();
+        }
 
         let mut applied = 0;
         while let Ok(cmd) = self.cmd_rx.pop() {
@@ -1409,6 +1666,7 @@ impl Engine {
             return;
         }
 
+        let blocks_before = self.status.parallel_blocks.load(Ordering::Relaxed);
         let mut done = 0;
         while done < frames {
             let mut n = (frames - done).min(MAX_BLOCK);
@@ -1423,7 +1681,27 @@ impl Engine {
             } else {
                 &[][..]
             };
-            self.process_block(in_slice, in_ch, n);
+            match self.process_block(in_slice, in_ch, n) {
+                BlockEnd::Played => {}
+                // As when the callback's own panic is caught: silence, and the transport waits.
+                BlockEnd::Silenced => {
+                    self.bus_l[..n].fill(0.0);
+                    self.bus_r[..n].fill(0.0);
+                }
+                // Counted and sent to silence like an overload. The session stops the transport.
+                BlockEnd::GivenUp => {
+                    self.parallel.stalled = true;
+                    output.fill(0.0);
+                    let budget = frames as f64 / self.sample_rate;
+                    self.block_load.block((started.elapsed().as_secs_f64() / budget) as f32, budget);
+                    self.status.cpu_peak.store(self.block_load.peak.to_bits(), Ordering::Relaxed);
+                    self.status.late_blocks.store(self.block_load.late, Ordering::Relaxed);
+                    self.behind_secs = 0.0;
+                    self.shedding = (SHED_SECS * self.sample_rate / frames.max(1) as f64).ceil() as u32;
+                    self.status.overloads.fetch_add(1, Ordering::Relaxed);
+                    return;
+                }
+            }
             // The last line of defence: the plug-ins are checked as they run.
             contain(&mut self.bus_l[..n], &mut self.bus_r[..n]);
             for i in 0..n {
@@ -1453,6 +1731,10 @@ impl Engine {
             }
             done += n;
         }
+        let pooled = self.status.parallel_blocks.load(Ordering::Relaxed) != blocks_before;
+        if let Some(t) = self.parallel.threads_now(pooled) {
+            self.status.threads.store(t, Ordering::Relaxed);
+        }
 
         self.status.pos.store(self.pos, Ordering::Relaxed);
         self.status.playing.store(self.playing, Ordering::Relaxed);
@@ -1464,6 +1746,7 @@ impl Engine {
             let l = (spent / budget) as f32;
             self.load = self.load * 0.9 + l * 0.1;
             self.status.cpu_load.store(self.load.to_bits(), Ordering::Relaxed);
+            self.parallel.weigh(l, self.load);
             // A render is meant to run flat out, so it isn't a late block.
             if !self.offline {
                 self.block_load.block(l, budget);
@@ -1498,7 +1781,23 @@ impl Engine {
         t
     }
 
-    fn process_block(&mut self, input: &[f32], in_ch: usize, n: usize) {
+    /// For checks, after applying what's queued: whether the task graph holds for the routes.
+    #[doc(hidden)]
+    pub fn task_graph_fits(&mut self) -> bool {
+        self.process(&[], 0, &mut [], 0);
+        self.parallel.fits(&self.tracks)
+    }
+
+    /// Waits for a block given up on to end (never on the audio thread), so that what it was using
+    /// can change or go away.
+    pub(crate) fn settle(&mut self) {
+        while self.parallel.stalled && !self.parallel.open_block_over() {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        self.parallel.stalled = false;
+    }
+
+    fn process_block(&mut self, input: &[f32], in_ch: usize, n: usize) -> BlockEnd {
         let in_ch = in_ch.min(MAX_INPUTS);
         let stride = input.len() / n.max(1);
         for c in 0..in_ch {
@@ -1519,7 +1818,7 @@ impl Engine {
         self.bus_r[..n].fill(0.0);
         // Isolated renders work out audibility themselves (see `Isolate`).
         let any_solo = self.isolate.is_none() && self.tracks.iter().any(|t| t.params.solo);
-        let iso = self.isolate.as_ref();
+        let iso = self.isolate.as_deref();
         let snap_gains = self.snap_gains;
         let transport = self.transport();
         let (pos, playing, recording, punch, sr) = (self.pos, self.playing, self.recording, self.punch, self.sample_rate);
@@ -1532,453 +1831,78 @@ impl Engine {
         let block_end = pos + n as i64;
         let smooth = 1.0 - (-1.0 / (0.005 * sr as f32)).exp();
 
-        for ti in 0..self.tracks.len() {
-            let (before, rest) = self.tracks.split_at_mut(ti);
-            let (cur, tail) = rest.split_first_mut().unwrap();
-            let t = &mut **cur;
-            t.instrument_ran = false;
-            let role = iso.map(|i| i.role(t.id));
-            if role == Some(Role::Skip) {
-                continue;
-            }
-            // An Off track goes quiet through its fader as a muted one does, then stops. A track
-            // in the middle of a take stays on until the take ends (only an undo can get here:
-            // the session refuses the switch while recording), so no audio is lost.
-            let taking = recording && t.params.armed && (t.rec.is_some() || self.midi_target == Some(t.id));
-            let off = t.params.off && !taking;
-            if off && (t.dormant || snap_gains || iso.is_some() || t.faded_out()) {
-                t.sleep_block(n, &transport);
-                if self.analyzer_target == Some(t.id) {
-                    for _ in 0..n {
-                        let _ = self.analyzer_tx.push(0.0);
-                    }
-                }
-                continue;
-            }
-            if t.dormant {
-                t.wake(if snap_gains { 0 } else { track_off::resume_frames(sr) });
-            }
-            let tap = role == Some(Role::Tap);
-            let fx = !tap || iso.map(|i| i.effects).unwrap_or(true);
-            let (l, r) = (&mut t.l[..n], &mut t.r[..n]);
-            l.fill(0.0);
-            r.fill(0.0);
-            t.midi.clear();
-            let mut p = t.params;
-            let pdc = t.pdc;
-            // A live track (recording, or monitored in Low Latency Mode) skips its delay
-            // compensation, so the performer isn't kept waiting (see session/pdc.rs).
-            let monitored = match t.kind {
-                TrackKind::Audio => p.monitor || (p.armed && auto_monitor),
-                TrackKind::Instrument => p.armed,
-                _ => false,
-            };
-            let live = (recording && p.armed && t.kind == TrackKind::Audio) || (low_latency && monitored);
-            let ll_skip = if low_latency && monitored { pdc.low_latency_skip } else { 0 };
-            // The strip's plug-ins hear the timeline `input_time` late, and its fader
-            // `output_time` late: automation and the plug-ins' transport follow the audio.
-            let fx_at = pos - pdc.input_time as i64;
-            let mix_at = pos - pdc.output_time as i64;
-            // A folder's lanes are read where this strip's fader is, like its own.
-            if let Some(j) = t.fold_idx.filter(|&j| j > ti) {
-                auto::apply_fold(&mut p, auto::fold_at(tail, ti + 1, j, mix_at, playing));
-            }
-            let transport = if pdc.input_time > 0 { transport_at(&self.tempo, &transport, fx_at) } else { transport };
-
-            // Automation overrides the fader, pan and mute (and drives plug-in parameters).
-            // Write mode plays the live values, which are being recorded over the lanes.
-            if playing && matches!(t.auto_mode, AutoMode::Read | AutoMode::Touch | AutoMode::Latch) {
-                for (k, lane) in t.automation.iter().enumerate() {
-                    if t.touched.contains(&Some(lane.target)) {
-                        continue;
-                    }
-                    let at = if matches!(lane.target, AutoTarget::Plugin { .. }) { fx_at } else { mix_at };
-                    let last = at + n as i64 - 1;
-                    let Some(v) = value_at(&lane.points, at) else { continue };
-                    match lane.target {
-                        AutoTarget::Volume => p.volume = volume_gain(v) * p.stack_gain,
-                        AutoTarget::Pan => p.pan = v,
-                        AutoTarget::Mute => p.mute = v >= 0.5 || p.stack_mute,
-                        // A muted send (gain 0) stays silent.
-                        AutoTarget::Send(slot) => {
-                            if let Some(Some(s)) = p.sends.get_mut(slot as usize) {
-                                if s.gain > 0.0 {
-                                    s.gain = volume_gain(v);
-                                }
-                            }
-                        }
-                        AutoTarget::Plugin { uid, param } => {
-                            // Two points per block: the plug-in ramps between them.
-                            let v1 = value_at(&lane.points, last).unwrap_or(v);
-                            let sent = t.auto_sent.get(k).copied().unwrap_or(f32::NAN);
-                            if v == sent && v1 == sent {
-                                continue;
-                            }
-                            let slot = t.inserts.iter_mut().flatten().chain(t.instrument.iter_mut()).find(|i| i.uid == uid);
-                            if let Some(ins) = slot {
-                                ins.plugin.set_param(param, 0, v as f64);
-                                if v1 != v {
-                                    ins.plugin.set_param(param, n as i32 - 1, v1 as f64);
-                                }
-                            }
-                            if let Some(s) = t.auto_sent.get_mut(k) {
-                                *s = v1;
-                            }
-                        }
-                    }
-                }
-            }
-
-            match t.kind {
-                // A folder only shapes its subtracks' settings (worked out by the session).
-                TrackKind::Folder => continue,
-                TrackKind::Summing | TrackKind::Aux => {
-                    l.copy_from_slice(&t.sum_l[..n]);
-                    r.copy_from_slice(&t.sum_r[..n]);
-                    t.sum_l[..n].fill(0.0);
-                    t.sum_r[..n].fill(0.0);
-                    if let Some(o) = p.instrument_output {
-                        let pull = multi_out::Pull { bus: o.bus as usize, smooth, snap: snap_gains, delay: pdc.feed, fade: (pdc::FADE_SECS * sr) as u32 };
-                        t.feed.pull(before, &pull, &mut t.pdc_taps.feed, (l, r), (&mut self.tap_l[..n], &mut self.tap_r[..n]));
-                        if contain(l, r) {
-                            self.status.bad_audio.fetch_add(1, Ordering::Relaxed);
-                        }
-                    }
-                }
-                TrackKind::Audio => {
-                    // A track being recorded is silent, or with Autopunch only inside the range.
-                    let quiet = match (recording && p.armed, punch_range) {
-                        (false, _) => (0, 0),
-                        (true, Some(r)) => r,
-                        (true, None) => (i64::MIN, i64::MAX),
-                    };
-                    if sources && !(quiet.0 <= pos && quiet.1 >= block_end) {
-                        play_audio(&t.regions, pos, l, r, quiet);
-                    }
-                    // Input is heard with the I button, or on armed tracks when auto monitoring is
-                    // on. Interfaces with direct monitoring want it off to avoid hearing a
-                    // delayed second copy.
-                    if p.monitor || (p.armed && auto_monitor) {
-                        match p.input {
-                            InputSel::Mono(c) if (c as usize) < MAX_INPUTS => {
-                                let src = &self.inputs[c as usize][..n];
-                                for i in 0..n {
-                                    l[i] += src[i];
-                                    r[i] += src[i];
-                                }
-                            }
-                            InputSel::Stereo(c) if (c as usize + 1) < MAX_INPUTS => {
-                                for i in 0..n {
-                                    l[i] += self.inputs[c as usize][i];
-                                    r[i] += self.inputs[c as usize + 1][i];
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                    if recording && p.armed && block_end > capture_from && pos < capture_end {
-                        if let Some(sink) = &mut t.rec {
-                            // The capture bounds can be the i64 extremes ("no punch-out"), and
-                            // `pos` is negative during a count-in from the start, so plain
-                            // subtraction would overflow.
-                            let first = capture_from.saturating_sub(pos).clamp(0, n as i64) as usize;
-                            let last = capture_end.saturating_sub(pos).clamp(0, n as i64) as usize;
-                            let mut lost = false;
-                            for i in first..last {
-                                match p.input {
-                                    InputSel::Mono(c) => lost |= sink.push(self.inputs[c as usize % MAX_INPUTS][i]).is_err(),
-                                    InputSel::Stereo(c) => {
-                                        let c = c as usize % (MAX_INPUTS - 1);
-                                        lost |= sink.push(self.inputs[c][i]).is_err();
-                                        lost |= sink.push(self.inputs[c + 1][i]).is_err();
-                                    }
-                                    InputSel::None => {}
-                                }
-                            }
-                            if lost {
-                                self.status.overruns.fetch_add(1, Ordering::Relaxed);
-                            }
-                        }
-                    }
-                }
-                TrackKind::Instrument => {
-                    if t.flush_notes {
-                        for pitch in 0..128 {
-                            if t.sounding[pitch] {
-                                t.midi.push(MidiEvent { offset: 0, data: [0x80, pitch as u8, 0] });
-                                t.sounding[pitch] = false;
-                            }
-                        }
-                        if t.cc_sent {
-                            // Don't leave the pedal down or the pitch bent after a stop.
-                            t.midi.push(MidiEvent { offset: 0, data: [0xB0, 64, 0] });
-                            t.midi.push(MidiEvent { offset: 0, data: [0xE0, 0, 64] });
-                            t.cc_sent = false;
-                        }
-                        if let Some(InsertDsp { plugin: Plugin::Synth(s), .. }) = &mut t.instrument {
-                            s.all_notes_off();
-                        }
-                        t.flush_notes = false;
-                    }
-                    if sources && t.chase_cc {
-                        t.chase_cc = false;
-                        // The latest value of each controller before the playhead, in the
-                        // region that covers it.
-                        let mut last: [Option<u16>; CC_KINDS] = [None; CC_KINDS];
-                        for reg in t.regions.iter().filter(|_| self.chase.1) {
-                            let RegionDsp::Midi { start, length, cc, .. } = reg else { continue };
-                            if pos < *start || pos >= *start + *length {
-                                continue;
-                            }
-                            let before = cc.partition_point(|c| c.start < pos - *start);
-                            for c in &cc[..before] {
-                                last[c.kind.index()] = Some(c.value);
-                            }
-                        }
-                        for (i, v) in last.iter().enumerate() {
-                            if let Some(v) = v {
-                                if t.midi.len() < t.midi.capacity() {
-                                    t.midi.push(MidiEvent { offset: 0, data: CcKind::from_index(i).message(*v) });
-                                    t.cc_sent = true;
-                                }
-                            }
-                        }
-                        // Chase: Notes. Notes held over the playhead start now (after the
-                        // controllers, so a sustain pedal is down first); the region loop below
-                        // ends them where they end.
-                        for reg in t.regions.iter().filter(|_| self.chase.0) {
-                            let RegionDsp::Midi { start, length, notes, .. } = reg else { continue };
-                            for note in crate::midi::sounding_at(notes, *start, *start + *length, pos) {
-                                let p = note.pitch as usize & 127;
-                                if !t.sounding[p] && t.midi.len() + 2 < t.midi.capacity() {
-                                    t.midi.push(MidiEvent { offset: 0, data: [0x90, note.pitch, note.velocity.max(1)] });
-                                    t.sounding[p] = true;
-                                }
-                            }
-                        }
-                    }
-                    if sources {
-                        for reg in t.regions.iter() {
-                            let RegionDsp::Midi { start, length, notes, cc } = reg else { continue };
-                            let (rs, re) = (*start, *start + *length);
-                            if re <= pos || rs >= block_end {
-                                continue;
-                            }
-                            let first = cc.partition_point(|c| rs + c.start < pos);
-                            for c in &cc[first..] {
-                                let at = rs + c.start;
-                                if at >= block_end || at >= re || t.midi.len() >= t.midi.capacity() {
-                                    break;
-                                }
-                                t.midi.push(MidiEvent { offset: (at - pos) as u32, data: c.kind.message(c.value) });
-                                t.cc_sent = true;
-                            }
-                            for note in notes.iter() {
-                                let on = rs + note.start;
-                                let off = (on + note.length).min(re);
-                                if on >= block_end {
-                                    break;
-                                }
-                                if t.midi.len() + 2 > t.midi.capacity() {
-                                    break;
-                                }
-                                if on >= pos && on < re {
-                                    t.midi.push(MidiEvent { offset: (on - pos) as u32, data: [0x90, note.pitch, note.velocity.max(1)] });
-                                    t.sounding[note.pitch as usize & 127] = true;
-                                }
-                                if off >= pos && off < block_end && on < re {
-                                    t.midi.push(MidiEvent { offset: (off - pos) as u32, data: [0x80, note.pitch, 0] });
-                                    t.sounding[note.pitch as usize & 127] = false;
-                                }
-                            }
-                        }
-                    }
-                    if self.midi_target == Some(t.id) {
-                        for m in &self.live {
-                            if self.midi_thru && t.midi.len() < t.midi.capacity() {
-                                t.midi.push(*m);
-                                track_off::note_held(&mut t.live_held, m.data);
-                            }
-                            if recording && p.armed && pos >= capture_from && pos < capture_end {
-                                let _ = self.midi_rec.push((pos, m.data));
-                            }
-                        }
-                    }
-                    t.midi.sort_by_key(|m| m.offset);
-                    if let Some(ins) = &mut t.instrument {
-                        if !ins.bypass && ll_skip & INSTRUMENT_BIT == 0 {
-                            ins.plugin.process(l, r, &t.midi, &transport);
-                            check_output(&self.status, ins, l, r);
-                            t.instrument_ran = true;
-                        } else {
-                            ins.plugin.pass_edits_aside(&transport);
-                        }
-                    }
-                    // A frozen instrument track plays its freeze file instead.
-                    if sources {
-                        play_audio(&t.regions, pos, l, r, (0, 0));
-                    }
-                }
-            }
-
-            track_off::fade_in(&mut t.resume_left, track_off::resume_frames(sr), l, r);
-
-            if fx {
-                t.eq_state.process(&t.eq, l, r);
-            }
-            if self.analyzer_target == Some(t.id) {
-                for i in 0..n {
-                    let _ = self.analyzer_tx.push(0.5 * (l[i] + r[i]));
-                }
-            }
-
-            for (k, slot) in t.inserts.iter_mut().enumerate().filter(|_| fx) {
-                let Some(ins) = slot else { continue };
-                if !ins.bypass && ll_skip & (1 << k) == 0 {
-                    let key = key_signal(before, ins.key.idx, ins.key.pre, iso, n);
-                    match &mut ins.plugin {
-                        Plugin::Builtin(b) => b.process(l, r, key, &fx_context(&transport)),
-                        Plugin::Vst(p) => p.process_keyed(l, r, key, &[], &transport),
-                        p => p.process(l, r, &[], &transport),
-                    }
-                    check_output(&self.status, ins, l, r);
-                } else {
-                    ins.plugin.pass_edits_aside(&transport);
-                }
-            }
-            // The delay line keeps the post-plug-in signal; the output and the sends read it
-            // at their own delays (none while live), gliding to a new delay (see `pdc.rs`).
-            // It's written even while nothing reads it, so a glide always finds real audio.
-            if let Some(d) = &mut t.delay {
-                d.write(l, r);
-            }
-            let tap_delay = |d: u32| if live { 0 } else { d };
-            let pdc_fade = (pdc::FADE_SECS * sr) as u32;
-
-            let audible = !off
-                && match role {
-                    Some(Role::Member { heard }) => heard,
-                    Some(Role::Key) => !p.mute,
-                    Some(_) => true,
-                    None => !p.mute && (!any_solo || p.solo),
-                };
-            // Pre-fader sends tap the signal after the plug-ins, before the fader and pan. Mute
-            // and solo still silence them, as in Logic.
-            for k in 0..SEND_SLOTS {
-                match (p.sends[k], t.send_idx[k]) {
-                    // An isolated render leaves out auxes it doesn't play; their buses must
-                    // not fill up meanwhile, or they'd burst out when playback resumes.
-                    (Some(s), Some(j)) if j > ti && iso.map(|i| i.feeds(role, tail[j - ti - 1].id)).unwrap_or(true) => {
-                        if s.pre_fader {
-                            let target = if audible { s.gain } else { 0.0 };
-                            let tap = &mut t.pdc_taps.sends[k];
-                            tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
-                            match &t.delay {
-                                Some(d) if !tap.is_direct() => {
-                                    let (sl, sr) = (&mut self.tap_l[..n], &mut self.tap_r[..n]);
-                                    d.read_tap(tap, sl, sr);
-                                    mix_send(&mut tail[j - ti - 1], sl, sr, &mut t.send_gains[k], target, smooth);
-                                }
-                                _ => mix_send(&mut tail[j - ti - 1], l, r, &mut t.send_gains[k], target, smooth),
-                            }
-                        }
-                    }
-                    _ => t.send_gains[k] = 0.0,
-                }
-            }
-            let vol = if audible { p.volume } else { 0.0 };
-            let mono_source = matches!(p.input, InputSel::Mono(_)) && t.kind == TrackKind::Audio;
-            let (tl, tr) = if tap && !iso.map(|i| i.fader).unwrap_or(true) {
-                (1.0, 1.0)
-            } else if mono_source {
-                // -3 dB compensated pan law: unity in the centre.
-                let a = (p.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
-                (a.cos() * std::f32::consts::SQRT_2 * vol, a.sin() * std::f32::consts::SQRT_2 * vol)
-            } else {
-                // Balance for stereo sources.
-                let pan = p.pan.clamp(-1.0, 1.0);
-                ((1.0 - pan.max(0.0)) * vol, (1.0 + pan.min(0.0)) * vol)
-            };
-            let (mut gl, mut gr) = if snap_gains { (tl, tr) } else { t.gains };
-            let (mut pl, mut pr) = (0.0f32, 0.0f32);
-            // A side-chain key leaves as the signal leaves the plug-ins, before the
-            // compensation delay, with the fader applied below.
-            if t.keyed {
-                t.key_l[..n].copy_from_slice(l);
-                t.key_r[..n].copy_from_slice(r);
-            }
-            // A pre-fader key ignores the fader and pan but, like a pre-fader send, not mute.
-            if t.keyed_pre {
-                let g = if audible { 1.0 } else { 0.0 };
-                for i in 0..n {
-                    t.pre_key_l[i] = l[i] * g;
-                    t.pre_key_r[i] = r[i] * g;
-                }
-            }
-            t.pdc_taps.output.aim(tap_delay(pdc.output), pdc_fade);
-            // Post-fader sends that read where the output reads share its result.
-            let out_tap = t.pdc_taps.output;
-            if let (false, Some(d)) = (out_tap.is_direct(), &t.delay) {
-                d.read_tap(&mut t.pdc_taps.output, l, r);
-            }
-            let (dl, dr) = match t.out_idx {
-                // An isolated render captures the tap track, and anything feeding a stack
-                // outside the render, straight off the bus.
-                Some(j) if j > ti && !tap && iso.map(|i| i.feeds(role, tail[j - ti - 1].id)).unwrap_or(true) => {
-                    let o = &mut *tail[j - ti - 1];
-                    (&mut o.sum_l[..n], &mut o.sum_r[..n])
-                }
-                // A track that only keys a side-chain in an isolated render isn't heard.
-                _ if role == Some(Role::Key) => (&mut self.tap_l[..n], &mut self.tap_r[..n]),
-                _ => (&mut self.bus_l[..n], &mut self.bus_r[..n]),
-            };
-            for i in 0..n {
-                gl += (tl - gl) * smooth;
-                gr += (tr - gr) * smooth;
-                self.gain_l[i] = gl;
-                self.gain_r[i] = gr;
-                l[i] *= gl;
-                r[i] *= gr;
-                pl = pl.max(l[i].abs());
-                pr = pr.max(r[i].abs());
-                dl[i] += l[i];
-                dr[i] += r[i];
-            }
-            t.gains = (gl, gr);
-            t.meter.feed(pl, pr);
-            if t.keyed {
-                for i in 0..n {
-                    t.key_l[i] *= self.gain_l[i];
-                    t.key_r[i] *= self.gain_r[i];
-                }
-            }
-            // Post-fader sends take what the fader and pan left (already silent when muted).
-            // One at another delay than the output reads its own tap and applies the same
-            // fader gains.
-            for k in 0..SEND_SLOTS {
-                if let (Some(s), Some(j)) = (p.sends[k], t.send_idx[k]) {
-                    if !s.pre_fader && j > ti && iso.map(|i| i.feeds(role, tail[j - ti - 1].id)).unwrap_or(true) {
-                        let tap = &mut t.pdc_taps.sends[k];
-                        tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
-                        match &t.delay {
-                            Some(d) if *tap != out_tap => {
-                                let (sl, sr) = (&mut self.tap_l[..n], &mut self.tap_r[..n]);
-                                d.read_tap(tap, sl, sr);
-                                for i in 0..n {
-                                    sl[i] *= self.gain_l[i];
-                                    sr[i] *= self.gain_r[i];
-                                }
-                                mix_send(&mut tail[j - ti - 1], sl, sr, &mut t.send_gains[k], s.gain, smooth);
-                            }
-                            _ => {
-                                t.pdc_taps.sends[k] = t.pdc_taps.output;
-                                mix_send(&mut tail[j - ti - 1], l, r, &mut t.send_gains[k], s.gain, smooth)
-                            }
-                        }
-                    }
+        let cx = BlockCtx {
+            n,
+            pos,
+            playing,
+            recording,
+            sr,
+            sources,
+            punch_range,
+            capture_from,
+            capture_end,
+            auto_monitor,
+            low_latency,
+            block_end,
+            smooth,
+            any_solo,
+            snap_gains,
+            iso,
+            transport,
+            tempo: &self.tempo,
+            status: &self.status,
+            inputs: &self.inputs,
+            live: &self.live,
+            midi_target: self.midi_target,
+            midi_thru: self.midi_thru,
+            chase: self.chase,
+            analyzer_target: self.analyzer_target,
+            wait: self.offline || self.parallel.test.patient,
+        };
+        let mut end = BlockEnd::Played;
+        // Recorded MIDI comes from one track, but the ring has one producer, which `process` also
+        // pushes to: this thread, before the strips start.
+        if let Some(t) = self.midi_target.and_then(|id| self.tracks.iter().find(|t| t.id == id)).filter(|t| t.kind == TrackKind::Instrument) {
+            if recording && t.params.armed && pos >= capture_from && pos < capture_end {
+                for m in &self.live {
+                    let _ = self.midi_rec.push((pos, m.data));
                 }
             }
         }
+        if self.parallel.wanted(self.offline, &self.tracks) {
+            match self.parallel.run(&mut self.tracks, &cx) {
+                parallel::Outcome::Done => {
+                    self.status.parallel_blocks.fetch_add(1, Ordering::Relaxed);
+                    // What the strips left for Stereo Out, in the order the serial loop adds it.
+                    for t in &self.tracks {
+                        if t.outs.dest() == Dest::Bus {
+                            for i in 0..n {
+                                self.bus_l[i] += t.l[i];
+                                self.bus_r[i] += t.r[i];
+                            }
+                        }
+                        if let Some(a) = t.outs.analysis(n) {
+                            for &s in a {
+                                let _ = self.analyzer_tx.push(s);
+                            }
+                        }
+                    }
+                }
+                parallel::Outcome::Panicked(k) => {
+                    self.status.engine_errors.fetch_add(k, Ordering::Relaxed);
+                    end = BlockEnd::Silenced;
+                }
+                parallel::Outcome::Stalled => return BlockEnd::GivenUp,
+            }
+        } else {
+            for ti in 0..self.tracks.len() {
+                let (before, rest) = self.tracks.split_at_mut(ti);
+                let (cur, tail) = rest.split_first_mut().unwrap();
+                let mut routes = Direct { before, tail, ti, bus: (&mut self.bus_l[..n], &mut self.bus_r[..n]), analyzer: &mut self.analyzer_tx };
+                run_strip(&cx, ti, cur, &mut self.scratch, &mut routes);
+            }
+        }
+
 
         // Isolated renders are captured before the Stereo Out strip.
         let master_fx = self.isolate.is_none();
@@ -1997,7 +1921,7 @@ impl Engine {
         let (bl, br) = (&mut self.bus_l[..n], &mut self.bus_r[..n]);
         for ins in self.master_inserts.iter_mut().flatten().filter(|_| master_fx) {
             if !ins.bypass {
-                let key = key_signal(&self.tracks, ins.key.idx, ins.key.pre, None, n);
+                let key = key_signal(ins.key.idx.and_then(|i| self.tracks.get(i)).map(|t| &**t), ins.key.pre, None, n);
                 match &mut ins.plugin {
                     Plugin::Builtin(b) => b.process(bl, br, key, &fx_context(&transport)),
                     Plugin::Vst(p) => p.process_keyed(bl, br, key, &[], &transport),
@@ -2080,6 +2004,451 @@ impl Engine {
                 let s = self.click.next(srf);
                 self.bus_l[i] += s;
                 self.bus_r[i] += s;
+            }
+        }
+        end
+    }
+}
+
+/// How `process_block` ended.
+enum BlockEnd {
+    Played,
+    /// A strip on the pool panicked: the block's audio is no good.
+    Silenced,
+    /// A strip on the pool hasn't finished (see `Parallel::run`).
+    GivenUp,
+}
+
+/// One strip's work for the block. The serial loop and the worker threads run this same code, with
+/// `routes` saying how the strip reaches other strips (see [`Routes`]).
+fn run_strip<R: Routes>(cx: &BlockCtx<'_>, ti: usize, t: &mut TrackDsp, sc: &mut Scratch, routes: &mut R) {
+    let BlockCtx { n, pos, playing, recording, sr, sources, punch_range, capture_from, capture_end, auto_monitor, low_latency, block_end, smooth, any_solo, snap_gains, iso, .. } = *cx;
+    t.instrument_ran = false;
+    let role = iso.map(|i| i.role(t.id));
+    if role == Some(Role::Skip) {
+        return;
+    }
+    // An Off track goes quiet through its fader as a muted one does, then stops. A track
+    // in the middle of a take stays on until the take ends (only an undo can get here:
+    // the session refuses the switch while recording), so no audio is lost.
+    let taking = recording && t.params.armed && (t.rec.is_some() || cx.midi_target == Some(t.id));
+    let off = t.params.off && !taking;
+    if off && (t.dormant || snap_gains || iso.is_some() || t.faded_out()) {
+        t.sleep_block(n, &cx.transport);
+        if cx.analyzer_target == Some(t.id) {
+            routes.analyze(&mut t.outs, None, n);
+        }
+        return;
+    }
+    if t.dormant {
+        t.wake(if snap_gains { 0 } else { track_off::resume_frames(sr) });
+    }
+    let tap = role == Some(Role::Tap);
+    let fx = !tap || iso.map(|i| i.effects).unwrap_or(true);
+    let (l, r) = (&mut t.l[..n], &mut t.r[..n]);
+    l.fill(0.0);
+    r.fill(0.0);
+    t.midi.clear();
+    let mut p = t.params;
+    let pdc = t.pdc;
+    // A live track (recording, or monitored in Low Latency Mode) skips its delay
+    // compensation, so the performer isn't kept waiting (see session/pdc.rs).
+    let monitored = match t.kind {
+        TrackKind::Audio => p.monitor || (p.armed && auto_monitor),
+        TrackKind::Instrument => p.armed,
+        _ => false,
+    };
+    let live = (recording && p.armed && t.kind == TrackKind::Audio) || (low_latency && monitored);
+    let ll_skip = if low_latency && monitored { pdc.low_latency_skip } else { 0 };
+    // The strip's plug-ins hear the timeline `input_time` late, and its fader
+    // `output_time` late: automation and the plug-ins' transport follow the audio.
+    let fx_at = pos - pdc.input_time as i64;
+    let mix_at = pos - pdc.output_time as i64;
+    // A folder's lanes are read where this strip's fader is, like its own.
+    if let Some(j) = t.fold_idx.filter(|&j| j > ti) {
+        auto::apply_fold(&mut p, routes.fold(t.fold_now, j, mix_at, playing));
+    }
+    let transport = if pdc.input_time > 0 { transport_at(cx.tempo, &cx.transport, fx_at) } else { cx.transport };
+
+    // Automation overrides the fader, pan and mute (and drives plug-in parameters).
+    // Write mode plays the live values, which are being recorded over the lanes.
+    if playing && matches!(t.auto_mode, AutoMode::Read | AutoMode::Touch | AutoMode::Latch) {
+        for (k, lane) in t.automation.iter().enumerate() {
+            if t.touched.contains(&Some(lane.target)) {
+                continue;
+            }
+            let at = if matches!(lane.target, AutoTarget::Plugin { .. }) { fx_at } else { mix_at };
+            let last = at + n as i64 - 1;
+            let Some(v) = value_at(&lane.points, at) else { continue };
+            match lane.target {
+                AutoTarget::Volume => p.volume = volume_gain(v) * p.stack_gain,
+                AutoTarget::Pan => p.pan = v,
+                AutoTarget::Mute => p.mute = v >= 0.5 || p.stack_mute,
+                // A muted send (gain 0) stays silent.
+                AutoTarget::Send(slot) => {
+                    if let Some(Some(s)) = p.sends.get_mut(slot as usize) {
+                        if s.gain > 0.0 {
+                            s.gain = volume_gain(v);
+                        }
+                    }
+                }
+                AutoTarget::Plugin { uid, param } => {
+                    // Two points per block: the plug-in ramps between them.
+                    let v1 = value_at(&lane.points, last).unwrap_or(v);
+                    let sent = t.auto_sent.get(k).copied().unwrap_or(f32::NAN);
+                    if v == sent && v1 == sent {
+                        continue;
+                    }
+                    let slot = t.inserts.iter_mut().flatten().chain(t.instrument.iter_mut()).find(|i| i.uid == uid);
+                    if let Some(ins) = slot {
+                        ins.plugin.set_param(param, 0, v as f64);
+                        if v1 != v {
+                            ins.plugin.set_param(param, n as i32 - 1, v1 as f64);
+                        }
+                    }
+                    if let Some(s) = t.auto_sent.get_mut(k) {
+                        *s = v1;
+                    }
+                }
+            }
+        }
+    }
+
+    match t.kind {
+        // A folder only shapes its subtracks' settings (worked out by the session).
+        TrackKind::Folder => return,
+        TrackKind::Summing | TrackKind::Aux => {
+            routes.inputs((&mut t.sum_l[..n], &mut t.sum_r[..n]), l, r);
+            if let Some(o) = p.instrument_output {
+                let pull = multi_out::Pull { bus: o.bus as usize, smooth, snap: snap_gains, delay: pdc.feed, fade: (pdc::FADE_SECS * sr) as u32 };
+                let src = t.feed.source.and_then(|i| routes.earlier(i));
+                t.feed.pull(src, &pull, &mut t.pdc_taps.feed, (l, r), (&mut sc.tap_l[..n], &mut sc.tap_r[..n]));
+                if contain(l, r) {
+                    cx.status.bad_audio.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+        TrackKind::Audio => {
+            // A track being recorded is silent, or with Autopunch only inside the range.
+            let quiet = match (recording && p.armed, punch_range) {
+                (false, _) => (0, 0),
+                (true, Some(r)) => r,
+                (true, None) => (i64::MIN, i64::MAX),
+            };
+            if sources && !(quiet.0 <= pos && quiet.1 >= block_end) {
+                play_audio(&t.regions, pos, l, r, quiet);
+            }
+            // Input is heard with the I button, or on armed tracks when auto monitoring is
+            // on. Interfaces with direct monitoring want it off to avoid hearing a
+            // delayed second copy.
+            if p.monitor || (p.armed && auto_monitor) {
+                match p.input {
+                    InputSel::Mono(c) if (c as usize) < MAX_INPUTS => {
+                        let src = &cx.inputs[c as usize][..n];
+                        for i in 0..n {
+                            l[i] += src[i];
+                            r[i] += src[i];
+                        }
+                    }
+                    InputSel::Stereo(c) if (c as usize + 1) < MAX_INPUTS => {
+                        for i in 0..n {
+                            l[i] += cx.inputs[c as usize][i];
+                            r[i] += cx.inputs[c as usize + 1][i];
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if recording && p.armed && block_end > capture_from && pos < capture_end {
+                if let Some(sink) = &mut t.rec {
+                    // The capture bounds can be the i64 extremes ("no punch-out"), and
+                    // `pos` is negative during a count-in from the start, so plain
+                    // subtraction would overflow.
+                    let first = capture_from.saturating_sub(pos).clamp(0, n as i64) as usize;
+                    let last = capture_end.saturating_sub(pos).clamp(0, n as i64) as usize;
+                    let mut lost = false;
+                    for i in first..last {
+                        match p.input {
+                            InputSel::Mono(c) => lost |= sink.push(cx.inputs[c as usize % MAX_INPUTS][i]).is_err(),
+                            InputSel::Stereo(c) => {
+                                let c = c as usize % (MAX_INPUTS - 1);
+                                lost |= sink.push(cx.inputs[c][i]).is_err();
+                                lost |= sink.push(cx.inputs[c + 1][i]).is_err();
+                            }
+                            InputSel::None => {}
+                        }
+                    }
+                    if lost {
+                        cx.status.overruns.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            }
+        }
+        TrackKind::Instrument => {
+            if t.flush_notes {
+                for pitch in 0..128 {
+                    if t.sounding[pitch] {
+                        t.midi.push(MidiEvent { offset: 0, data: [0x80, pitch as u8, 0] });
+                        t.sounding[pitch] = false;
+                    }
+                }
+                if t.cc_sent {
+                    // Don't leave the pedal down or the pitch bent after a stop.
+                    t.midi.push(MidiEvent { offset: 0, data: [0xB0, 64, 0] });
+                    t.midi.push(MidiEvent { offset: 0, data: [0xE0, 0, 64] });
+                    t.cc_sent = false;
+                }
+                if let Some(InsertDsp { plugin: Plugin::Synth(s), .. }) = &mut t.instrument {
+                    s.all_notes_off();
+                }
+                t.flush_notes = false;
+            }
+            if sources && t.chase_cc {
+                t.chase_cc = false;
+                // The latest value of each controller before the playhead, in the
+                // region that covers it.
+                let mut last: [Option<u16>; CC_KINDS] = [None; CC_KINDS];
+                for reg in t.regions.iter().filter(|_| cx.chase.1) {
+                    let RegionDsp::Midi { start, length, cc, .. } = reg else { continue };
+                    if pos < *start || pos >= *start + *length {
+                        continue;
+                    }
+                    let before = cc.partition_point(|c| c.start < pos - *start);
+                    for c in &cc[..before] {
+                        last[c.kind.index()] = Some(c.value);
+                    }
+                }
+                for (i, v) in last.iter().enumerate() {
+                    if let Some(v) = v {
+                        if t.midi.len() < t.midi.capacity() {
+                            t.midi.push(MidiEvent { offset: 0, data: CcKind::from_index(i).message(*v) });
+                            t.cc_sent = true;
+                        }
+                    }
+                }
+                // Chase: Notes. Notes held over the playhead start now (after the
+                // controllers, so a sustain pedal is down first); the region loop below
+                // ends them where they end.
+                for reg in t.regions.iter().filter(|_| cx.chase.0) {
+                    let RegionDsp::Midi { start, length, notes, .. } = reg else { continue };
+                    for note in crate::midi::sounding_at(notes, *start, *start + *length, pos) {
+                        let p = note.pitch as usize & 127;
+                        if !t.sounding[p] && t.midi.len() + 2 < t.midi.capacity() {
+                            t.midi.push(MidiEvent { offset: 0, data: [0x90, note.pitch, note.velocity.max(1)] });
+                            t.sounding[p] = true;
+                        }
+                    }
+                }
+            }
+            if sources {
+                for reg in t.regions.iter() {
+                    let RegionDsp::Midi { start, length, notes, cc } = reg else { continue };
+                    let (rs, re) = (*start, *start + *length);
+                    if re <= pos || rs >= block_end {
+                        continue;
+                    }
+                    let first = cc.partition_point(|c| rs + c.start < pos);
+                    for c in &cc[first..] {
+                        let at = rs + c.start;
+                        if at >= block_end || at >= re || t.midi.len() >= t.midi.capacity() {
+                            break;
+                        }
+                        t.midi.push(MidiEvent { offset: (at - pos) as u32, data: c.kind.message(c.value) });
+                        t.cc_sent = true;
+                    }
+                    for note in notes.iter() {
+                        let on = rs + note.start;
+                        let off = (on + note.length).min(re);
+                        if on >= block_end {
+                            break;
+                        }
+                        if t.midi.len() + 2 > t.midi.capacity() {
+                            break;
+                        }
+                        if on >= pos && on < re {
+                            t.midi.push(MidiEvent { offset: (on - pos) as u32, data: [0x90, note.pitch, note.velocity.max(1)] });
+                            t.sounding[note.pitch as usize & 127] = true;
+                        }
+                        if off >= pos && off < block_end && on < re {
+                            t.midi.push(MidiEvent { offset: (off - pos) as u32, data: [0x80, note.pitch, 0] });
+                            t.sounding[note.pitch as usize & 127] = false;
+                        }
+                    }
+                }
+            }
+            if cx.midi_target == Some(t.id) {
+                for m in cx.live {
+                    if cx.midi_thru && t.midi.len() < t.midi.capacity() {
+                        t.midi.push(*m);
+                        track_off::note_held(&mut t.live_held, m.data);
+                    }
+                }
+            }
+            t.midi.sort_by_key(|m| m.offset);
+            if let Some(ins) = &mut t.instrument {
+                if !ins.bypass && ll_skip & INSTRUMENT_BIT == 0 {
+                    ins.plugin.process(l, r, &t.midi, &transport);
+                    check_output(cx.status, ins, l, r);
+                    t.instrument_ran = true;
+                } else {
+                    ins.plugin.pass_edits_aside(&transport);
+                }
+            }
+            // A frozen instrument track plays its freeze file instead.
+            if sources {
+                play_audio(&t.regions, pos, l, r, (0, 0));
+            }
+        }
+    }
+
+    track_off::fade_in(&mut t.resume_left, track_off::resume_frames(sr), l, r);
+
+    if fx {
+        t.eq_state.process(&t.eq, l, r);
+    }
+    if cx.analyzer_target == Some(t.id) {
+        routes.analyze(&mut t.outs, Some((&*l, &*r)), n);
+    }
+
+    for (k, slot) in t.inserts.iter_mut().enumerate().filter(|_| fx) {
+        let Some(ins) = slot else { continue };
+        if !ins.bypass && ll_skip & (1 << k) == 0 {
+            let key = key_signal(ins.key.idx.and_then(|i| routes.earlier(i)), ins.key.pre, iso, n);
+            match &mut ins.plugin {
+                Plugin::Builtin(b) => b.process(l, r, key, &fx_context(&transport)),
+                Plugin::Vst(p) => p.process_keyed(l, r, key, &[], &transport),
+                p => p.process(l, r, &[], &transport),
+            }
+            check_output(cx.status, ins, l, r);
+        } else {
+            ins.plugin.pass_edits_aside(&transport);
+        }
+    }
+    // The delay line keeps the post-plug-in signal; the output and the sends read it
+    // at their own delays (none while live), gliding to a new delay (see `pdc.rs`).
+    // It's written even while nothing reads it, so a glide always finds real audio.
+    if let Some(d) = &mut t.delay {
+        d.write(l, r);
+    }
+    let tap_delay = |d: u32| if live { 0 } else { d };
+    let pdc_fade = (pdc::FADE_SECS * sr) as u32;
+
+    let audible = !off
+        && match role {
+            Some(Role::Member { heard }) => heard,
+            Some(Role::Key) => !p.mute,
+            Some(_) => true,
+            None => !p.mute && (!any_solo || p.solo),
+        };
+    // Pre-fader sends tap the signal after the plug-ins, before the fader and pan. Mute
+    // and solo still silence them, as in Logic.
+    for k in 0..SEND_SLOTS {
+        match (p.sends[k], t.send_idx[k]) {
+            // An isolated render leaves out auxes it doesn't play; their buses must
+            // not fill up meanwhile, or they'd burst out when playback resumes.
+            (Some(s), Some(j)) if j > ti && iso.map(|i| i.feeds(role, routes.id_of(j))).unwrap_or(true) => {
+                if s.pre_fader {
+                    let target = if audible { s.gain } else { 0.0 };
+                    let tap = &mut t.pdc_taps.sends[k];
+                    tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
+                    match &t.delay {
+                        Some(d) if !tap.is_direct() => {
+                            let (sl, sr) = (&mut sc.tap_l[..n], &mut sc.tap_r[..n]);
+                            d.read_tap(tap, sl, sr);
+                            routes.send(&mut t.outs, SendOut { slot: k, to: j, pre: true }, (&*sl, &*sr), &mut t.send_gains[k], target, smooth);
+                        }
+                        _ => routes.send(&mut t.outs, SendOut { slot: k, to: j, pre: true }, (&*l, &*r), &mut t.send_gains[k], target, smooth),
+                    }
+                }
+            }
+            _ => t.send_gains[k] = 0.0,
+        }
+    }
+    let vol = if audible { p.volume } else { 0.0 };
+    let mono_source = matches!(p.input, InputSel::Mono(_)) && t.kind == TrackKind::Audio;
+    let (tl, tr) = if tap && !iso.map(|i| i.fader).unwrap_or(true) {
+        (1.0, 1.0)
+    } else if mono_source {
+        // -3 dB compensated pan law: unity in the centre.
+        let a = (p.pan.clamp(-1.0, 1.0) + 1.0) * std::f32::consts::FRAC_PI_4;
+        (a.cos() * std::f32::consts::SQRT_2 * vol, a.sin() * std::f32::consts::SQRT_2 * vol)
+    } else {
+        // Balance for stereo sources.
+        let pan = p.pan.clamp(-1.0, 1.0);
+        ((1.0 - pan.max(0.0)) * vol, (1.0 + pan.min(0.0)) * vol)
+    };
+    let (mut gl, mut gr) = if snap_gains { (tl, tr) } else { t.gains };
+    let (mut pl, mut pr) = (0.0f32, 0.0f32);
+    // A side-chain key leaves as the signal leaves the plug-ins, before the
+    // compensation delay, with the fader applied below.
+    if t.keyed {
+        t.key_l[..n].copy_from_slice(l);
+        t.key_r[..n].copy_from_slice(r);
+    }
+    // A pre-fader key ignores the fader and pan but, like a pre-fader send, not mute.
+    if t.keyed_pre {
+        let g = if audible { 1.0 } else { 0.0 };
+        for i in 0..n {
+            t.pre_key_l[i] = l[i] * g;
+            t.pre_key_r[i] = r[i] * g;
+        }
+    }
+    t.pdc_taps.output.aim(tap_delay(pdc.output), pdc_fade);
+    // Post-fader sends that read where the output reads share its result.
+    let out_tap = t.pdc_taps.output;
+    if let (false, Some(d)) = (out_tap.is_direct(), &t.delay) {
+        d.read_tap(&mut t.pdc_taps.output, l, r);
+    }
+    let dest = match t.out_idx {
+        // An isolated render captures the tap track, and anything feeding a stack
+        // outside the render, straight off the bus.
+        Some(j) if j > ti && !tap && iso.map(|i| i.feeds(role, routes.id_of(j))).unwrap_or(true) => Dest::Track(j),
+        // A track that only keys a side-chain in an isolated render isn't heard.
+        _ if role == Some(Role::Key) => Dest::Nowhere,
+        _ => Dest::Bus,
+    };
+    for i in 0..n {
+        gl += (tl - gl) * smooth;
+        gr += (tr - gr) * smooth;
+        sc.gain_l[i] = gl;
+        sc.gain_r[i] = gr;
+        l[i] *= gl;
+        r[i] *= gr;
+        pl = pl.max(l[i].abs());
+        pr = pr.max(r[i].abs());
+    }
+    routes.output(&mut t.outs, dest, l, r);
+    t.gains = (gl, gr);
+    t.meter.feed(pl, pr);
+    if t.keyed {
+        for i in 0..n {
+            t.key_l[i] *= sc.gain_l[i];
+            t.key_r[i] *= sc.gain_r[i];
+        }
+    }
+    // Post-fader sends take what the fader and pan left (already silent when muted).
+    // One at another delay than the output reads its own tap and applies the same
+    // fader gains.
+    for k in 0..SEND_SLOTS {
+        if let (Some(s), Some(j)) = (p.sends[k], t.send_idx[k]) {
+            if !s.pre_fader && j > ti && iso.map(|i| i.feeds(role, routes.id_of(j))).unwrap_or(true) {
+                let tap = &mut t.pdc_taps.sends[k];
+                tap.aim(tap_delay(pdc.sends[k]), pdc_fade);
+                match &t.delay {
+                    Some(d) if *tap != out_tap => {
+                        let (sl, sr) = (&mut sc.tap_l[..n], &mut sc.tap_r[..n]);
+                        d.read_tap(tap, sl, sr);
+                        for i in 0..n {
+                            sl[i] *= sc.gain_l[i];
+                            sr[i] *= sc.gain_r[i];
+                        }
+                        routes.send(&mut t.outs, SendOut { slot: k, to: j, pre: false }, (&*sl, &*sr), &mut t.send_gains[k], s.gain, smooth);
+                    }
+                    _ => {
+                        t.pdc_taps.sends[k] = t.pdc_taps.output;
+                        routes.send(&mut t.outs, SendOut { slot: k, to: j, pre: false }, (&*l, &*r), &mut t.send_gains[k], s.gain, smooth)
+                    }
+                }
             }
         }
     }

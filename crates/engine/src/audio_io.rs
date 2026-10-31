@@ -50,6 +50,10 @@ pub struct AudioConfig {
     /// Play the input of record-enabled tracks without needing their I button.
     #[serde(default)]
     pub auto_monitor: bool,
+    /// Settings › Audio › Processing Threads: how many threads play tracks, the callback's own
+    /// included. 0 is Automatic ([`crate::threads`]), 1 the callback alone.
+    #[serde(default = "crate::threads::default_setting")]
+    pub processing_threads: u32,
     /// Extra offset applied to recordings on top of the measured latency, like Logic's
     /// Recording Delay. Positive values move recordings earlier.
     #[serde(default)]
@@ -67,6 +71,7 @@ impl Default for AudioConfig {
             input_enabled: true,
             auto_monitor: false,
             recording_delay_ms: 0.0,
+            processing_threads: crate::threads::default_setting(),
         }
     }
 }
@@ -442,7 +447,7 @@ fn start_null(engine: Arc<Mutex<Engine>>, cfg: &AudioConfig) -> (Option<AudioIo>
 /// 512 samples), and the default action for the SIGXCPU it raises ends the process with a core
 /// dump. One slow block must only cost a dropout, so ignore it. The 200 ms hard limit still holds,
 /// and the engine sheds load well before that (`OVERLOAD_SECS`).
-fn survive_slow_blocks() {
+pub(crate) fn survive_slow_blocks() {
     #[cfg(target_os = "linux")]
     unsafe {
         libc::signal(libc::SIGXCPU, libc::SIG_IGN);

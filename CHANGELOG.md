@@ -8,6 +8,13 @@ All notable changes to Fermata are recorded here. The format follows
 
 ### Added
 
+- **Multi-core track processing:** independent tracks play at the same time on a small pool of
+  real-time threads, with the audio thread working too, so a heavy project finishes each buffer
+  sooner. Settings › Audio › Processing Threads chooses Automatic (the default) or a number; 1 keeps
+  everything on the audio thread, and the change applies without restarting audio. The output is the
+  same sample for sample however many threads play it. A light project stays on the audio thread alone,
+  and bounces are unchanged. The CPU meter still shows how much of each buffer's time it takes to
+  finish the buffer, and its tooltip now says how many threads are playing.
 - **Undo for changes made in a VST3's own editor:** a knob moved in a plug-in's window is an undo
   step, labelled with the plug-in and the parameter ("TONE3000: Gain"), and Undo and Redo put the
   plug-in and its open window back. A plug-in that doesn't announce its drags gets a step per

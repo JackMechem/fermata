@@ -800,6 +800,7 @@ name = "daw-engine"
 version = "0.1.0-alpha.3"
 dependencies = [
  "anyhow",
+ "audio_thread_priority",
  "base64 0.22.1",
  "cpal",
  "flacenc",

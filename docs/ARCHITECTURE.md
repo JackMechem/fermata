@@ -63,6 +63,7 @@ flowchart LR
 | **Main / UI thread** | Tauri | Runs synchronous Tauri commands (most edits, including audio import with its decoding and resampling), the native menu, the GTK main loop on Linux, the 30 ms idle timer (`Session::idle`: plug-in controller idle, latency changes, draining `Garbage`, automation follow and writes), and taking autosaves. All VST3 *controllers* and editor windows live here. | Block for long. Renders are async commands for that reason. |
 | **`audio-io`** | `audio_io::start` | Builds and owns the cpal streams, then waits until the device is closed. | |
 | **Audio callback** | cpal (output stream) | Calls `Engine::process` once per device buffer, inside `catch_unwind`; the input stream's callback only fills the input ring. Runs with real-time priority (rtkit on Linux). | Allocate, lock, block, do I/O. See [Real-time rules](#3-real-time-rules). |
+| **`fermata-dsp-N`** | `dsp/pool.rs`, started by `Session::sync_parallel` | Plays strips alongside the audio callback when Settings › Audio › Processing Threads allows it and a project is heavy enough, then blocks until the next block. Real-time like the callback. See [Multi-core processing](#multi-core-processing). | The same as the audio callback. |
 | **`recorder`** | `recorder.rs` | Every 10 ms, drains the ring buffer of each armed track into its WAV file and an in-memory copy, and keeps a peak preview for the UI. | Touch the engine or the project. |
 | **`ui-tick`** | `src-tauri/src/main.rs` | Every 33 ms: locks the session, builds a `Tick` (playhead, meters, input levels, recording previews, CPU, latency, analyzer spectrum, warnings, meters of open built-in effect panels, the clip indicators' held peaks, each strip's gain reduction) and emits it as the `tick` event. | Edit anything. |
 | **MIDI refresh** | `main.rs` | Every 3 s: `Session::refresh_midi`, so devices plugged in later get connected. | |
@@ -114,7 +115,8 @@ Failures on the audio thread are contained rather than fatal:
 
 - **Denormals.** `Engine::process` holds a `NoDenormals` guard (`denormals.rs`) for its whole
   run: flush-to-zero, plus denormals-are-zero on x86_64 (FPCR.FZ on aarch64), restored when
-  the guard drops, since the callback thread belongs to the driver. Decaying tails in filters,
+  the guard drops, since the callback thread belongs to the driver. The pool's workers set it for
+  their whole life. Decaying tails in filters,
   reverbs and the tuner would otherwise fall into the denormal range, where arithmetic is
   about a hundred times slower.
 - **Overload.** When callbacks take longer than the audio they produce, back to back for more
@@ -127,8 +129,9 @@ Failures on the audio thread are contained rather than fatal:
   exempt, since they are meant to run flat out.
 
 - **Panics.** `audio_io::build_output` runs `Engine::process` inside `catch_unwind`, because a
-  panic unwinding into the driver's C callback would abort the process. A panicking block is
-  silenced and counted in `EngineStatus::engine_errors`; `Session::engine_error_warning` turns
+  panic unwinding into the driver's C callback would abort the process. On the worker pool each
+  strip has a `catch_unwind` of its own (`pool.rs`), whichever thread runs it. Either way a
+  panicking block is silenced and counted in `EngineStatus::engine_errors`; `Session::engine_error_warning` turns
   new errors into a tick `warning` (a toast), at most every 5 s. The panic message goes to the
   log.
 - **Bad plug-in output.** After every instrument, insert and Stereo Out plug-in, `contain()`
@@ -637,6 +640,174 @@ The solver is in `session/pdc.rs`, the delay lines in `dsp/pdc.rs`:
   (`low_latency_skip` bits) are not run.
 - Recordings are moved earlier by `total` as well, since the performer heard the song that
   late.
+
+### Multi-core processing
+
+Settings › Audio › Processing Threads (`AudioConfig::processing_threads`, in `threads.rs`) lets
+independent strips play at the same time, on a small pool of real-time threads with the audio
+callback working too. Its output is bit for bit the serial loop's, so nothing else in the program
+has to know. With the setting at 1 there is no pool: `process_block` runs the plain serial loop.
+
+**One strip, two kinds of route.** `run_strip` in `dsp.rs` is one strip's whole block, and the serial
+loop and the workers run that same code. They differ only in `Routes`, how a strip reaches other
+strips. The serial `Direct` writes straight into later strips' `sum_l`/`sum_r` and the bus. On the
+pool, in `dsp/parallel.rs`, nothing writes across strips: `Deferred` leaves a strip's output in its
+own `l`/`r` and renders each send into its own `Outlets`, and a bus adds up its feeders' outlets
+when its turn comes.
+
+**Why the sum is bit-identical.** Float addition isn't associative, so the order must be the
+serial loop's: feeders by processing order, and within a feeder its pre-fader sends by slot, its
+output, its post-fader sends by slot. `Deferred::inputs` reads them in exactly that order (a task's
+dependencies in `TaskGraph` are sorted by processing position), and Stereo Out's bus is summed the
+same way once the strips are done. A send's product `l[i] * g` is the same bits wherever it is
+computed. This is why a switch between serial and parallel at any block boundary is inaudible.
+
+**The graph.** `TaskGraph::of_project` (`dsp/graph.rs`) makes every track a task and every route an
+edge: outputs, sends, side-chain keys and multi-output sources, from `Project::feeds` and
+`keyed_by`. Tasks are in `process_order`, so edges only point forward and a cycle can't be built
+(`TaskGraph::new` refuses one). VCAs and stacks need no edge, since the session folds them into each
+track's `TrackParams`. Folder automation doesn't either: a subtrack doesn't wait for its folder,
+because `Parallel::run` reads the folder's lanes (`fold_at`) before the strips start.
+
+**Keeping the graph true.** The session builds the graph off the audio thread and sends it in
+`Cmd::Graph` (`Session::sync_parallel`, called after every Tauri command and from `idle`, whenever a
+route-changing `Cmd` went out). The old one comes back as `Garbage`. The commands of one edit can
+straddle blocks, so the engine doesn't take the graph on trust: whenever routes or the graph changed
+(`resolve_keys`), `parallel::covers` checks at the next block that every route the engine resolved
+has its edge, and until that holds it plays serially. So a route never races and never arrives a
+block late; at worst an edit costs a few serial blocks. `Deferred::earlier` also checks the edge on
+each read, so a side-chain key whose edge is somehow missing is silence rather than undefined
+behaviour. `soak_check` checks after every random edit that the graph fits.
+
+**The pool** (`dsp/pool.rs`) holds no lock or queue. A task is a bit in a few words of atomics;
+finishing a task's last dependency sets its bit, and whoever clears a bit owns the task, preferring
+tasks "at home" on that thread so a strip tends to stay on one core from block to block. The
+guarantees:
+
+- *The callback is never stuck behind a worker for ready work.* A ready task can be seen and taken
+  by anyone, so there is no slot a preempted worker could be holding up, and a preempted or late
+  worker costs only the one task it has taken. Rarely does the callback have to wait with nothing to
+  take: it spins for 300 µs, then naps 50 µs at a time, which also lets a worker at normal priority
+  run if it shares this core.
+- *A stuck worker can't hang the callback.* After `GIVE_UP_SECS` (0.1 s, or four buffers if that's
+  longer) `process` gives the block up: silence, counted as an overload, so the session stops the
+  transport and says so. The block stays open (`Parallel::stalled`) and the strips and all it reads
+  belong to the threads playing it. Until it ends, each callback plays silence and applies no
+  commands; then the engine flushes notes and carries on, shedding as after any overload. Anything
+  that changes the graph off the audio thread (`replace_graph`, `render`, dropping the engine) first
+  waits for it (`Engine::settle`).
+- *A panic stays in its task.* It is caught, counted in `engine_errors`, its dependants still run
+  and the block is silenced. The pool isn't poisoned.
+- *Workers really sleep.* A real-time thread that never blocks is killed at RLIMIT_RTTIME's hard limit
+  (200 ms). A worker with nothing to do spins for 30 µs at most, then parks on a futex. Blocks arriving
+  back to back could keep it from ever truly sleeping, so one that hasn't slept for `RT_GUARD` (50 ms)
+  naps before its next task; the callback does the work meanwhile, and `OVERLOAD_SECS` sheds load as
+  ever when the callback itself falls behind. `survive_slow_blocks` covers workers too, and every
+  worker's load counts toward the same block, so the meter and the shedding still see a late block.
+  Past that a plug-in that never returns on a worker is what it always was on the callback: the
+  kernel's limit applies.
+
+**Real time.** Workers call `audio_thread_priority::promote_current_thread_to_real_time`, as cpal
+does for its callback (rtkit, the same priority and limits), and stay at normal priority if refused.
+On a machine with performance and efficiency cores they keep to the performance cores
+(`Topology::fast`), as the scheduler places real-time threads without regard to a core's speed: measured
+at 128 frames, that took 24 CHOWTapeModels from a mean of 340 µs to 270 µs and the 99th percentile of 5
+TONE3000s from 1510 µs to about 900 µs, repeatably. They keep to the set, not one core each, so the
+kernel still balances them, and the callback, the driver's thread, is left alone. Workers aren't
+real time on the null device, as cpal's callback isn't there either. A worker has an 8 MB stack, as
+plug-ins expect of an audio thread, and touches the first part of it before its first block.
+
+**When it runs.** `Parallel::wanted`: there are workers, the graph holds, two strips with plug-ins can
+overlap (`heavy_width`), and the load has reached 15% of the buffer (`ENGAGE_LOAD`), going back to one
+thread once the average load times the threads, the most it could come to alone, is under that. The session doesn't even start the threads for a project with nothing to
+gain. Below that a project pays nothing at all for the feature. Automatic is a fast (performance)
+physical core count less one, at most 6 (`threads::automatic`); on 1 or 2 cores it is 1, and away from
+Linux too, where workers can't get real-time priority yet.
+
+**Offline renders** stay serial: their blocks come back to back with no real-time deadline, and
+real-time workers that never sleep would be killed for it. `ParallelTest::renders` sends them through
+the pool for `parallel_check` and `soak_check`, so the route is tested for identity.
+
+**What a block touches, and who may:**
+
+| State | Where it's used | How it's kept safe |
+|---|---|---|
+| Commands, `Garbage`, `cmd_rx` | `process`, before the strips | Calling thread only; the graph and workers change only here, between blocks. |
+| `garbage: RefCell` | `discard`, from `apply` | Calling thread only; the strips' context doesn't hold the engine, so the compiler sees to it. |
+| `live_midi`, `live` | Filled before the strips | Read-only for the strips. |
+| `midi_rec` (recorded MIDI ring) | Also pushed by `process` (cycle marks) | Moved before the strips, for the serial loop too; it comes from one track anyway. |
+| `analyzer_tx` (SPSC, several pushers) | A strip's tap, Stereo Out's | On the pool the watched strip fills `Outlets::analysis`, and the calling thread pushes it after the strips. Stereo Out's is on the calling thread. |
+| `inputs` | Copied in before the strips | Read-only for the strips. |
+| `bus_l`, `bus_r` | Stereo Out | Summed by the calling thread after the strips, in order. |
+| `tap_*`, `gain_*` | A strip's scratch | `Scratch`, one per thread. |
+| `sum_l`, `sum_r` | Serial loop only | Unused on the pool, where a bus sums into its own `l`/`r`. |
+| Strip's own state (`TrackDsp`) | Its task | One task, one thread at a time, handed over by the pool's Acquire/Release. |
+| A feeder's `l`, `r`, `outs`, `key_*` | Its receivers | Only read once its task is done (an edge), and by any number of receivers at once. |
+| An instrument's output buses, `instrument_ran` | Output auxes | The same: the instrument's task is done. |
+| A folder's `params`, `automation` | Its subtracks' faders | Read before the strips start (`fold_now`). |
+| `params`, `tempo`, `Isolate`, `chase`, `midi_target`, transport values | Every strip | `BlockCtx`: copied or shared immutably; commands are applied only between blocks. |
+| Regions and clips | Their strip | Shared read-only behind `Arc`. |
+| `TransportInfo` for plug-ins | Each strip | A copy per strip, moved to its own `input_time`. |
+| Plug-in instance | Its strip | Only its strip's task calls it, so one thread at a time; which thread can change from block to block, as VST3 allows. |
+| `Gate`, `OutGate` (VST3 bus changes) | `process`, `suspend`, the controller | Atomics, unchanged. `Cmd::VstGate` is applied between blocks; the task holds `OutGate` through the call. |
+| Meters (`Meter`) | Each strip's own, Stereo Out's | Atomics, per strip. |
+| `EngineStatus` counters (`bad_audio`, `overruns`, `engine_errors`, `midi_activity`) | Any strip | Atomic adds. `bad_audio_uid` is a plain store, so with two bad plug-ins in a block either may be named. |
+| Input meters, `cpu_*`, `late_blocks` | Before and after the strips | Calling thread only. |
+| `t.rec` (recording ring) | Its strip | One producer per track. |
+| Bad-audio containment (`check_output`) | Each plug-in, its strip | Works on the strip's own buffers and effect. |
+| Effect ticks (`FxShared`) | Each effect | Atomics, per effect. |
+| Global state in plug-ins | Inside third-party code | As in any host that plays instances in parallel, which is their concern. No mutable globals in `fx/`, `synth.rs` or `vst3-host`'s processing. |
+
+The `unsafe` is in `parallel.rs` and `pool.rs`, each with its argument beside it: `StripJob::run` and
+`Deferred::dep` (who holds which strip), the job cell (only written with no block open), and
+extending `BlockCtx`'s lifetime (what it points at is on the heap and unchanged while a block is open).
+The parallel tests, `parallel_check` and `soak_check` ran clean under ThreadSanitizer: see
+[DEVELOPING.md](DEVELOPING.md#threadsanitizer).
+
+**Plug-ins with threads of their own.** TONE3000 runs its model on its own pool of worker threads, and
+the Linear Phase EQ designs filters on a thread. Their output depends on timing, serial or not, which
+is why `parallel_check` doesn't use TONE3000, and swaps the EQ out live (a render waits for it).
+
+**The CPU meter** (`Tick.cpu`, `cpu_peak`, `late_blocks`) is still the wall-clock time of the callback
+over the buffer's duration, as that is what decides a dropout. `Tick.threads` says how many threads are
+playing right now, for its tooltip.
+
+**Measured** on an i7-13700KF (8 performance and 8 efficiency cores, 24 hardware threads), driving
+`Engine::process` at real-time pace with real-time workers: block time in µs, mean / worst of about 8 s.
+The user's own app was running on the same machine. Real plug-ins: 5 TONE3000s with a real project's
+models, 24 CHOWTapeModels, 16 Dragonfly Hall Reverbs, and "buses": 12 CHOWTapeModels in 3 summing
+stacks with a shared Dragonfly Plate Reverb on an aux.
+
+| Project | Buffer | 1 thread | 2 | 4 | 8 | Automatic (6) |
+|---|---|---|---|---|---|---|
+| 5 TONE3000 | 512 | 2822 / 5447 | 1723 / 2714 | 1237 / 2165 | 1060 / 1393 | 1099 / 1833 |
+| 24 CHOWTapeModel | 512 | 4822 / 5852 | 2512 / 3009 | 1463 / 1603 | 754 / 859 | 979 / 1086 |
+| 16 Dragonfly Hall | 512 | 1686 / 2834 | 891 / 1234 | 622 / 737 | 387 / 495 | 546 / 682 |
+| buses | 512 | 2458 / 3033 | 1254 / 1556 | 707 / 885 | 496 / 573 | 778 / 881 |
+| 5 TONE3000 | 128 | 1371 / 2729 | 549 / 1700 | 337 / 927 | 331 / 1049 | 350 / 1036 |
+| 24 CHOWTapeModel | 128 | 1330 / 1988 | 794 / 1026 | 457 / 582 | 206 / 312 | 269 / 418 |
+| 16 Dragonfly Hall | 128 | 430 / 805 | 221 / 400 | 187 / 262 | 110 / 173 | 111 / 174 |
+| buses | 128 | 1186 / 1448 | 350 / 547 | 240 / 367 | 142 / 236 | 155 / 235 |
+
+A small project, where threads have nothing to gain, at 128 and 512 frames: mean / worst µs.
+
+| Project | Buffer | 1 thread | Automatic | Forced onto 6 threads | Forced onto 2 threads |
+|---|---|---|---|---|---|
+| 2 audio tracks | 512 | 8 / 15 | 10 / 24 | 16 / 42 | 12 / 27 |
+| 2 tracks with 2 built-in effects each | 512 | 81 / 130 | 134 / 168 | 68 / 93 | 48 / 92 |
+| 2 audio tracks | 128 | 3 / 11 | 5 / 16 | 4 / 18 | 4 / 23 |
+| 2 tracks with 2 built-in effects each | 128 | 35 / 58 | 20 / 45 | 16 / 29 | 21 / 43 |
+
+Reading it: wide projects scale close to the thread count. The worst block falls with the mean, except
+where one plug-in sets it: at 128 frames one of the TONE3000 models takes about 850 µs in some blocks,
+so past 4 threads its worst block stops improving. TONE3000's own worker threads did no harm to it or to
+ours: no thread count made it worse than the one before beyond the noise. The one-thread column
+varies by up to a factor of two from run to run (5 TONE3000s at 128: mean 870 and 1370 µs), probably
+from whether the callback lands on an efficiency core. Going to 8 threads helps wide projects another
+10 to 25% and does nothing for the 5-track project, and it would leave a performance core for nothing
+else, so Automatic stops at 6. Since the gate keeps a light project on the callback, these small
+projects pay nothing: without the gate the pool's cost is about 10 µs a block, or none next to any
+real plug-in.
 
 ### Offline render and `Isolate`
 
@@ -1523,6 +1694,9 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `model.rs` | The project document (serde): tracks, regions, take folders, markers, punch, EQ, sends, automation, groups, freeze info. Tree and routing helpers: `normalize_tree`, `process_order`, `output_of`, `feeds`, `reaches`, `prune_routes`. |
 | `dsp.rs` | The real-time graph: `Engine`, `TrackDsp`, `RegionDsp`, `TrackParams`, `Cmd`, `Garbage`, `EngineStatus`, meters, the click. |
 | `dsp/offline.rs` | `Engine::render` and `Isolate`: offline rendering of the full mix or one track. |
+| `dsp/graph.rs` | `TaskGraph`: which strips wait for which, built from the project off the audio thread. |
+| `dsp/pool.rs` | `Pool`: the worker threads, running a graph's tasks with no lock or queue. Knows nothing of audio. |
+| `dsp/parallel.rs` | Strips on the pool: `Parallel`, `Workers`, `Deferred` (a strip's routes there), `covers`. |
 | `dsp/pdc.rs` | `DelayLine` (power-of-two ring with read taps), `PdcParams`, `PdcGlobal`. |
 | `dsp/multi_out.rs` | `OutputFeed`: an aux reading its instrument's output bus. |
 | `dsp/builtin.rs` | `BuiltinDsp` (a built-in effect in an insert slot), `FxShared`, parameter normalization. |
@@ -1541,6 +1715,7 @@ command and menu id is handled, no two default keys clash), `tests/tauriCommands
 | `tempo.rs` | `TempoMap`: samples to beats and bars and back, tempo ramps, signatures, grid. |
 | `session.rs` | `Session`: engine plumbing, `track_params`, `regions_dsp`, building tracks, undo (`checkpoint`, `undo`, `redo`, `restore`), transport and recording, track and region edits, import, plug-in slots, `idle`, `tick`, new/save/open. |
 | `session/routing.rs` | Auxes, sends and outputs; feedback-loop checks. |
+| `session/threads.rs` | Processing Threads: starting and stopping the workers, sending the task graph (`sync_parallel`). |
 | `session/multi_out.rs` | Multi-output instruments: the instruments' outputs for the UI, `add_output_aux`, `sync_output_buses` (called from `update_pdc`), what Freeze and Bounce in Place refuse. The design notes are at its top. |
 | `session/crossfades.rs` | Fade shapes and types from the inspector, the Crossfade command, the X-Fade drag mode (`auto_crossfade`), Crossfade Time (`crossfade_frames`). |
 | `session/drag_modes.rs` | Region edits as the Tracks area makes them: `drag_move_regions`, `drag_nudge_regions`, `drag_resize_region`, `drag_delete_regions`, `drag_paste_regions`, in the drag mode and with Move Automation with Regions. |
