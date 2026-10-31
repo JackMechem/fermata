@@ -23,7 +23,7 @@
 
 rustPlatform.buildRustPackage (finalAttrs: {
   pname = "fermata";
-  version = "0.1.0-alpha.3";
+  version = "0.1.0-alpha.4";
 
   # Only what the build reads, so editing docs doesn't trigger a rebuild.
   src = lib.fileset.toSource {

@@ -6,6 +6,8 @@ All notable changes to Fermata are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0-alpha.4] - 2026-10-31
+
 ### Added
 
 - **Fermata Sampler:** make instruments from your own sounds. Drop or choose audio files and play them across the
@@ -75,6 +77,11 @@ All notable changes to Fermata are recorded here. The format follows
   that it's the audio thread's load, not the system monitor's figure, with the average and recent
   peak. A thin tick marks the worst single block for two seconds, and the label stays red once
   a block has gone over 100%, with a count in the tooltip, until you click the meter.
+- **A System Overload message says what happened:** how long the buffer took and which track took
+  longest, or which track a stuck processing thread is in.
+- **Built-in instrument panels open in the bottom section,** with their sections in one row that the
+  mouse wheel moves along. Row and Grid beside the panel's keyboard choose the layout; a floating panel
+  starts in Grid, and each place remembers its own choice.
 
 ### Fixed
 
@@ -469,7 +476,8 @@ The first prerelease. Everything below is new.
 - The `takes_check` headless check "autopunch trims the take" fails about one run in five,
   from the null audio device's timing.
 
-[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.3...HEAD
+[Unreleased]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.4...HEAD
+[0.1.0-alpha.4]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.3...v0.1.0-alpha.4
 [0.1.0-alpha.3]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.2...v0.1.0-alpha.3
 [0.1.0-alpha.2]: https://github.com/JackMechem/fermata/compare/v0.1.0-alpha.1...v0.1.0-alpha.2
 [0.1.0-alpha.1]: https://github.com/JackMechem/fermata/releases/tag/v0.1.0-alpha.1

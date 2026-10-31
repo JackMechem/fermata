@@ -50,6 +50,13 @@ The framework (`instrument/`, `synth_dsp/`) and Fermata Tre: unit tests, `instru
 
 ## Open items (multi-core processing, 2026-10-30)
 
+- **Dropouts while other work runs:** with builds and checks running on every core (some taking real-time
+  priority), the app ran late, went choppy and hit a System Overload once, while total CPU read about 15%. A
+  later 10 minutes with that work kept to the efficiency cores, including about a minute of `stress-ng`, had
+  no PipeWire errors. The cause isn't proven, and nothing has been seen to line up with one specific test. If
+  it comes back, the overload message now says what happened. `parallel_check`'s real-time part still takes
+  real-time priority: run checks with `taskset` on other cores beside a live session.
+
 Checked in the app on a copy of a real project (5 TONE3000, 512 samples) through PipeWire to an
 M-Track 2X2, with Stereo Out at -∞: 56% average, 72% peak at 1 thread; 13-14%, about 20% at
 Automatic (6), stopped and playing. No late blocks, workers real time, and switching the setting
